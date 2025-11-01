@@ -1,7 +1,7 @@
 import React from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
-import { collectDeadlines, sortByDeadlineAsc, deadlineStatus } from '../utils';
+import { collectDeadlines, sortByDeadlineAsc, getDeadlineColor } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 
 interface DeadlineListProps {
@@ -35,33 +35,22 @@ export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
       </h2>
       <div className="space-y-2">
         {deadlines.map((dl) => {
-          const status = deadlineStatus(dl);
           const dateStr = dl.deadline ? new Date(dl.deadline).toLocaleDateString('ru-RU') : '';
+          const deadlineColor = getDeadlineColor(dl);
           
           return (
             <button
               key={dl.id}
               onClick={() => onNavigate(dl.id)}
-              className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                status === 'overdue'
-                  ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20'
-                  : status === 'soon'
-                  ? 'border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20'
-                  : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50'
-              } hover:shadow-sm`}
+              className="w-full text-left p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:shadow-sm transition-colors"
             >
               <div className="flex items-center justify-between">
                 <span className="font-medium text-gray-900 dark:text-gray-100">
                   {dl.title}
                 </span>
                 <span
-                  className={`text-xs px-2 py-1 rounded ${
-                    status === 'overdue'
-                      ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                      : status === 'soon'
-                      ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                  }`}
+                  className="text-xs px-2 py-1 rounded text-white"
+                  style={{ backgroundColor: deadlineColor }}
                 >
                   {dateStr}
                 </span>

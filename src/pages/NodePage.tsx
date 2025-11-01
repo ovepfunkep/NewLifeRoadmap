@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import { useState, useEffect, useMemo } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
-import { initDB, getRoot, getNode, saveNode, deleteNode } from '../db';
+import { initDB, getNode, saveNode, deleteNode } from '../db';
 import { buildBreadcrumbs } from '../utils';
 import { useNodeNavigation } from '../hooks/useHashRoute';
 import { useToast } from '../hooks/useToast';
@@ -11,8 +10,8 @@ import { NodeCard } from '../components/NodeCard';
 import { DeadlineList } from '../components/DeadlineList';
 import { EditorModal } from '../components/EditorModal';
 import { ImportExportModal } from '../components/ImportExportModal';
+import { MoveModal } from '../components/MoveModal';
 import { ToastList } from '../components/ToastList';
-import { generateId } from '../utils';
 import { FiCalendar } from 'react-icons/fi';
 import { FaSort } from 'react-icons/fa';
 import { Tooltip } from '../components/Tooltip';
@@ -28,52 +27,13 @@ export function NodePage() {
   const [showImportExport, setShowImportExport] = useState(false);
   const [editingNode, setEditingNode] = useState<Node | null>(null);
   const [sortType, setSortType] = useState<SortType>('none');
-  const [isDragging, setIsDragging] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [draggedNode, setDraggedNode] = useState<Node | null>(null);
+  const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
   const { toasts, showToast, removeToast } = useToast();
 
-  // Сохраняем стабильный список во время drag
-  const [stableChildren, setStableChildren] = useState<Node[]>([]);
-
-  // Вычисляем отсортированных детей (без использования isDragging в зависимостях useMemo)
-  const computeSortedChildren = (children: Node[]): Node[] => {
-    // Разделяем на приоритетные и обычные
-    const priority = children.filter(c => c.priority);
-    const normal = children.filter(c => !c.priority);
-
-    // Сортируем приоритетные по order, затем обычные по order
-    const sortedPriority = [...priority].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    const sortedNormal = [...normal].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-    let result = [...sortedPriority, ...sortedNormal];
-
-    // Применяем дополнительную сортировку (только если не идёт drag)
-    if (!isDragging && sortType === 'name') {
-      result = result.sort((a, b) => a.title.localeCompare(b.title));
-      // Но приоритетные остаются сверху
-      const priority2 = result.filter(c => c.priority);
-      const normal2 = result.filter(c => !c.priority);
-      result = [...priority2, ...normal2];
-    } else if (!isDragging && sortType === 'deadline') {
-      result = result.sort((a, b) => {
-        if (!a.deadline && !b.deadline) return 0;
-        if (!a.deadline) return 1;
-        if (!b.deadline) return -1;
-        return new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime();
-      });
-      // Приоритетные остаются сверху
-      const priority2 = result.filter(c => c.priority);
-      const normal2 = result.filter(c => !c.priority);
-      result = [...priority2, ...normal2];
-    }
-
-    return result;
-  };
-
-  // Мемоизированный список (зависит только от children и sortType)
-  // Создаём строку для отслеживания изменений детей
-  const childrenKey = currentNode ? JSON.stringify(currentNode.children.map(c => c.id)) : '';
-  
-  const baseSortedChildren = useMemo(() => {
+  // Мемоизированный отсортированный список детей
+  const sortedChildren = useMemo(() => {
     if (!currentNode) return [];
     const children = currentNode.children;
     const priority = children.filter(c => c.priority);
@@ -99,12 +59,7 @@ export function NodePage() {
       result = [...priority2, ...normal2];
     }
     return result;
-  }, [currentNode, childrenKey, sortType]);
-
-  // Используем стабильный список во время drag, иначе базовый
-  const sortedChildren = (isDragging && stableChildren.length > 0) 
-    ? stableChildren 
-    : baseSortedChildren;
+  }, [currentNode?.children, currentNode?.id, sortType]);
 
   // Загрузка узла
   useEffect(() => {
@@ -126,7 +81,7 @@ export function NodePage() {
         setBreadcrumbs(crumbs);
       } catch (error) {
         console.error('Error loading node:', error);
-        showToast(t('general.loading'));
+        showToast('Ошибка загрузки задачи');
       } finally {
         setLoading(false);
       }
@@ -207,6 +162,9 @@ export function NodePage() {
     const reloaded = await getNode(currentNode!.id);
     if (reloaded) {
       setCurrentNode(reloaded);
+      // Обновляем хлебные крошки после переименования/изменения
+      const breadcrumbs = await buildBreadcrumbs(reloaded.id, getNode);
+      setBreadcrumbs(breadcrumbs);
       showToast(t('toast.nodeSaved'));
     }
   };
@@ -249,65 +207,107 @@ export function NodePage() {
     });
   };
 
-  const handleDragEnd = async (result: DropResult) => {
-    if (!currentNode || !result.destination) {
-      setIsDragging(false);
-      setStableChildren([]);
+  // Перемещение шага внутрь другого шага
+  const handleMoveNode = async (sourceNodeId: string, targetNodeId: string) => {
+    if (!currentNode || sourceNodeId === targetNodeId) return;
+    
+    // Предотвращаем перемещение корневого узла
+    if (sourceNodeId === 'root-node') {
+      showToast('Нельзя переместить корневую задачу');
       return;
     }
-    if (result.source.index === result.destination.index) {
-      setIsDragging(false);
-      setStableChildren([]);
+
+    // Получаем узел для перемещения
+    const sourceNode = await getNode(sourceNodeId);
+    if (!sourceNode) return;
+
+    // Проверяем, не является ли targetNodeId потомком sourceNodeId (предотвращение рекурсии)
+    const isDescendant = (node: Node, targetId: string): boolean => {
+      for (const child of node.children) {
+        if (child.id === targetId) return true;
+        if (isDescendant(child, targetId)) return true;
+      }
+      return false;
+    };
+    
+    if (isDescendant(sourceNode, targetNodeId)) {
+      showToast('Нельзя переместить задачу в её собственный подшаг');
       return;
     }
 
-    // Используем стабильный список для определения элементов
-    const sourceItem = stableChildren[result.source.index];
-    const destItem = stableChildren[result.destination.index];
-
-    // Получаем исходный порядок из currentNode
-    const originalChildren = [...currentNode.children];
-    const sourceOriginalIndex = originalChildren.findIndex(c => c.id === sourceItem.id);
-    
-    // Перемещаем элемент
-    const reordered = [...originalChildren];
-    const [movedItem] = reordered.splice(sourceOriginalIndex, 1);
-    
-    // Вычисляем целевой индекс в исходном списке
-    const destOriginalIndex = originalChildren.findIndex(c => c.id === destItem.id);
-    // Правильно вычисляем индекс вставки
-    const insertIndex = sourceOriginalIndex < destOriginalIndex 
-      ? destOriginalIndex 
-      : destOriginalIndex + 1;
-    reordered.splice(insertIndex, 0, movedItem);
-
-    // Обновляем order для всех узлов
-    const updatedChildren = reordered.map((child, index) => ({
-      ...child,
-      order: index,
-      updatedAt: new Date().toISOString(),
-    }));
-
-    // Сохраняем все узлы
-    for (const child of updatedChildren) {
-      await saveNode(child);
+    // Удаляем из старого родителя
+    if (sourceNode.parentId) {
+      const oldParent = await getNode(sourceNode.parentId);
+      if (oldParent) {
+        const updatedChildren = oldParent.children.filter(child => child.id !== sourceNodeId);
+        const updatedParent: Node = {
+          ...oldParent,
+          children: updatedChildren,
+          updatedAt: new Date().toISOString(),
+        };
+        await saveNode(updatedParent);
+      }
     }
 
-    // Обновляем родителя
-    const updatedParent: Node = {
-      ...currentNode,
-      children: updatedChildren,
+    // Обновляем parentId у перемещаемого узла и всех его потомков
+    const updateParentIds = (node: Node, newParentId: string) => {
+      node.parentId = newParentId;
+      node.updatedAt = new Date().toISOString();
+      for (const child of node.children) {
+        updateParentIds(child, node.id);
+      }
+    };
+
+    // Добавляем в новый родитель
+    const targetNode = await getNode(targetNodeId);
+    if (!targetNode) return;
+
+    updateParentIds(sourceNode, targetNodeId);
+    await saveNode(sourceNode);
+
+    const updatedTarget: Node = {
+      ...targetNode,
+      children: [...targetNode.children, sourceNode],
       updatedAt: new Date().toISOString(),
     };
-    await saveNode(updatedParent);
+    await saveNode(updatedTarget);
 
-    setIsDragging(false);
-    setStableChildren([]);
-    
+    // Перезагружаем текущий узел
     const reloaded = await getNode(currentNode.id);
     if (reloaded) {
       setCurrentNode(reloaded);
+      const breadcrumbs = await buildBreadcrumbs(reloaded.id, getNode);
+      setBreadcrumbs(breadcrumbs);
     }
+
+    showToast(t('toast.nodeMoved'));
+  };
+
+  // Обработчик drag для перемещения внутрь другого шага
+  const handleDragStart = (node: Node) => {
+    // Предотвращаем перетаскивание корневого узла
+    if (node.id === 'root-node') {
+      return;
+    }
+    setDraggedNode(node);
+  };
+
+  const handleDragEnd = () => {
+    if (draggedNode && dragOverNodeId) {
+      handleMoveNode(draggedNode.id, dragOverNodeId);
+    }
+    setDraggedNode(null);
+    setDragOverNodeId(null);
+  };
+
+  const handleDragOver = (nodeId: string) => {
+    if (draggedNode && draggedNode.id !== nodeId) {
+      setDragOverNodeId(nodeId);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverNodeId(null);
   };
 
   const handleImportExport = () => {
@@ -335,7 +335,7 @@ export function NodePage() {
   if (!currentNode) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <p className="text-gray-600 dark:text-gray-400">Узел не найден</p>
+        <p className="text-gray-600 dark:text-gray-400">Задача не найдена</p>
       </div>
     );
   }
@@ -368,6 +368,15 @@ export function NodePage() {
           >
             {t('importExport.import')} / {t('importExport.export')}
           </button>
+          
+          {currentNode.id !== 'root-node' && (
+            <button
+              onClick={() => setShowMoveModal(true)}
+              className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              {t('node.move')}
+            </button>
+          )}
 
           {/* Сортировка */}
           <div className="flex gap-1 ml-auto">
@@ -415,44 +424,26 @@ export function NodePage() {
                 <p className="text-gray-500 dark:text-gray-400">{t('node.noChildren')}</p>
               </div>
             ) : (
-              <DragDropContext 
-                onDragStart={(start) => {
-                  // КРИТИЧНО: Фиксируем список ДО начала drag - глубокое копирование
-                  const frozenList = baseSortedChildren.map(child => ({ ...child }));
-                  setStableChildren(frozenList);
-                  setIsDragging(true);
-                }}
-                onDragEnd={handleDragEnd}
-              >
-                <Droppable droppableId="children">
-                  {(provided) => (
-                    <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
-                      {sortedChildren.map((child, index) => (
-                        <Draggable key={child.id} draggableId={child.id} index={index}>
-                          {(provided, snapshot) => (
-                            <NodeCard
-                              node={child}
-                              index={index}
-                              onNavigate={navigateToNode}
-                              onMarkCompleted={handleMarkCompleted}
-                              onEdit={handleEdit}
-                              onDelete={handleDelete}
-                              onTogglePriority={handleTogglePriority}
-                              isDragging={snapshot.isDragging}
-                              dragHandleProps={provided.dragHandleProps}
-                              draggableProps={{
-                                ref: provided.innerRef,
-                                ...provided.draggableProps
-                              }}
-                            />
-                          )}
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              </DragDropContext>
+              <div className="space-y-2">
+                {sortedChildren.map((child, index) => (
+                  <NodeCard
+                    key={child.id}
+                    node={child}
+                    index={index}
+                    onNavigate={navigateToNode}
+                    onMarkCompleted={handleMarkCompleted}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onTogglePriority={handleTogglePriority}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    isDragOver={dragOverNodeId === child.id}
+                    draggedNode={draggedNode}
+                  />
+                ))}
+              </div>
             )}
           </div>
           
@@ -481,6 +472,14 @@ export function NodePage() {
           currentNode={currentNode}
           onImport={handleImportComplete}
           onClose={() => setShowImportExport(false)}
+        />
+      )}
+      
+      {showMoveModal && currentNode && (
+        <MoveModal
+          sourceNodeId={currentNode.id}
+          onMove={handleMoveNode}
+          onClose={() => setShowMoveModal(false)}
         />
       )}
       

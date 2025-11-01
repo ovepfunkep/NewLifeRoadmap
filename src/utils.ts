@@ -55,16 +55,16 @@ export function computeProgress(node: Node): number {
     return false;
   };
   
-  for (const leaf of leaves) {
+  leaves.forEach(leaf => {
     if (isCompletedLeaf(leaf, node)) {
       completedCount++;
     }
-  }
+  });
   
-  return leaves.length > 0 ? Math.round((completedCount / leaves.length) * 100) : 0;
+  return Math.round((completedCount / leaves.length) * 100);
 }
 
-// Получить статус дедлайна
+// Статус дедлайна
 export function deadlineStatus(node: Node): DeadlineStatus {
   if (!node.deadline) {
     return 'none';
@@ -82,6 +82,33 @@ export function deadlineStatus(node: Node): DeadlineStatus {
     return 'soon';
   }
   return 'future';
+}
+
+// Цвет дедлайна: красный < недели, жёлтый < месяца, иначе акцентный
+export function getDeadlineColor(node: Node): string {
+  if (!node.deadline) {
+    return 'var(--accent)';
+  }
+  
+  const deadline = new Date(node.deadline);
+  const now = new Date();
+  const diffMs = deadline.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0) {
+    // Просрочено - красный
+    return '#ef4444'; // red-500
+  }
+  if (diffDays < 7) {
+    // Меньше недели - красный
+    return '#ef4444'; // red-500
+  }
+  if (diffDays < 30) {
+    // Меньше месяца - жёлтый
+    return '#eab308'; // yellow-500
+  }
+  // Больше месяца - акцентный
+  return 'var(--accent)';
 }
 
 // Собрать все дедлайны из поддерева
@@ -105,20 +132,20 @@ export function sortByDeadlineAsc(nodes: Node[]): Node[] {
   });
 }
 
-// Генерация нового UUID
+// Генерация уникального ID
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
 // Перегенерировать ID для узла и всех потомков (для импорта)
 export function remapIds(node: Node, existingIds: Set<string>): Node {
+  const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   const newId = existingIds.has(node.id) ? generateId() : node.id;
   existingIds.add(newId);
   
   return {
     ...node,
     id: newId,
-    parentId: node.parentId, // будет обновлён при вставке
     children: node.children.map(child => remapIds(child, existingIds)),
   };
 }
@@ -141,4 +168,3 @@ export async function buildBreadcrumbs(
   
   return breadcrumbs;
 }
-

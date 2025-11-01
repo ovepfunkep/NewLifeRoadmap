@@ -15,22 +15,24 @@ export const i18n: Record<string, any> = {
   node: {
     markCompleted: 'Отметить готовым',
     markIncomplete: 'Отметить как неготовый',
-    editNode: 'Редактировать узел',
-    createChild: 'Создать дочерний узел',
-    deleteNode: 'Удалить узел',
-    deleteConfirm: 'Удалить этот узел и всех его потомков?',
-    noChildren: 'Нет дочерних узлов',
+    editNode: 'Редактировать задачу',
+    createChild: 'Создать подзадачу',
+    deleteNode: 'Удалить задачу',
+    deleteConfirm: 'Удалить эту задачу и всех её потомков?',
+    noChildren: 'Нет подзадач',
     progress: 'Прогресс',
+    move: 'Переместить',
+    moveTitle: 'Переместить задачу',
   },
   importExport: {
     import: 'Импорт',
     export: 'Экспорт',
-    importTitle: 'Импорт узла',
-    exportTitle: 'Экспорт узла',
+    importTitle: 'Импорт задачи',
+    exportTitle: 'Экспорт задачи',
     strategyAdd: 'Добавить (add)',
     strategyReplace: 'Заменить (replace)',
     importHint: 'Выберите JSON файл для импорта',
-    exportHint: 'Скачать текущий узел как JSON',
+    exportHint: 'Скачать текущую задачу как JSON',
     selectFile: 'Выбрать файл',
   },
   deadline: {
@@ -43,10 +45,11 @@ export const i18n: Record<string, any> = {
   },
   toast: {
     undo: 'Отменить',
-    nodeDeleted: 'Узел удалён',
-    nodeSaved: 'Узел сохранён',
+    nodeDeleted: 'Задача удалена',
+    nodeSaved: 'Задача сохранена',
     importSuccess: 'Импорт выполнен успешно',
     importError: 'Ошибка импорта',
+    nodeMoved: 'Задача перемещена',
   },
   theme: {
     light: 'Светлая',
@@ -67,4 +70,3 @@ export function t(key: string): string {
   }
   return value || key;
 }
-
