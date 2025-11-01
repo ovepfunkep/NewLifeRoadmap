@@ -6,15 +6,13 @@ import { buildBreadcrumbs } from '../utils';
 import { useNodeNavigation } from '../hooks/useHashRoute';
 import { useToast } from '../hooks/useToast';
 import { Header } from '../components/Header';
-import { NodeCard } from '../components/NodeCard';
+import { StepsList } from '../components/StepsList';
 import { DeadlineList } from '../components/DeadlineList';
 import { EditorModal } from '../components/EditorModal';
 import { ImportExportModal } from '../components/ImportExportModal';
 import { MoveModal } from '../components/MoveModal';
 import { ToastList } from '../components/ToastList';
-import { FiCalendar } from 'react-icons/fi';
-import { FaSort } from 'react-icons/fa';
-import { Tooltip } from '../components/Tooltip';
+import { SettingsWidget } from '../components/SettingsWidget';
 
 type SortType = 'none' | 'name' | 'deadline';
 
@@ -342,94 +340,27 @@ export function NodePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Header node={currentNode} breadcrumbs={breadcrumbs} />
+      <Header 
+        node={currentNode} 
+        breadcrumbs={breadcrumbs}
+        draggedNode={draggedNode}
+        dragOverNodeId={dragOverNodeId}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDragEnd={handleDragEnd}
+        onEdit={handleEdit}
+        onImportExport={handleImportExport}
+        onMove={() => setShowMoveModal(true)}
+      />
       
-      <main className="container mx-auto px-4 py-6">
-        {/* Панель действий */}
-        <div className="flex gap-3 mb-6 flex-wrap items-center">
-          <button
-            onClick={handleCreateChild}
-            className="px-4 py-2 rounded-lg text-white transition-colors"
-            style={{ backgroundColor: 'var(--accent)' }}
-          >
-            {t('node.createChild')}
-          </button>
-          
-          <button
-            onClick={() => handleEdit(currentNode)}
-            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
-            {t('general.edit')}
-          </button>
-          
-          <button
-            onClick={handleImportExport}
-            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
-            {t('importExport.import')} / {t('importExport.export')}
-          </button>
-          
-          {currentNode.id !== 'root-node' && (
-            <button
-              onClick={() => setShowMoveModal(true)}
-              className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-            >
-              {t('node.move')}
-            </button>
-          )}
-
-          {/* Сортировка */}
-          <div className="flex gap-1 ml-auto">
-            <Tooltip text="Сортировать по имени">
-              <button
-                onClick={() => setSortType(sortType === 'name' ? 'none' : 'name')}
-                className={`p-2 rounded-lg transition-all border ${
-                  sortType === 'name'
-                    ? 'border-transparent'
-                    : 'border-current hover:bg-accent/10'
-                }`}
-                style={{ 
-                  color: 'var(--accent)',
-                  backgroundColor: sortType === 'name' ? 'var(--accent)' : 'transparent'
-                }}
-              >
-                <FaSort size={18} style={{ color: sortType === 'name' ? 'white' : 'var(--accent)' }} />
-              </button>
-            </Tooltip>
-            <Tooltip text="Сортировать по дедлайну">
-              <button
-                onClick={() => setSortType(sortType === 'deadline' ? 'none' : 'deadline')}
-                className={`p-2 rounded-lg transition-all border ${
-                  sortType === 'deadline'
-                    ? 'border-transparent'
-                    : 'border-current hover:bg-accent/10'
-                }`}
-                style={{ 
-                  color: 'var(--accent)',
-                  backgroundColor: sortType === 'deadline' ? 'var(--accent)' : 'transparent'
-                }}
-              >
-                <FiCalendar size={18} style={{ color: sortType === 'deadline' ? 'white' : 'var(--accent)' }} />
-              </button>
-            </Tooltip>
-          </div>
-        </div>
-        
-        {/* Контент: список детей и дедлайны */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Список детей */}
-          <div className="lg:col-span-2">
-            {sortedChildren.length === 0 ? (
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-8 text-center">
-                <p className="text-gray-500 dark:text-gray-400">{t('node.noChildren')}</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {sortedChildren.map((child, index) => (
-                  <NodeCard
-                    key={child.id}
-                    node={child}
-                    index={index}
+            <main className="container mx-auto px-4 py-6">
+              {/* Контент: шаги и дедлайны */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Блок шагов */}
+                <div className="lg:col-span-2">
+                  <StepsList
+                    children={sortedChildren}
+                    onCreateChild={handleCreateChild}
                     onNavigate={navigateToNode}
                     onMarkCompleted={handleMarkCompleted}
                     onEdit={handleEdit}
@@ -439,19 +370,16 @@ export function NodePage() {
                     onDragEnd={handleDragEnd}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
-                    isDragOver={dragOverNodeId === child.id}
                     draggedNode={draggedNode}
+                    dragOverNodeId={dragOverNodeId}
                   />
-                ))}
+                </div>
+                
+                {/* Боковая панель с дедлайнами */}
+                <div className="lg:col-span-1">
+                  <DeadlineList node={currentNode} onNavigate={navigateToNode} />
+                </div>
               </div>
-            )}
-          </div>
-          
-          {/* Боковая панель с дедлайнами */}
-          <div className="lg:col-span-1">
-            <DeadlineList node={currentNode} onNavigate={navigateToNode} />
-          </div>
-        </div>
       </main>
       
       {/* Модалки */}
@@ -485,6 +413,9 @@ export function NodePage() {
       
       {/* Тосты */}
       <ToastList toasts={toasts} onRemove={removeToast} />
+      
+      {/* Виджет настроек - закреплен снизу справа */}
+      <SettingsWidget />
     </div>
   );
 }

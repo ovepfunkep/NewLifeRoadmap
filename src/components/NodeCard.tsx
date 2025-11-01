@@ -178,58 +178,58 @@ export function NodeCard({
           
           {/* Действия (иконки) */}
           <div className="flex items-center gap-1 flex-shrink-0">
-            <Tooltip text={node.completed ? t('node.markIncomplete') : t('node.markCompleted')}>
-              <button
-                onClick={() => onMarkCompleted(node.id, !node.completed)}
-                className={`p-2 rounded-lg transition-all border ${
-                  node.completed
-                    ? 'border-transparent'
-                    : 'border-current hover:bg-accent/10'
-                }`}
-                style={{ 
-                  color: 'var(--accent)',
-                  backgroundColor: node.completed ? 'var(--accent)' : 'transparent'
-                }}
-              >
-                <FiCheck size={18} style={{ color: node.completed ? 'white' : 'var(--accent)' }} />
-              </button>
-            </Tooltip>
-            
-            <Tooltip text={node.priority ? 'Убрать приоритет' : 'Приоритетная задача'}>
-              <button
-                onClick={() => onTogglePriority(node.id, !node.priority)}
-                className={`p-2 rounded-lg transition-all border ${
-                  node.priority
-                    ? 'border-transparent'
-                    : 'border-current hover:bg-accent/10'
-                }`}
-                style={{ 
-                  color: 'var(--accent)',
-                  backgroundColor: node.priority ? 'var(--accent)' : 'transparent'
-                }}
-              >
-                <FiArrowUp size={18} style={{ color: node.priority ? 'white' : 'var(--accent)' }} />
-              </button>
-            </Tooltip>
-            
-            <Tooltip text={t('general.edit')}>
-              <button
-                onClick={() => onEdit(node)}
-                className="p-2 rounded-lg hover:bg-accent/10 transition-colors"
-                style={{ color: 'var(--accent)' }}
-              >
-                <FiEdit2 size={18} />
-              </button>
-            </Tooltip>
-            
-            <Tooltip text={t('general.delete')}>
-              <button
-                onClick={() => onDelete(node.id)}
-                className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-colors"
-              >
-                <FiTrash2 size={18} />
-              </button>
-            </Tooltip>
+                   <Tooltip text={node.completed ? t('node.markIncomplete') : t('node.markCompleted')}>
+                     <button
+                       onClick={() => onMarkCompleted(node.id, !node.completed)}
+                       className={`p-2 rounded-lg transition-all border hover:brightness-150 ${
+                         node.completed
+                           ? 'border-transparent'
+                           : 'border-current hover:bg-accent/10'
+                       }`}
+                       style={{ 
+                         color: 'var(--accent)',
+                         backgroundColor: node.completed ? 'var(--accent)' : 'transparent'
+                       }}
+                     >
+                       <FiCheck size={18} style={{ color: node.completed ? 'white' : 'var(--accent)' }} />
+                     </button>
+                   </Tooltip>
+                   
+                   <Tooltip text={node.priority ? 'Убрать приоритет' : 'Приоритетная задача'}>
+                     <button
+                       onClick={() => onTogglePriority(node.id, !node.priority)}
+                       className={`p-2 rounded-lg transition-all border hover:brightness-150 ${
+                         node.priority
+                           ? 'border-transparent'
+                           : 'border-current hover:bg-accent/10'
+                       }`}
+                       style={{ 
+                         color: 'var(--accent)',
+                         backgroundColor: node.priority ? 'var(--accent)' : 'transparent'
+                       }}
+                     >
+                       <FiArrowUp size={18} style={{ color: node.priority ? 'white' : 'var(--accent)' }} />
+                     </button>
+                   </Tooltip>
+                   
+                   <Tooltip text={t('general.edit')}>
+                     <button
+                       onClick={() => onEdit(node)}
+                       className="p-2 rounded-lg hover:bg-accent/10 transition-all hover:brightness-150"
+                       style={{ color: 'var(--accent)' }}
+                     >
+                       <FiEdit2 size={18} />
+                     </button>
+                   </Tooltip>
+                   
+                   <Tooltip text={t('general.delete')}>
+                     <button
+                       onClick={() => onDelete(node.id)}
+                       className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-all hover:brightness-150"
+                     >
+                       <FiTrash2 size={18} />
+                     </button>
+                   </Tooltip>
           </div>
         </div>
       </div>

@@ -1,0 +1,353 @@
+import { useState, useEffect, useRef } from 'react';
+import { useTheme } from '../hooks/useTheme';
+import { useAccent } from '../hooks/useAccent';
+import { FiSun, FiMoon } from 'react-icons/fi';
+import { setLanguage as setI18nLanguage, getLanguage as getI18nLanguage } from '../i18n';
+
+type Language = 'ru' | 'en';
+
+interface SettingsWidgetProps {
+  onLanguageChange?: (lang: Language) => void;
+}
+
+export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
+  const { theme, setTheme } = useTheme();
+  const { accent, setAccent, colors } = useAccent();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [showPalette, setShowPalette] = useState(false);
+  const [language, setLanguageState] = useState<Language>(() => {
+    if (typeof window !== 'undefined') {
+      return getI18nLanguage();
+    }
+    return 'en';
+  });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const timeoutRef = useRef<number | null>(null);
+  const radius = 60; // Радиус спиннера в пикселях
+  const gearSize = 32; // Размер шестеренки
+  const paletteWidth = 280; // Ширина палитры цветов
+
+  // Проверяем, находится ли курсор в пределах радиуса (с учетом палитры)
+  useEffect(() => {
+    if (!isExpanded || !containerRef.current) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      // Центр контейнера = центр спиннера
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      
+      // Расширяем область: если показывается палитра, учитываем её ширину
+      const effectiveRadius = showPalette ? radius + paletteWidth : radius;
+      
+      const distance = Math.sqrt(
+        Math.pow(e.clientX - centerX, 2) + Math.pow(e.clientY - centerY, 2)
+      );
+      
+      // Очищаем предыдущий таймер
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      // Если курсор выходит за пределы расширенного радиуса + отступ, планируем сворачивание
+      if (distance > effectiveRadius + 30) {
+        timeoutRef.current = window.setTimeout(() => {
+          // Дополнительная проверка перед сворачиванием
+          if (containerRef.current) {
+            const finalRect = containerRef.current.getBoundingClientRect();
+            const finalCenterX = finalRect.left + finalRect.width / 2;
+            const finalCenterY = finalRect.top + finalRect.height / 2;
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+            const finalEffectiveRadius = showPalette ? radius + paletteWidth : radius;
+            const finalDistance = Math.sqrt(
+              Math.pow(mouseX - finalCenterX, 2) + Math.pow(mouseY - finalCenterY, 2)
+            );
+            if (finalDistance > finalEffectiveRadius + 30) {
+              setIsExpanded(false);
+              setShowPalette(false);
+            }
+          }
+        }, 150);
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [isExpanded, radius, showPalette, paletteWidth]);
+
+  const handleThemeClick = () => {
+    setTheme(theme === 'light' ? 'dark' : 'light');
+  };
+
+  const handleLanguageClick = () => {
+    const newLang = language === 'ru' ? 'en' : 'ru';
+    setLanguageState(newLang);
+    setI18nLanguage(newLang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('language', newLang);
+      window.location.reload();
+    }
+    onLanguageChange?.(newLang);
+  };
+
+  const ColorIcon = () => (
+    <div 
+      className="w-4 h-4 rounded border-2 border-current" 
+      style={{ backgroundColor: accent }}
+    />
+  );
+
+  const LanguageIcon = () => (
+    <span className="text-xs font-bold" style={{ color: 'var(--accent)' }}>
+      {language.toUpperCase()}
+    </span>
+  );
+
+  // Углы для кнопок: тема сверху (270°), цвет слева снизу (150°), язык справа снизу (30°)
+  const buttonPositions = [
+    { angle: 270, icon: theme === 'light' ? FiSun : FiMoon, action: handleThemeClick, label: language === 'en' ? 'Theme' : 'Тема' },
+    { angle: 150, icon: ColorIcon, action: () => setShowPalette(!showPalette), label: language === 'en' ? 'Color' : 'Цвет' },
+    { angle: 30, icon: LanguageIcon, action: handleLanguageClick, label: language === 'en' ? 'Language' : 'Язык' },
+  ];
+
+  return (
+    <div 
+      ref={containerRef}
+      className="fixed flex items-center justify-center"
+      style={{ 
+        width: `${radius * 2}px`,
+        height: `${radius * 2}px`,
+        right: '1.5rem',
+        bottom: '1.5rem',
+        zIndex: 50,
+      }}
+    >
+      {/* Шестеренка (свернутое состояние) - отцентрирована внутри контейнера */}
+      <div
+        className="absolute flex items-center justify-center transition-all duration-[333ms] ease-in-out"
+        style={{
+          width: `${gearSize}px`,
+          height: `${gearSize}px`,
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          opacity: isExpanded ? 0 : 1,
+          pointerEvents: 'auto',
+          cursor: 'pointer',
+          zIndex: 20,
+        }}
+        onMouseEnter={() => {
+          if (!isExpanded) {
+            setIsExpanded(true);
+            if (timeoutRef.current !== null) {
+              clearTimeout(timeoutRef.current);
+              timeoutRef.current = null;
+            }
+          }
+        }}
+      >
+        <svg
+          width={gearSize}
+          height={gearSize}
+          viewBox="0 0 24 24"
+          fill="none"
+          style={{ color: 'var(--accent)' }}
+          className="transition-colors"
+        >
+          <path
+            d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
+
+      {/* Спиннер с кнопками (развернутое состояние) - отцентрирован внутри контейнера */}
+      <div
+        className="absolute flex items-center justify-center transition-all duration-[333ms] ease-in-out"
+        style={{
+          width: '100%',
+          height: '100%',
+          left: '50%',
+          top: '50%',
+          transform: isExpanded 
+            ? 'translate(-50%, -50%) scale(1) rotate(360deg)' 
+            : 'translate(-50%, -50%) scale(0) rotate(0deg)',
+          opacity: isExpanded ? 1 : 0,
+          pointerEvents: isExpanded ? 'auto' : 'none',
+        }}
+        onMouseEnter={() => {
+          if (isExpanded && timeoutRef.current !== null) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
+        }}
+      >
+        {/* Центральная точка */}
+        <div 
+          className="absolute rounded-full bg-gray-400 dark:bg-gray-600 transition-all duration-[333ms]"
+          style={{
+            width: isExpanded ? '12px' : '8px',
+            height: isExpanded ? '12px' : '8px',
+            left: '50%',
+            top: '50%',
+            opacity: isExpanded ? 1 : 0,
+            transform: 'translate(-50%, -50%)',
+          }}
+        />
+        
+        {/* Линии спиннера */}
+        <svg 
+          className="absolute pointer-events-none" 
+          style={{ 
+            color: 'var(--accent)',
+            width: '100%',
+            height: '100%',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+          }}
+          viewBox={`0 0 ${radius * 2} ${radius * 2}`}
+        >
+          {buttonPositions.map((pos, idx) => {
+            const rad = (pos.angle * Math.PI) / 180;
+            const centerX = radius;
+            const centerY = radius;
+            const lineLength = radius - 20;
+            const x1 = centerX;
+            const y1 = centerY;
+            const x2 = centerX + (lineLength - 20) * Math.cos(rad);
+            const y2 = centerY + (lineLength - 20) * Math.sin(rad);
+            
+            return (
+              <line
+                key={idx}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                className="transition-opacity duration-[333ms]"
+                style={{ opacity: isExpanded ? 0.6 : 0 }}
+              />
+            );
+          })}
+        </svg>
+
+        {/* Кнопки на концах */}
+        {buttonPositions.map((pos, idx) => {
+          const rad = (pos.angle * Math.PI) / 180;
+          const buttonRadius = radius - 20;
+          const Icon = pos.icon;
+
+          return (
+            <button
+              key={idx}
+              onClick={(e) => {
+                e.stopPropagation();
+                pos.action();
+              }}
+              className="absolute w-8 h-8 rounded-lg border-2 border-current hover:bg-accent/10 hover:brightness-150 transition-all duration-[333ms] flex items-center justify-center group z-10 bg-white dark:bg-gray-800 shadow-sm"
+              style={{
+                left: '50%',
+                top: '50%',
+                color: 'var(--accent)',
+                transform: isExpanded 
+                  ? `translate(calc(-50% + ${buttonRadius * Math.cos(rad)}px), calc(-50% + ${buttonRadius * Math.sin(rad)}px)) scale(1)` 
+                  : 'translate(-50%, -50%) scale(0)',
+                opacity: isExpanded ? 1 : 0,
+                transition: 'transform 333ms ease-in-out, opacity 333ms ease-in-out',
+              }}
+              title={pos.label}
+            >
+              <Icon size={18} />
+              {/* Tooltip */}
+              <span className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs text-gray-600 dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none bg-white dark:bg-gray-800 px-2 py-1 rounded shadow-lg border border-gray-200 dark:border-gray-700">
+                {pos.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Палитра цветов */}
+      {showPalette && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setShowPalette(false)}
+          />
+          <div 
+            className="absolute z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
+            onClick={(e) => e.stopPropagation()}
+            onMouseEnter={() => {
+              if (timeoutRef.current !== null) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+              }
+            }}
+            style={{
+              right: 'calc(100% + 0.5rem)',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              padding: '12px',
+              display: 'inline-block',
+            }}
+          >
+            <div 
+              style={{ 
+                display: 'flex', 
+                flexWrap: 'wrap', 
+                gap: '7px',
+                width: 'max-content',
+              }}
+            >
+              {colors.map((color) => (
+                <button
+                  key={color}
+                  onClick={() => {
+                    setAccent(color);
+                    setShowPalette(false);
+                  }}
+                  className={`rounded border-2 transition-all hover:brightness-150 flex-shrink-0 ${
+                    accent === color
+                      ? 'border-gray-900 dark:border-gray-100 scale-110'
+                      : 'border-gray-300 dark:border-gray-700 hover:scale-105'
+                  }`}
+                  style={{ 
+                    backgroundColor: color,
+                    width: '32px',
+                    height: '32px',
+                    minWidth: '32px',
+                    minHeight: '32px',
+                  }}
+                  aria-label={`Выбрать цвет ${color}`}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

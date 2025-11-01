@@ -1,70 +1,158 @@
 import { Node, DeadlineStatus } from './types';
 
-// Локализация (RU)
-export const i18n: Record<string, any> = {
-  general: {
-    appName: 'LifeRoadmap',
-    loading: 'Загрузка...',
-    save: 'Сохранить',
-    cancel: 'Отмена',
-    delete: 'Удалить',
-    edit: 'Редактировать',
-    create: 'Создать',
-    close: 'Закрыть',
+type Language = 'ru' | 'en';
+
+// Локализация
+export const i18n: Record<Language, Record<string, any>> = {
+  en: {
+    general: {
+      appName: 'LifeRoadmap',
+      loading: 'Loading...',
+      save: 'Save',
+      cancel: 'Cancel',
+      delete: 'Delete',
+      edit: 'Edit',
+      create: 'Create',
+      close: 'Close',
+    },
+    node: {
+      markCompleted: 'Mark as completed',
+      markIncomplete: 'Mark as incomplete',
+      editNode: 'Edit task',
+      createChild: 'Create subtask',
+      deleteNode: 'Delete task',
+      deleteConfirm: 'Delete this task and all its children?',
+      noChildren: 'No subtasks',
+      progress: 'Progress',
+      move: 'Move',
+      moveTitle: 'Move task',
+      steps: 'Steps',
+    },
+    importExport: {
+      import: 'Import',
+      export: 'Export',
+      importTitle: 'Import task',
+      exportTitle: 'Export task',
+      strategyAdd: 'Add',
+      strategyReplace: 'Replace',
+      importHint: 'Select JSON file to import',
+      exportHint: 'Download current task as JSON',
+      selectFile: 'Select file',
+    },
+    deadline: {
+      title: 'Upcoming deadlines',
+      none: 'No deadline',
+      overdue: 'Overdue',
+      soon: 'Soon (≤3 days)',
+      future: 'Future',
+      noDeadlines: 'No deadlines',
+    },
+    toast: {
+      undo: 'Undo',
+      nodeDeleted: 'Task deleted',
+      nodeSaved: 'Task saved',
+      importSuccess: 'Import completed successfully',
+      importError: 'Import error',
+      nodeMoved: 'Task moved',
+    },
+    theme: {
+      light: 'Light',
+      dark: 'Dark',
+      system: 'System',
+    },
+    breadcrumb: {
+      root: 'Your Life Roadmaps',
+    },
   },
-  node: {
-    markCompleted: 'Отметить готовым',
-    markIncomplete: 'Отметить как неготовый',
-    editNode: 'Редактировать задачу',
-    createChild: 'Создать подзадачу',
-    deleteNode: 'Удалить задачу',
-    deleteConfirm: 'Удалить эту задачу и всех её потомков?',
-    noChildren: 'Нет подзадач',
-    progress: 'Прогресс',
-    move: 'Переместить',
-    moveTitle: 'Переместить задачу',
-  },
-  importExport: {
-    import: 'Импорт',
-    export: 'Экспорт',
-    importTitle: 'Импорт задачи',
-    exportTitle: 'Экспорт задачи',
-    strategyAdd: 'Добавить (add)',
-    strategyReplace: 'Заменить (replace)',
-    importHint: 'Выберите JSON файл для импорта',
-    exportHint: 'Скачать текущую задачу как JSON',
-    selectFile: 'Выбрать файл',
-  },
-  deadline: {
-    title: 'Ближайшие дедлайны',
-    none: 'Без дедлайна',
-    overdue: 'Просрочено',
-    soon: 'Скоро (≤3 дня)',
-    future: 'Будущее',
-    noDeadlines: 'Нет дедлайнов',
-  },
-  toast: {
-    undo: 'Отменить',
-    nodeDeleted: 'Задача удалена',
-    nodeSaved: 'Задача сохранена',
-    importSuccess: 'Импорт выполнен успешно',
-    importError: 'Ошибка импорта',
-    nodeMoved: 'Задача перемещена',
-  },
-  theme: {
-    light: 'Светлая',
-    dark: 'Тёмная',
-    system: 'Системная',
-  },
-  breadcrumb: {
-    root: 'Ваши Life Roadmaps',
+  ru: {
+    general: {
+      appName: 'LifeRoadmap',
+      loading: 'Загрузка...',
+      save: 'Сохранить',
+      cancel: 'Отмена',
+      delete: 'Удалить',
+      edit: 'Редактировать',
+      create: 'Создать',
+      close: 'Закрыть',
+    },
+    node: {
+      markCompleted: 'Отметить готовым',
+      markIncomplete: 'Отметить как неготовый',
+      editNode: 'Редактировать задачу',
+      createChild: 'Создать подзадачу',
+      deleteNode: 'Удалить задачу',
+      deleteConfirm: 'Удалить эту задачу и всех её потомков?',
+      noChildren: 'Нет подзадач',
+      progress: 'Прогресс',
+      move: 'Переместить',
+      moveTitle: 'Переместить задачу',
+      steps: 'Шаги',
+    },
+    importExport: {
+      import: 'Импорт',
+      export: 'Экспорт',
+      importTitle: 'Импорт задачи',
+      exportTitle: 'Экспорт задачи',
+      strategyAdd: 'Добавить (add)',
+      strategyReplace: 'Заменить (replace)',
+      importHint: 'Выберите JSON файл для импорта',
+      exportHint: 'Скачать текущую задачу как JSON',
+      selectFile: 'Выбрать файл',
+    },
+    deadline: {
+      title: 'Ближайшие дедлайны',
+      none: 'Без дедлайна',
+      overdue: 'Просрочено',
+      soon: 'Скоро (≤3 дня)',
+      future: 'Будущее',
+      noDeadlines: 'Нет дедлайнов',
+    },
+    toast: {
+      undo: 'Отменить',
+      nodeDeleted: 'Задача удалена',
+      nodeSaved: 'Задача сохранена',
+      importSuccess: 'Импорт выполнен успешно',
+      importError: 'Ошибка импорта',
+      nodeMoved: 'Задача перемещена',
+    },
+    theme: {
+      light: 'Светлая',
+      dark: 'Тёмная',
+      system: 'Системная',
+    },
+    breadcrumb: {
+      root: 'Ваши Life Roadmaps',
+    },
   },
 };
 
+let currentLanguage: Language = 'en'; // По умолчанию английский
+
+// Получить текущий язык
+export function getLanguage(): Language {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('language') as Language | null;
+    if (stored && (stored === 'ru' || stored === 'en')) {
+      currentLanguage = stored;
+      return stored;
+    }
+  }
+  return currentLanguage;
+}
+
+// Установить язык
+export function setLanguage(lang: Language): void {
+  currentLanguage = lang;
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('language', lang);
+  }
+}
+
 // Получить локализованную строку (поддержка вложенных ключей)
 export function t(key: string): string {
+  const lang = getLanguage();
   const keys = key.split('.');
-  let value: any = i18n;
+  let value: any = i18n[lang];
   for (const k of keys) {
     value = value?.[k];
   }
