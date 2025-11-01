@@ -5,11 +5,17 @@ import { VitePWA } from 'vite-plugin-pwa';
 // GitHub Pages base path (пустой для username.github.io, или '/reponame/' для обычного репозитория)
 const base = process.env.GITHUB_PAGES_BASE || '/';
 
+// Отладочный вывод для проверки base path при сборке
+if (process.env.NODE_ENV === 'production') {
+  console.log('Building with base path:', base || '(root)');
+}
+
 export default defineConfig({
   base,
   plugins: [
     react(),
     VitePWA({
+      base,
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'robots.txt'],
       manifest: {
@@ -17,6 +23,7 @@ export default defineConfig({
         short_name: 'LifeRoadmap',
         description: 'PWA менеджер вложенных роадмапов',
         theme_color: '#2563eb',
+        start_url: base,
         icons: [
           {
             src: 'pwa-192x192.png',
