@@ -31,6 +31,32 @@ npm run dev
 npm run build
 ```
 
+## Деплой на GitHub Pages
+
+### Автоматический деплой (рекомендуется)
+
+1. Включите GitHub Pages в настройках репозитория:
+   - Settings → Pages → Source: "GitHub Actions"
+
+2. Workflow автоматически запустится при пуше в ветку `main` или `master`.
+
+3. Если имя репозитория отличается от `NewLifeRoadmap0.5`, обновите в `.github/workflows/deploy.yml`:
+   ```yaml
+   GITHUB_PAGES_BASE: /your-repo-name/
+   ```
+
+### Ручной деплой
+
+```bash
+# Сборка с base path для GitHub Pages
+npm run build:gh-pages
+
+# Затем загрузите содержимое папки dist в ветку gh-pages
+# или используйте GitHub Actions
+```
+
+**Важно:** Если репозиторий называется `username.github.io`, используйте `base: '/'` вместо `/repo-name/`.
+
 ## Предпросмотр
 
 ```bash
