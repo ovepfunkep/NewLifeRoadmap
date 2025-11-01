@@ -35,7 +35,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # Замените 'NewLifeRoadmap0.5' на имя вашего репозитория
+          # Base path для GitHub Pages (должен совпадать с именем репозитория)
           # Если репозиторий называется username.github.io, оставьте пустым: GITHUB_PAGES_BASE=
           GITHUB_PAGES_BASE: /NewLifeRoadmap/
 

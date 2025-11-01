@@ -40,7 +40,7 @@ npm run build
 
 2. Workflow автоматически запустится при пуше в ветку `main` или `master`.
 
-3. Если имя репозитория отличается от `NewLifeRoadmap0.5`, обновите в `.github/workflows/deploy.yml`:
+3. Если имя репозитория отличается от `NewLifeRoadmap`, обновите в `.github/workflows/deploy.yml`:
    ```yaml
    GITHUB_PAGES_BASE: /your-repo-name/
    ```

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:gh-pages": "GITHUB_PAGES_BASE=/NewLifeRoadmap0.5/ npm run build",
+    "build:gh-pages": "GITHUB_PAGES_BASE=/NewLifeRoadmap/ npm run build",
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui"
