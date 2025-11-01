@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Toast } from '../hooks/useToast';
 import { t } from '../i18n';
 
@@ -29,7 +29,7 @@ interface ToastItemProps {
   onUndo?: (id: string) => void;
 }
 
-function ToastItem({ toast, onRemove, onUndo }: ToastItemProps) {
+function ToastItem({ toast, onRemove }: ToastItemProps) {
   const [progress, setProgress] = useState(100);
   const hasUndo = !!toast.undo;
   const duration = hasUndo ? 5000 : 3000;

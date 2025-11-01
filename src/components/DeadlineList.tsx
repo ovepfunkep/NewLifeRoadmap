@@ -1,4 +1,3 @@
-import React from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { collectDeadlines, sortByDeadlineAsc, getDeadlineColor } from '../utils';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { NodeCard } from './NodeCard';

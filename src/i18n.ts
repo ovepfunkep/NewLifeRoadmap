@@ -1,5 +1,3 @@
-import { Node, DeadlineStatus } from './types';
-
 type Language = 'ru' | 'en';
 
 // Локализация

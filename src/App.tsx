@@ -1,11 +1,9 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { NodePage } from './pages/NodePage';
-import { useTheme } from './hooks/useTheme';
 import { useAccent } from './hooks/useAccent';
 import './index.css';
 
 function App() {
-  const { theme } = useTheme();
   const { accent } = useAccent();
 
   useEffect(() => {

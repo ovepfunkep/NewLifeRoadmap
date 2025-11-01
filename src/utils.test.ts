@@ -182,8 +182,8 @@ describe('utils', () => {
       };
       const deadlines = collectDeadlines(node);
       expect(deadlines.length).toBe(2);
-      expect(deadlines.map(d => d.id)).toContain('2');
-      expect(deadlines.map(d => d.id)).toContain('4');
+      expect(deadlines.map((d: { id: string }) => d.id)).toContain('2');
+      expect(deadlines.map((d: { id: string }) => d.id)).toContain('4');
     });
   });
 

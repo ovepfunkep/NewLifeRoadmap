@@ -24,7 +24,7 @@ export function NodePage() {
   const [showEditor, setShowEditor] = useState(false);
   const [showImportExport, setShowImportExport] = useState(false);
   const [editingNode, setEditingNode] = useState<Node | null>(null);
-  const [sortType, setSortType] = useState<SortType>('none');
+  const [sortType] = useState<SortType>('none');
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [draggedNode, setDraggedNode] = useState<Node | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
