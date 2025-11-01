@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --accent: #2563eb;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Стили для react-beautiful-dnd */
+.react-beautiful-dnd-dragging {
+  cursor: grabbing !important;
+}
+
+/* Фиксы для drag-and-drop */
+[data-rbd-drag-handle-draggable-id] {
+  cursor: grab !important;
+}
+
+[data-rbd-drag-handle-draggable-id]:active {
+  cursor: grabbing !important;
+}
+
