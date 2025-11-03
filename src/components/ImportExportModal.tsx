@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Node, ImportStrategy } from '../types';
 import { t } from '../i18n';
 import { bulkImport } from '../db';
@@ -12,6 +12,17 @@ interface ImportExportModalProps {
 export function ImportExportModal({ currentNode, onImport, onClose }: ImportExportModalProps) {
   const [strategy, setStrategy] = useState<ImportStrategy>('add');
   const [importing, setImporting] = useState(false);
+
+  // Обработка ESC
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
 
   const handleExport = () => {
     const json = JSON.stringify(currentNode, null, 2);
@@ -46,8 +57,14 @@ export function ImportExportModal({ currentNode, onImport, onClose }: ImportExpo
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md mx-4">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
           {t('importExport.importTitle')} / {t('importExport.exportTitle')}
         </h2>

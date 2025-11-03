@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { initDB, getNode, saveNode, deleteNode } from '../db';
@@ -13,6 +13,7 @@ import { ImportExportModal } from '../components/ImportExportModal';
 import { MoveModal } from '../components/MoveModal';
 import { ToastList } from '../components/ToastList';
 import { SettingsWidget } from '../components/SettingsWidget';
+import { Footer } from '../components/Footer';
 
 type SortType = 'none' | 'name' | 'deadline';
 
@@ -24,40 +25,131 @@ export function NodePage() {
   const [showEditor, setShowEditor] = useState(false);
   const [showImportExport, setShowImportExport] = useState(false);
   const [editingNode, setEditingNode] = useState<Node | null>(null);
-  const [sortType] = useState<SortType>('none');
+  const [sortType, setSortType] = useState<SortType>('none');
+  const [filterType, setFilterType] = useState<'all' | 'completed' | 'incomplete'>('all');
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [draggedNode, setDraggedNode] = useState<Node | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
   const { toasts, showToast, removeToast } = useToast();
 
-  // Мемоизированный отсортированный список детей
+  // Мемоизированный список детей (сортировка и фильтрация теперь в StepsList)
   const sortedChildren = useMemo(() => {
     if (!currentNode) return [];
-    const children = currentNode.children;
-    const priority = children.filter(c => c.priority);
-    const normal = children.filter(c => !c.priority);
-    const sortedPriority = [...priority].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    const sortedNormal = [...normal].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    let result = [...sortedPriority, ...sortedNormal];
-    
-    if (sortType === 'name') {
-      result = result.sort((a, b) => a.title.localeCompare(b.title));
-      const priority2 = result.filter(c => c.priority);
-      const normal2 = result.filter(c => !c.priority);
-      result = [...priority2, ...normal2];
-    } else if (sortType === 'deadline') {
-      result = result.sort((a, b) => {
+    return currentNode.children;
+  }, [currentNode?.children, currentNode?.id]);
+
+  // Получаем отсортированные и отфильтрованные шаги для shortcuts
+  const getVisibleSteps = useMemo(() => {
+    if (!currentNode) return [];
+    // Фильтрация
+    let filtered = currentNode.children.filter(child => {
+      if (filterType === 'all') return true;
+      if (filterType === 'completed') return child.completed;
+      if (filterType === 'incomplete') return !child.completed;
+      return true;
+    });
+    // Сортировка
+    filtered = [...filtered].sort((a, b) => {
+      // Приоритетные всегда сверху
+      if (a.priority && !b.priority) return -1;
+      if (!a.priority && b.priority) return 1;
+      // Выполненные идут вниз
+      if (a.completed && !b.completed) return 1;
+      if (!a.completed && b.completed) return -1;
+      if (sortType === 'name') {
+        return a.title.localeCompare(b.title);
+      } else if (sortType === 'deadline') {
         if (!a.deadline && !b.deadline) return 0;
         if (!a.deadline) return 1;
         if (!b.deadline) return -1;
         return new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime();
-      });
-      const priority2 = result.filter(c => c.priority);
-      const normal2 = result.filter(c => !c.priority);
-      result = [...priority2, ...normal2];
-    }
-    return result;
-  }, [currentNode?.children, currentNode?.id, sortType]);
+      }
+      return (a.order ?? 0) - (b.order ?? 0);
+    });
+    return filtered;
+  }, [currentNode, sortType, filterType]);
+
+  const handleEdit = useCallback((node: Node) => {
+    setEditingNode(node);
+    setShowEditor(true);
+  }, []);
+
+  const handleCreateChild = useCallback(() => {
+    setEditingNode(null);
+    setShowEditor(true);
+  }, []);
+
+  // Обработка ESC и shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Не обрабатывать если пользователь вводит текст
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // ESC - закрытие модалок или переход к родителю
+      if (e.key === 'Escape') {
+        if (showEditor || showImportExport || showMoveModal) {
+          return; // Модалки сами обработают
+        }
+        if (currentNode && currentNode.parentId && currentNode.id !== 'root-node') {
+          navigateToNode(currentNode.parentId);
+        }
+        return;
+      }
+
+      // T - добавить шаг (независимо от раскладки, только если фокус не на input)
+      if ((e.key === 'T' || e.key === 't' || e.key === 'Т' || e.key === 'т') && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+        if (!showEditor && !showImportExport && !showMoveModal) {
+          e.preventDefault();
+          handleCreateChild();
+        }
+        return;
+      }
+
+      // R - редактировать текущую мапу (независимо от раскладки, только если не на input)
+      if ((e.key === 'R' || e.key === 'r' || e.key === 'Р' || e.key === 'р' || e.key === 'К' || e.key === 'к') && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+        if (!showEditor && !showImportExport && !showMoveModal && currentNode) {
+          e.preventDefault();
+          setEditingNode(currentNode);
+          setShowEditor(true);
+        }
+        return;
+      }
+
+      // CTRL + цифра - переход к крошке (кроме текущей)
+      if (e.ctrlKey && !e.shiftKey && !e.altKey) {
+        const digit = parseInt(e.key);
+        if (!isNaN(digit) && digit >= 1 && digit <= 9) {
+          e.preventDefault();
+          const targetIndex = digit - 1;
+          // Не переходим если цифра >= номеру текущей крошки (текущая крошка - последняя в массиве)
+          const currentIndex = breadcrumbs.length - 1;
+          if (targetIndex < currentIndex) {
+            navigateToNode(breadcrumbs[targetIndex].id);
+          }
+          return;
+        }
+      }
+
+      // Цифра без CTRL - переход к шагу
+      if (!e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+        const digit = parseInt(e.key);
+        if (!isNaN(digit) && digit >= 1 && digit <= 9) {
+          e.preventDefault();
+          const targetIndex = digit - 1;
+          if (targetIndex < getVisibleSteps.length) {
+            navigateToNode(getVisibleSteps[targetIndex].id);
+          }
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentNode, showEditor, showImportExport, showMoveModal, navigateToNode, breadcrumbs, getVisibleSteps, handleEdit, handleCreateChild]);
 
   // Загрузка узла
   useEffect(() => {
@@ -149,11 +241,6 @@ export function NodePage() {
     }
   };
 
-  const handleEdit = (node: Node) => {
-    setEditingNode(node);
-    setShowEditor(true);
-  };
-
   const handleSave = async (node: Node) => {
     await saveNode(node);
     
@@ -165,11 +252,6 @@ export function NodePage() {
       setBreadcrumbs(breadcrumbs);
       showToast(t('toast.nodeSaved'));
     }
-  };
-
-  const handleCreateChild = () => {
-    setEditingNode(null);
-    setShowEditor(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -339,7 +421,7 @@ export function NodePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
       <Header 
         node={currentNode} 
         breadcrumbs={breadcrumbs}
@@ -372,6 +454,10 @@ export function NodePage() {
                     onDragLeave={handleDragLeave}
                     draggedNode={draggedNode}
                     dragOverNodeId={dragOverNodeId}
+                    sortType={sortType}
+                    onSortChange={setSortType}
+                    filterType={filterType}
+                    onFilterChange={setFilterType}
                   />
                 </div>
                 
@@ -416,6 +502,9 @@ export function NodePage() {
       
       {/* Виджет настроек - закреплен снизу справа */}
       <SettingsWidget />
+      
+      {/* Footer */}
+      <Footer />
     </div>
   );
 }

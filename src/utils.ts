@@ -64,6 +64,53 @@ export function computeProgress(node: Node): number {
   return Math.round((completedCount / leaves.length) * 100);
 }
 
+// Получить количество выполненных и общее количество листьев
+export function getProgressCounts(node: Node): { completed: number; total: number } {
+  const leaves = flattenLeaves(node);
+  if (leaves.length === 0) {
+    return { completed: node.completed ? 1 : 0, total: 1 };
+  }
+  
+  if (node.completed) {
+    return { completed: leaves.length, total: leaves.length };
+  }
+  
+  let completedCount = 0;
+  
+  const isCompletedLeaf = (leaf: Node, root: Node): boolean => {
+    if (leaf.completed) return true;
+    
+    const checkParent = (n: Node, targetId: string): Node | null => {
+      for (const child of n.children) {
+        if (child.id === targetId) {
+          return n;
+        }
+        const found = checkParent(child, targetId);
+        if (found) return found;
+      }
+      return null;
+    };
+    
+    let current: Node | null = leaf;
+    while (current && current.id !== root.id) {
+      const parent = checkParent(root, current.id);
+      if (!parent) break;
+      if (parent.completed) return true;
+      current = parent;
+    }
+    
+    return false;
+  };
+  
+  leaves.forEach(leaf => {
+    if (isCompletedLeaf(leaf, node)) {
+      completedCount++;
+    }
+  });
+  
+  return { completed: completedCount, total: leaves.length };
+}
+
 // Статус дедлайна
 export function deadlineStatus(node: Node): DeadlineStatus {
   if (!node.deadline) {

@@ -25,6 +25,32 @@ export const i18n: Record<Language, Record<string, any>> = {
       move: 'Move',
       moveTitle: 'Move task',
       steps: 'Steps',
+      priority: 'Priority task',
+    },
+    move: {
+      selectTarget: 'Select task to move into',
+    },
+    editor: {
+      title: 'Title *',
+      description: 'Description',
+      deadline: 'Deadline',
+      time: 'Time',
+    },
+    filter: {
+      all: 'All',
+      completed: 'Completed',
+      incomplete: 'Incomplete',
+    },
+    sort: {
+      name: 'Sort by name',
+      deadline: 'Sort by deadline',
+    },
+    keyboard: {
+      esc: 'ESC - Close modal / Go to parent',
+      addStep: 'T - Add step',
+      edit: 'R - Edit current map',
+      crtlNumber: 'CTRL + Number - Go to breadcrumb',
+      number: 'Number - Go to step',
     },
     importExport: {
       import: 'Import',
@@ -85,6 +111,32 @@ export const i18n: Record<Language, Record<string, any>> = {
       move: 'Переместить',
       moveTitle: 'Переместить задачу',
       steps: 'Шаги',
+      priority: 'Приоритетная задача',
+    },
+    move: {
+      selectTarget: 'Выберите задачу, в которую нужно переместить',
+    },
+    editor: {
+      title: 'Название *',
+      description: 'Описание',
+      deadline: 'Дедлайн',
+      time: 'Время',
+    },
+    filter: {
+      all: 'Все',
+      completed: 'Выполненные',
+      incomplete: 'Невыполненные',
+    },
+    sort: {
+      name: 'Сортировка по имени',
+      deadline: 'Сортировка по дедлайну',
+    },
+    keyboard: {
+      esc: 'ESC - Закрыть попап / Перейти к родителю',
+      addStep: 'T - Добавить шаг',
+      edit: 'R - Редактировать текущую мапу',
+      crtlNumber: 'CTRL + Цифра - Переход к крошке',
+      number: 'Цифра - Переход к шагу',
     },
     importExport: {
       import: 'Импорт',

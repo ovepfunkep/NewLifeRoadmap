@@ -1,8 +1,7 @@
-import React from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { useNodeNavigation } from '../hooks/useHashRoute';
-import { computeProgress, getDeadlineColor } from '../utils';
+import { computeProgress, getDeadlineColor, getProgressCounts } from '../utils';
 import { FiEdit2, FiDownload, FiMove } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
 
@@ -46,6 +45,15 @@ export function Header({
     }
   };
 
+  const handleBreadcrumbMouseLeave = () => {
+    // Не сбрасываем подсветку при уходе мышки с крошки во время drag
+    // Подсветка должна оставаться пока идет drag
+    if (!draggedNode) {
+      // Только если не идет drag, можно сбрасывать
+      onDragLeave?.();
+    }
+  };
+
   return (
           <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md shadow-sm border-b border-gray-200 dark:border-gray-800 overflow-visible">
             <div className="container mx-auto px-4 py-3 relative">
@@ -56,29 +64,38 @@ export function Header({
                     <div className="flex items-center gap-2 flex-wrap">
               {breadcrumbs.map((crumb, idx) => {
                 const isDragOver = dragOverNodeId === crumb.id;
+                const isDraggedOver = draggedNode && draggedNode.id !== crumb.id;
                 return (
-                  <React.Fragment key={crumb.id}>
+                  <>
                     <button
+                      key={crumb.id}
                       onClick={() => navigateToNode(crumb.id)}
                       onMouseEnter={() => handleBreadcrumbDragOver(crumb.id)}
-                      onMouseLeave={onDragLeave}
+                      onMouseLeave={handleBreadcrumbMouseLeave}
                       onMouseUp={() => handleBreadcrumbMouseUp(crumb.id)}
-                      className={`hover:text-gray-900 dark:hover:text-gray-100 truncate max-w-[200px] px-2 py-1 rounded transition-all ${
-                        isDragOver ? 'shadow-lg ring-2 ring-offset-2' : ''
-                      }`}
-                      style={isDragOver ? {
-                        boxShadow: `0 0 0 3px var(--accent), 0 4px 6px -1px rgba(0, 0, 0, 0.1)`,
-                        transition: 'all 0.5s ease'
-                      } : {}}
+                      className="hover:text-gray-900 dark:hover:text-gray-100 truncate max-w-[200px] px-2 py-1 rounded transition-all"
+                      style={{
+                        ...((isDragOver || isDraggedOver) ? {
+                          borderColor: 'var(--accent)',
+                          borderWidth: '1px',
+                          borderStyle: 'solid',
+                          borderRadius: '0.5rem',
+                          transition: 'all 0.2s ease'
+                        } : {
+                          borderWidth: '1px',
+                          borderStyle: 'solid',
+                          borderColor: 'transparent'
+                        })
+                      }}
                     >
                       {crumb.title}
                     </button>
                     {idx < breadcrumbs.length - 1 && (
-                      <span className="text-gray-400">/</span>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
+                      <span key={`sep-${idx}`} className="text-gray-400">/</span>
+                    )}
+                  </>
+                );
+              })}
               </div>
             </nav>
             
@@ -143,15 +160,17 @@ export function Header({
               {/* Прогресс под названием, но выше описания - оформлен как в шагах, но длиннее */}
               {node.children.length > 0 && (
                 <div className="flex items-center gap-2 mt-2">
-                  <div className="w-32 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full transition-all duration-300"
-                      style={{
-                        width: `${progress}%`,
-                        backgroundColor: progress === 100 ? 'var(--accent)' : '#9ca3af',
-                      }}
-                    />
-                  </div>
+                  <Tooltip text={`${getProgressCounts(node).completed} / ${getProgressCounts(node).total}`}>
+                    <div className="w-32 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden" style={{ padding: '2px' }}>
+                      <div
+                        className="h-full transition-all duration-300"
+                        style={{
+                          width: `${progress}%`,
+                          backgroundColor: progress === 100 ? 'var(--accent)' : '#9ca3af',
+                        }}
+                      />
+                    </div>
+                  </Tooltip>
                   <span 
                     className={`text-xs ${
                       progress === 100 

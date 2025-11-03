@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Node } from '../types';
 import { getRoot, getNode } from '../db';
 import { t } from '../i18n';
@@ -130,6 +130,17 @@ export function MoveModal({ sourceNodeId, onMove, onClose }: MoveModalProps) {
     loadData();
   }, [sourceNodeId]);
 
+  // Обработка ESC
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
   const handleSelect = (targetNodeId: string) => {
     onMove(sourceNodeId, targetNodeId);
     onClose();
@@ -147,11 +158,11 @@ export function MoveModal({ sourceNodeId, onMove, onClose }: MoveModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col"
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col mx-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
@@ -159,7 +170,7 @@ export function MoveModal({ sourceNodeId, onMove, onClose }: MoveModalProps) {
             {t('node.moveTitle')}
           </h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-            Выберите задачу, в которую нужно переместить
+            {t('move.selectTarget')}
           </p>
         </div>
         

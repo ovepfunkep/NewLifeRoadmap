@@ -1,20 +1,86 @@
+import { useState, useEffect } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
-import { collectDeadlines, sortByDeadlineAsc, getDeadlineColor } from '../utils';
+import { collectDeadlines, sortByDeadlineAsc, getDeadlineColor, buildBreadcrumbs } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
+import { getNode } from '../db';
 
 interface DeadlineListProps {
   node: Node;
   onNavigate: (id: string) => void;
 }
 
+// Группировка дедлайнов: возвращаем ближайший дедлайн для каждого первого уровня дочерних узлов
+// Учитываем как сам шаг первого уровня, так и все его подшаги
+function groupDeadlines(node: Node): Map<string, Node> {
+  const groupMap = new Map<string, Node>();
+  
+  // Для каждого первого уровня дочерних узлов находим ближайший дедлайн
+  for (const child of node.children) {
+    // Проверяем дедлайн самого шага первого уровня
+    const childHasDeadline = child.deadline && !child.completed;
+    
+    // Собираем все дедлайны из поддерева (включая сам шаг)
+    const allDeadlines: Node[] = [];
+    if (childHasDeadline) {
+      allDeadlines.push(child);
+    }
+    
+    // Добавляем дедлайны из поддерева
+    const subtreeDeadlines = collectDeadlines(child).filter(dl => !dl.completed && dl.deadline);
+    allDeadlines.push(...subtreeDeadlines);
+    
+    if (allDeadlines.length === 0) continue;
+    
+    // Сортируем и берём ближайший
+    const sorted = sortByDeadlineAsc(allDeadlines);
+    const nearest = sorted[0];
+    
+    if (!nearest) continue;
+    
+    // Используем ID дочернего узла первого уровня как ключ группы
+    const existing = groupMap.get(child.id);
+    if (!existing || new Date(nearest.deadline!).getTime() < new Date(existing.deadline!).getTime()) {
+      groupMap.set(child.id, nearest);
+    }
+  }
+  
+  return groupMap;
+}
+
 export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
   useDeadlineTicker(); // подписка на тикер
-  // Фильтруем только незавершённые задачи
-  const allDeadlines = collectDeadlines(node).filter(dl => !dl.completed);
-  const deadlines = sortByDeadlineAsc(allDeadlines);
+  const [deadlinesWithBreadcrumbs, setDeadlinesWithBreadcrumbs] = useState<Array<{ node: Node; breadcrumbs: Node[] }>>([]);
 
-  if (deadlines.length === 0) {
+          useEffect(() => {
+            const loadBreadcrumbs = async () => {
+              const grouped = groupDeadlines(node);
+              const result: Array<{ node: Node; breadcrumbs: Node[] }> = [];
+
+              for (const [, deadlineNode] of grouped) {
+        const breadcrumbs = await buildBreadcrumbs(deadlineNode.id, getNode);
+        // Исключаем сам текущий узел и саму задачу из breadcrumbs
+        // Оставляем только путь от текущего узла до задачи
+        const currentIndex = breadcrumbs.findIndex(b => b.id === node.id);
+        const relevantBreadcrumbs = breadcrumbs
+          .slice(currentIndex + 1)
+          .filter(b => b.id !== deadlineNode.id);
+        result.push({ node: deadlineNode, breadcrumbs: relevantBreadcrumbs });
+      }
+      
+      // Сортируем по дате дедлайна
+      result.sort((a, b) => {
+        if (!a.node.deadline || !b.node.deadline) return 0;
+        return new Date(a.node.deadline).getTime() - new Date(b.node.deadline).getTime();
+      });
+      
+      setDeadlinesWithBreadcrumbs(result);
+    };
+    
+    loadBreadcrumbs();
+  }, [node]);
+
+  if (deadlinesWithBreadcrumbs.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
@@ -33,7 +99,7 @@ export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
         {t('deadline.title')}
       </h2>
       <div className="space-y-2">
-        {deadlines.map((dl) => {
+        {deadlinesWithBreadcrumbs.map(({ node: dl, breadcrumbs }) => {
           const dateStr = dl.deadline ? new Date(dl.deadline).toLocaleDateString('ru-RU') : '';
           const deadlineColor = getDeadlineColor(dl);
           
@@ -43,12 +109,27 @@ export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
               onClick={() => onNavigate(dl.id)}
               className="w-full text-left p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:shadow-sm transition-colors"
             >
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-gray-900 dark:text-gray-100">
-                  {dl.title}
-                </span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1 min-w-0 flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    {/* Breadcrumbs - мелким шрифтом, полупрозрачным, над названием */}
+                    {breadcrumbs.length > 0 && (
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 opacity-60 mb-0.5 truncate">
+                        {breadcrumbs.map((b, idx) => (
+                          <span key={b.id}>
+                            {b.title}
+                            {idx < breadcrumbs.length - 1 && ' / '}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <span className="font-medium text-gray-900 dark:text-gray-100">
+                      {dl.title}
+                    </span>
+                  </div>
+                </div>
                 <span
-                  className="text-xs px-2 py-1 rounded text-white"
+                  className="text-xs px-2 py-1 rounded text-white flex-shrink-0 self-center"
                   style={{ backgroundColor: deadlineColor }}
                 >
                   {dateStr}

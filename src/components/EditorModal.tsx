@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { generateId } from '../utils';
+import { FiAlertCircle } from 'react-icons/fi';
+import { Tooltip } from './Tooltip';
 
 interface EditorModalProps {
   node: Node | null; // null = создание нового
@@ -13,8 +15,11 @@ interface EditorModalProps {
 export function EditorModal({ node, parentId, onSave, onClose }: EditorModalProps) {
   const [title, setTitle] = useState(node?.title || '');
   const [description, setDescription] = useState(node?.description || '');
-  const [deadline, setDeadline] = useState(
-    node?.deadline ? new Date(node.deadline).toISOString().slice(0, 16) : ''
+  const [deadlineDate, setDeadlineDate] = useState(
+    node?.deadline ? new Date(node.deadline).toISOString().slice(0, 10) : ''
+  );
+  const [deadlineTime, setDeadlineTime] = useState(
+    node?.deadline ? new Date(node.deadline).toISOString().slice(11, 16) : ''
   );
   const [priority, setPriority] = useState(node?.priority || false);
 
@@ -22,15 +27,43 @@ export function EditorModal({ node, parentId, onSave, onClose }: EditorModalProp
     if (node) {
       setTitle(node.title);
       setDescription(node.description || '');
-      setDeadline(node.deadline ? new Date(node.deadline).toISOString().slice(0, 16) : '');
+      if (node.deadline) {
+        const date = new Date(node.deadline);
+        setDeadlineDate(date.toISOString().slice(0, 10));
+        setDeadlineTime(date.toISOString().slice(11, 16));
+      } else {
+        setDeadlineDate('');
+        setDeadlineTime('');
+      }
       setPriority(node.priority || false);
     }
   }, [node]);
+
+  // Обработка ESC
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!title.trim()) return;
+
+    // Объединяем дату и время
+    let deadline: string | null = null;
+    if (deadlineDate) {
+      if (deadlineTime) {
+        deadline = new Date(`${deadlineDate}T${deadlineTime}`).toISOString();
+      } else {
+        deadline = new Date(`${deadlineDate}T00:00`).toISOString();
+      }
+    }
 
     const now = new Date().toISOString();
     const newNode: Node = node
@@ -38,7 +71,7 @@ export function EditorModal({ node, parentId, onSave, onClose }: EditorModalProp
           ...node,
           title: title.trim(),
           description: description.trim() || undefined,
-          deadline: deadline ? new Date(deadline).toISOString() : null,
+          deadline,
           priority,
           updatedAt: now,
         }
@@ -47,7 +80,7 @@ export function EditorModal({ node, parentId, onSave, onClose }: EditorModalProp
           parentId,
           title: title.trim(),
           description: description.trim() || undefined,
-          deadline: deadline ? new Date(deadline).toISOString() : null,
+          deadline,
           completed: false,
           priority,
           createdAt: now,
@@ -60,63 +93,81 @@ export function EditorModal({ node, parentId, onSave, onClose }: EditorModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md mx-4">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
           {node ? t('node.editNode') : t('node.createChild')}
         </h2>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Заголовок *
-            </label>
+          <div className="flex items-center gap-2">
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent"
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent"
+              placeholder={t('editor.title')}
               required
               autoFocus
             />
+            <Tooltip text={t('node.priority')}>
+              <button
+                type="button"
+                onClick={() => setPriority(!priority)}
+                className={`p-2 rounded-lg transition-all border hover:brightness-150 ${
+                  priority
+                    ? 'border-transparent'
+                    : 'border-current hover:bg-accent/10'
+                }`}
+                style={{ 
+                  color: 'var(--accent)',
+                  backgroundColor: priority ? 'var(--accent)' : 'transparent'
+                }}
+              >
+                <FiAlertCircle size={18} style={{ color: priority ? 'white' : 'var(--accent)' }} />
+              </button>
+            </Tooltip>
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Описание
-            </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Дедлайн
-            </label>
-            <input
-              type="datetime-local"
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent"
+              placeholder={t('editor.description')}
             />
           </div>
           
           <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="priority"
-              checked={priority}
-              onChange={(e) => setPriority(e.target.checked)}
-              className="w-4 h-4 rounded text-accent focus:ring-accent"
-              style={{ accentColor: 'var(--accent)' }}
-            />
-            <label htmlFor="priority" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Приоритетная задача
-            </label>
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                {t('editor.deadline')}
+              </label>
+              <input
+                type="date"
+                value={deadlineDate}
+                onChange={(e) => setDeadlineDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </div>
+            <div className="w-32">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                {t('editor.time')}
+              </label>
+              <input
+                type="time"
+                value={deadlineTime}
+                onChange={(e) => setDeadlineTime(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </div>
           </div>
           
           <div className="flex gap-3 justify-end">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
-import { computeProgress, getDeadlineColor } from '../utils';
+import { computeProgress, getDeadlineColor, getProgressCounts } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { FiCheck, FiEdit2, FiTrash2, FiArrowUp } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
@@ -41,6 +41,7 @@ export function NodeCard({
   const deadlineDisplay = node.deadline ? new Date(node.deadline).toLocaleDateString('ru-RU') : null;
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
+  const [justDragged, setJustDragged] = useState(false);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -51,6 +52,8 @@ export function NodeCard({
 
     const handleMouseUp = () => {
       setIsDragging(false);
+      setJustDragged(true);
+      setTimeout(() => setJustDragged(false), 100);
       onDragEnd?.();
     };
 
@@ -65,10 +68,39 @@ export function NodeCard({
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // только левая кнопка мыши
-    setIsDragging(true);
-    setDragPosition({ x: e.clientX, y: e.clientY });
-    onDragStart?.(node);
-    e.preventDefault();
+    // Запоминаем начальную позицию
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let hasStartedDrag = false;
+    
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      // Проверяем, что мышь сдвинулась минимум на 3px при зажатой мышке - это означает начало drag
+      const deltaX = Math.abs(moveEvent.clientX - startX);
+      const deltaY = Math.abs(moveEvent.clientY - startY);
+      if (!hasStartedDrag && (deltaX > 3 || deltaY > 3)) {
+        hasStartedDrag = true;
+        setIsDragging(true);
+        setDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
+        onDragStart?.(node);
+      }
+      if (hasStartedDrag) {
+        setDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
+      }
+    };
+    
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      if (hasStartedDrag) {
+        setIsDragging(false);
+        setJustDragged(true);
+        setTimeout(() => setJustDragged(false), 100);
+        onDragEnd?.();
+      }
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
   };
 
   const handleMouseEnter = () => {
@@ -90,12 +122,18 @@ export function NodeCard({
             : 'border-gray-200 dark:border-gray-700 shadow-sm'
         } hover:shadow-md ${
           isDragOver ? 'shadow-lg ring-2 ring-offset-2' : ''
+        } ${
+          draggedNode && draggedNode.id !== node.id ? 'opacity-60' : ''
         }`}
         style={{
           ...(node.priority ? { borderColor: 'var(--accent)' } : {}),
           ...(isDragOver ? { 
             boxShadow: `0 0 0 3px var(--accent), 0 4px 6px -1px rgba(0, 0, 0, 0.1)`,
             transition: 'all 0.5s ease'
+          } : {}),
+          ...(draggedNode && draggedNode.id !== node.id ? {
+            borderColor: 'var(--accent)',
+            opacity: 0.7
           } : {})
         }}
         onMouseEnter={handleMouseEnter}
@@ -104,49 +142,49 @@ export function NodeCard({
         <div className="flex items-center gap-3">
           {/* Заголовок и описание (кликабельный) */}
           <div
-            className="flex-1 min-w-0 group"
+            className="flex-1 min-w-0"
             onMouseDown={handleMouseDown}
           >
             <button
-              onClick={() => onNavigate(node.id)}
-              className="w-full text-left"
+              onClick={(e) => {
+                // Предотвращаем клик, если только что закончили drag
+                if (justDragged) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return;
+                }
+                onNavigate(node.id);
+              }}
+              className="w-full text-left group"
             >
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-gray-900 dark:text-gray-100 group-hover:opacity-75 transition-opacity truncate" style={{ color: 'var(--accent)' }}>
-                {node.title}
-              </span>
-              {node.description && (
-                <>
-                  <span className="text-gray-400">—</span>
-                  <span className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                    {node.description}
+            <div className="w-full">
+              {/* Название и дедлайн в одну строку */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-gray-900 dark:text-gray-100 group-hover:opacity-75 transition-opacity truncate" style={{ color: 'var(--accent)' }}>
+                  {node.title}
+                </span>
+                {deadlineDisplay && (
+                  <span
+                    className="text-xs px-2 py-0.5 rounded flex-shrink-0 border"
+                    style={{
+                      borderColor: node.completed ? 'var(--accent)' : getDeadlineColor(node),
+                      color: node.completed ? 'var(--accent)' : 'white',
+                      backgroundColor: node.completed ? 'transparent' : getDeadlineColor(node),
+                    }}
+                  >
+                    {deadlineDisplay}
                   </span>
-                </>
-              )}
-              {node.priority && (
-                <span className="flex-shrink-0 text-xs font-medium rounded border-2" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-                  Приоритет
-                </span>
-              )}
-              {node.completed && (
-                <FiCheck className="flex-shrink-0" size={18} style={{ color: 'var(--accent)' }} />
-              )}
-            </div>
-            
-            {/* Дедлайн и прогресс */}
-            <div className="flex items-center gap-2 mt-1 gap-3">
-              {deadlineDisplay && !node.completed && (
-                <span
-                  className="text-xs px-2 py-0.5 rounded flex-shrink-0 text-white"
-                  style={{
-                    backgroundColor: getDeadlineColor(node),
-                  }}
-                >
-                  {deadlineDisplay}
-                </span>
-              )}
+                )}
+                {node.priority && (
+                  <span className="flex-shrink-0 text-xs font-medium rounded border-2" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
+                    Приоритет
+                  </span>
+                )}
+              </div>
+              
+              {/* Прогресс */}
               {node.children.length > 0 && (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 mt-1">
                   <div className="w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div
                       className="h-full transition-all duration-300"
@@ -156,18 +194,27 @@ export function NodeCard({
                       }}
                     />
                   </div>
-                  <span 
-                    className={`text-xs ${
-                      progress === 100 
-                        ? '' 
-                        : 'text-gray-600 dark:text-gray-400'
-                    }`}
-                    style={{ 
-                      color: progress === 100 ? 'var(--accent)' : undefined 
-                    }}
-                  >
-                    {progress}%
-                  </span>
+                  <Tooltip text={`${getProgressCounts(node).completed} / ${getProgressCounts(node).total}`}>
+                    <span 
+                      className={`text-xs ${
+                        progress === 100 
+                          ? '' 
+                          : 'text-gray-600 dark:text-gray-400'
+                      }`}
+                      style={{ 
+                        color: progress === 100 ? 'var(--accent)' : undefined 
+                      }}
+                    >
+                      {progress}%
+                    </span>
+                  </Tooltip>
+                </div>
+              )}
+              
+              {/* Описание */}
+              {node.description && (
+                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400 truncate">
+                  {node.description}
                 </div>
               )}
             </div>
