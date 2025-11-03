@@ -33,14 +33,13 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: |
-          export GITHUB_PAGES_BASE=/NewLifeRoadmap/
-          echo "Building with base path: $GITHUB_PAGES_BASE"
-          npm run build
         env:
           # Base path для GitHub Pages (должен совпадать с именем репозитория)
           # Если репозиторий называется username.github.io, оставьте пустым: GITHUB_PAGES_BASE=
           GITHUB_PAGES_BASE: /NewLifeRoadmap/
+        run: |
+          echo "Building with base path: $GITHUB_PAGES_BASE"
+          npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
