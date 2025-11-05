@@ -99,8 +99,8 @@ export function NodePage() {
         return;
       }
 
-      // T - добавить шаг (независимо от раскладки, только если фокус не на input)
-      if ((e.key === 'T' || e.key === 't' || e.key === 'Т' || e.key === 'т') && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+      // T - добавить шаг (используем code для независимости от раскладки)
+      if (e.code === 'KeyT' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
         if (!showEditor && !showImportExport && !showMoveModal) {
           e.preventDefault();
           handleCreateChild();
@@ -108,8 +108,8 @@ export function NodePage() {
         return;
       }
 
-      // R - редактировать текущую мапу (независимо от раскладки, только если не на input)
-      if ((e.key === 'R' || e.key === 'r' || e.key === 'Р' || e.key === 'р' || e.key === 'К' || e.key === 'к') && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+      // R - редактировать текущую мапу (используем code для независимости от раскладки)
+      if (e.code === 'KeyR' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
         if (!showEditor && !showImportExport && !showMoveModal && currentNode) {
           e.preventDefault();
           setEditingNode(currentNode);
