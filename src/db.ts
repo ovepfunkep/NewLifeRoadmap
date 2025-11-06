@@ -1,5 +1,7 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Node, ImportStrategy } from './types';
+import { syncNodeDebounced } from './db-sync';
+import { deleteNodeFromFirestore } from './firebase/sync';
 
 interface LifeRoadmapDB extends DBSchema {
   nodes: {
@@ -65,6 +67,12 @@ export async function getNode(id: string): Promise<Node | null> {
   return await dbInstance!.get(STORE_NAME, id) || null;
 }
 
+// Получить все узлы из БД
+export async function getAllNodes(): Promise<Node[]> {
+  if (!dbInstance) await initDB();
+  return await dbInstance!.getAll(STORE_NAME);
+}
+
 // Сохранить узел (и поддерево через denormalized структуру)
 // Сохраняем сам узел и всех потомков в БД отдельно
 export async function saveNode(node: Node): Promise<void> {
@@ -118,6 +126,9 @@ export async function saveNode(node: Node): Promise<void> {
       await saveNode(updatedParent);
     }
   }
+
+  // Синхронизируем с Firestore (если пользователь авторизован)
+  syncNodeDebounced(nodeToSave);
 }
 
 // Удалить узел и всех потомков
@@ -148,6 +159,24 @@ export async function deleteNode(id: string): Promise<void> {
       };
       await saveNode(updatedParent);
     }
+  }
+
+  // Удаляем из Firestore (если пользователь авторизован)
+  try {
+    // Собираем всех потомков рекурсивно
+    const collectChildrenIds = (n: Node): string[] => {
+      const ids: string[] = [];
+      for (const child of n.children) {
+        ids.push(child.id);
+        ids.push(...collectChildrenIds(child));
+      }
+      return ids;
+    };
+    const allChildrenIds = collectChildrenIds(node);
+    await deleteNodeFromFirestore(id, allChildrenIds);
+  } catch (error) {
+    console.error('Error deleting node from Firestore:', error);
+    // Не прерываем выполнение при ошибке синхронизации
   }
 }
 

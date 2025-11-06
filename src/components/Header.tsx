@@ -4,6 +4,7 @@ import { useNodeNavigation } from '../hooks/useHashRoute';
 import { computeProgress, getDeadlineColor, getProgressCounts } from '../utils';
 import { FiEdit2, FiDownload, FiMove } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
+import { AuthButton } from './AuthButton';
 
 interface HeaderProps {
   node: Node;
@@ -121,6 +122,7 @@ export function Header({
                 
                 {/* Кнопки действий - aligned right */}
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  <AuthButton />
                   {onEdit && (
                     <Tooltip text={t('general.edit')}>
                       <button

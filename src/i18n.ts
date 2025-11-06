@@ -78,6 +78,15 @@ export const i18n: Record<Language, Record<string, any>> = {
       importSuccess: 'Import completed successfully',
       importError: 'Import error',
       nodeMoved: 'Task moved',
+      syncSuccess: 'Data synchronized',
+      syncError: 'Sync error',
+      syncLoading: 'Syncing...',
+    },
+    sync: {
+      signIn: 'Sign in with Google',
+      signOut: 'Sign out',
+      syncing: 'Syncing...',
+      signedInAs: 'Signed in as',
     },
     theme: {
       light: 'Light',
@@ -164,6 +173,15 @@ export const i18n: Record<Language, Record<string, any>> = {
       importSuccess: 'Импорт выполнен успешно',
       importError: 'Ошибка импорта',
       nodeMoved: 'Задача перемещена',
+      syncSuccess: 'Данные синхронизированы',
+      syncError: 'Ошибка синхронизации',
+      syncLoading: 'Синхронизация...',
+    },
+    sync: {
+      signIn: 'Войти через Google',
+      signOut: 'Выйти',
+      syncing: 'Синхронизация...',
+      signedInAs: 'Вошли как',
     },
     theme: {
       light: 'Светлая',
