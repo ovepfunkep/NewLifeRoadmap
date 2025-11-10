@@ -394,7 +394,7 @@ export function NodePage() {
     }
 
     // Обновляем parentId у перемещаемого узла и всех его потомков
-    const updateParentIds = (node: Node, newParentId: string) => {
+    const updateParentIds = (node: Node, newParentId: string | null) => {
       node.parentId = newParentId;
       node.updatedAt = new Date().toISOString();
       for (const child of node.children) {

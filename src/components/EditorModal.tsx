@@ -56,14 +56,14 @@ export function EditorModal({ node, parentId, onSave, onClose }: EditorModalProp
     // Запоминаем, где начался клик
     clickStartRef.current = {
       target: e.target,
-      inside: modalRef.current?.contains(e.target as Node) || false
+      inside: modalRef.current?.contains(e.target as unknown as globalThis.Node) || false
     };
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     // Закрываем только если клик начался и закончился вне модалки
     if (clickStartRef.current && !clickStartRef.current.inside) {
-      const endedInside = modalRef.current?.contains(e.target as Node) || false;
+      const endedInside = modalRef.current?.contains(e.target as unknown as globalThis.Node) || false;
       if (!endedInside) {
         onClose();
       }

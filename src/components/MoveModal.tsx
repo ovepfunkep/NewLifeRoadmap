@@ -146,13 +146,13 @@ export function MoveModal({ sourceNodeId, onMove, onClose }: MoveModalProps) {
   const handleBackdropMouseDown = (e: React.MouseEvent) => {
     clickStartRef.current = {
       target: e.target,
-      inside: modalRef.current?.contains(e.target as Node) || false
+      inside: modalRef.current?.contains(e.target as unknown as globalThis.Node) || false
     };
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (clickStartRef.current && !clickStartRef.current.inside) {
-      const endedInside = modalRef.current?.contains(e.target as Node) || false;
+      const endedInside = modalRef.current?.contains(e.target as unknown as globalThis.Node) || false;
       if (!endedInside) {
         onClose();
       }

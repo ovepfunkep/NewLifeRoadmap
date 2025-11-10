@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
 import { SyncDiff, compareNodes } from '../utils/syncCompare';
-import { getRoot } from '../db';
-import { t } from '../i18n';
 
 interface SyncConflictDialogProps {
   localNodes: Node[];
@@ -105,13 +103,13 @@ export function SyncConflictDialog({
   const handleBackdropMouseDown = (e: React.MouseEvent) => {
     clickStartRef.current = {
       target: e.target,
-      inside: modalRef.current?.contains(e.target as Node) || false
+      inside: modalRef.current?.contains(e.target as unknown as globalThis.Node) || false
     };
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (clickStartRef.current && !clickStartRef.current.inside) {
-      const endedInside = modalRef.current?.contains(e.target as Node) || false;
+      const endedInside = modalRef.current?.contains(e.target as unknown as globalThis.Node) || false;
       if (!endedInside) {
         onCancel();
       }

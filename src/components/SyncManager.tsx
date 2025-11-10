@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { onAuthChange, getCurrentUser } from '../firebase/auth';
+import { onAuthChange } from '../firebase/auth';
 import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore } from '../firebase/sync';
 import { getAllNodes, clearAllNodes } from '../db';
 import { SyncConflictDialog } from './SyncConflictDialog';
 import { hasDifferences } from '../utils/syncCompare';
 import { useToast } from '../hooks/useToast';
-import { t } from '../i18n';
-import { Node } from '../types';
 import { openDB } from 'idb';
 
 const isDev = import.meta.env.DEV;
