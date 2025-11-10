@@ -315,9 +315,8 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
             }}
           >
             <div 
+              className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap"
               style={{ 
-                display: 'flex', 
-                flexWrap: 'wrap', 
                 gap: '7px',
                 width: 'max-content',
               }}

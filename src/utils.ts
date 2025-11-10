@@ -204,13 +204,27 @@ export async function buildBreadcrumbs(
 ): Promise<Node[]> {
   const breadcrumbs: Node[] = [];
   let currentId: string | null = nodeId;
+  const visitedIds = new Set<string>(); // Защита от циклических ссылок
   
   while (currentId) {
+    // Защита от циклических ссылок
+    if (visitedIds.has(currentId)) {
+      console.warn(`Circular reference detected in breadcrumbs at node ${currentId}`);
+      break;
+    }
+    visitedIds.add(currentId);
+    
     const node = await getNode(currentId);
     if (!node) break;
     
     breadcrumbs.unshift(node); // добавляем в начало
     currentId = node.parentId;
+    
+    // Ограничение глубины для безопасности
+    if (breadcrumbs.length > 100) {
+      console.warn('Breadcrumbs depth limit reached (100)');
+      break;
+    }
   }
   
   return breadcrumbs;

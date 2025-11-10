@@ -96,6 +96,14 @@ export const i18n: Record<Language, Record<string, any>> = {
     breadcrumb: {
       root: 'Your Life Roadmaps',
     },
+    tooltip: {
+      signIn: 'Sign in with Google',
+      signOut: 'Sign out',
+      telegram: "Author's Telegram",
+      github: 'Project on GitHub',
+      removePriority: 'Remove priority',
+      priority: 'Priority task',
+    },
   },
   ru: {
     general: {
@@ -190,6 +198,14 @@ export const i18n: Record<Language, Record<string, any>> = {
     },
     breadcrumb: {
       root: 'Ваши Life Roadmaps',
+    },
+    tooltip: {
+      signIn: 'Войти в аккаунт',
+      signOut: 'Выйти из аккаунта',
+      telegram: 'Telegram автора',
+      github: 'Проект на GitHub',
+      removePriority: 'Убрать приоритет',
+      priority: 'Приоритетная задача',
     },
   },
 };

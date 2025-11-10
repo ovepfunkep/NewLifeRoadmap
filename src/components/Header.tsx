@@ -1,10 +1,10 @@
+import React from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { useNodeNavigation } from '../hooks/useHashRoute';
 import { computeProgress, getDeadlineColor, getProgressCounts } from '../utils';
 import { FiEdit2, FiDownload, FiMove } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
-import { AuthButton } from './AuthButton';
 
 interface HeaderProps {
   node: Node;
@@ -17,6 +17,7 @@ interface HeaderProps {
   onEdit?: (node: Node) => void;
   onImportExport?: () => void;
   onMove?: () => void;
+  currentNodeId?: string;
 }
 
 export function Header({ 
@@ -29,12 +30,17 @@ export function Header({
   onDragEnd,
   onEdit,
   onImportExport,
-  onMove
+  onMove,
+  currentNodeId
 }: HeaderProps) {
   const [, navigateToNode] = useNodeNavigation();
   const progress = computeProgress(node);
 
   const handleBreadcrumbDragOver = (nodeId: string) => {
+    // Запрещаем перетаскивание в текущий узел
+    if (currentNodeId && nodeId === currentNodeId) {
+      return;
+    }
     if (draggedNode && draggedNode.id !== nodeId) {
       onDragOver?.(nodeId);
     }
@@ -55,6 +61,12 @@ export function Header({
     }
   };
 
+  const handleBreadcrumbTouchEnd = (nodeId: string) => {
+    if (draggedNode && draggedNode.id !== nodeId) {
+      onDragEnd?.();
+    }
+  };
+
   return (
           <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md shadow-sm border-b border-gray-200 dark:border-gray-800 overflow-visible">
             <div className="container mx-auto px-4 py-3 relative">
@@ -64,16 +76,18 @@ export function Header({
                   <nav className="flex items-center justify-between gap-2 text-sm text-gray-600 dark:text-gray-400 mb-2 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap">
               {breadcrumbs.map((crumb, idx) => {
-                const isDragOver = dragOverNodeId === crumb.id;
-                const isDraggedOver = draggedNode && draggedNode.id !== crumb.id;
+                // Запрещаем перетаскивание в текущий узел
+                const isCurrentNode = currentNodeId && crumb.id === currentNodeId;
+                const isDragOver = !isCurrentNode && dragOverNodeId === crumb.id;
+                const isDraggedOver = !isCurrentNode && draggedNode && draggedNode.id !== crumb.id;
                 return (
-                  <>
+                  <React.Fragment key={crumb.id}>
                     <button
-                      key={crumb.id}
                       onClick={() => navigateToNode(crumb.id)}
                       onMouseEnter={() => handleBreadcrumbDragOver(crumb.id)}
                       onMouseLeave={handleBreadcrumbMouseLeave}
                       onMouseUp={() => handleBreadcrumbMouseUp(crumb.id)}
+                      onTouchEnd={() => handleBreadcrumbTouchEnd(crumb.id)}
                       className="hover:text-gray-900 dark:hover:text-gray-100 truncate max-w-[200px] px-2 py-1 rounded transition-all"
                       style={{
                         ...((isDragOver || isDraggedOver) ? {
@@ -92,9 +106,9 @@ export function Header({
                       {crumb.title}
                     </button>
                     {idx < breadcrumbs.length - 1 && (
-                      <span key={`sep-${idx}`} className="text-gray-400">/</span>
+                      <span className="text-gray-400">/</span>
                     )}
-                  </>
+                  </React.Fragment>
                 );
               })}
               </div>
@@ -122,7 +136,6 @@ export function Header({
                 
                 {/* Кнопки действий - aligned right */}
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <AuthButton />
                   {onEdit && (
                     <Tooltip text={t('general.edit')}>
                       <button

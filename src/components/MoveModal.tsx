@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
 import { getRoot, getNode } from '../db';
 import { t } from '../i18n';
@@ -115,6 +115,8 @@ function TreeNode({ node, level, sourceNodeId, sourceNodeTree, onSelect }: TreeN
 export function MoveModal({ sourceNodeId, onMove, onClose }: MoveModalProps) {
   const [rootNode, setRootNode] = useState<Node | null>(null);
   const [sourceNodeTree, setSourceNodeTree] = useState<Node | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const clickStartRef = useRef<{ target: EventTarget | null; inside: boolean } | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -141,6 +143,23 @@ export function MoveModal({ sourceNodeId, onMove, onClose }: MoveModalProps) {
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
 
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    clickStartRef.current = {
+      target: e.target,
+      inside: modalRef.current?.contains(e.target as Node) || false
+    };
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (clickStartRef.current && !clickStartRef.current.inside) {
+      const endedInside = modalRef.current?.contains(e.target as Node) || false;
+      if (!endedInside) {
+        onClose();
+      }
+    }
+    clickStartRef.current = null;
+  };
+
   const handleSelect = (targetNodeId: string) => {
     onMove(sourceNodeId, targetNodeId);
     onClose();
@@ -159,9 +178,11 @@ export function MoveModal({ sourceNodeId, onMove, onClose }: MoveModalProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onClose}
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
     >
       <div
+        ref={modalRef}
         className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col mx-4"
         onClick={(e) => e.stopPropagation()}
       >

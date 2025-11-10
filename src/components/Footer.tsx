@@ -1,15 +1,29 @@
 import { FiGithub } from 'react-icons/fi';
 import { FaTelegram } from 'react-icons/fa';
 import { Tooltip } from './Tooltip';
+import { AuthAvatar } from './AuthAvatar';
 import { t } from '../i18n';
+import { useEffect, useState } from 'react';
 
 export function Footer() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   return (
     <footer className="border-t border-gray-200 dark:border-gray-700 mt-auto bg-transparent">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4">
-            <Tooltip text="Telegram автора">
+            <AuthAvatar />
+            <Tooltip text={t('tooltip.telegram')}>
               <a
                 href="https://t.me/IncludeIntelligence"
                 target="_blank"
@@ -20,7 +34,7 @@ export function Footer() {
                 <FaTelegram size={20} />
               </a>
             </Tooltip>
-            <Tooltip text="Проект на GitHub">
+            <Tooltip text={t('tooltip.github')}>
               <a
                 href="https://github.com/ovepfunkep/NewLifeRoadmap"
                 target="_blank"
@@ -32,18 +46,20 @@ export function Footer() {
               </a>
             </Tooltip>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-              <div>{t('keyboard.esc')}</div>
-              <div>{t('keyboard.addStep')}</div>
-              <div>{t('keyboard.edit')}</div>
+          {!isMobile && (
+            <div className="flex items-center gap-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                <div>{t('keyboard.esc')}</div>
+                <div>{t('keyboard.addStep')}</div>
+                <div>{t('keyboard.edit')}</div>
+              </div>
+              <div className="w-px h-3 bg-gray-300 dark:bg-gray-600 self-center"></div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                <div>{t('keyboard.crtlNumber')}</div>
+                <div>{t('keyboard.number')}</div>
+              </div>
             </div>
-            <div className="w-px h-3 bg-gray-300 dark:bg-gray-600 self-center"></div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-              <div>{t('keyboard.crtlNumber')}</div>
-              <div>{t('keyboard.number')}</div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </footer>

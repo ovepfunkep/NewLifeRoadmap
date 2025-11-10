@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
-import { initDB, getNode, saveNode, deleteNode } from '../db';
+import { initDB, getNode, getRoot, saveNode, deleteNode } from '../db';
 import { buildBreadcrumbs } from '../utils';
 import { useNodeNavigation } from '../hooks/useHashRoute';
 import { useToast } from '../hooks/useToast';
@@ -81,6 +81,11 @@ export function NodePage() {
 
   // Обработка ESC и shortcuts
   useEffect(() => {
+    // Проверяем, открыты ли модалки - если да, не обрабатываем события
+    if (showEditor || showImportExport || showMoveModal) {
+      return;
+    }
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Не обрабатывать если пользователь вводит текст
       const target = e.target as HTMLElement;
@@ -88,11 +93,8 @@ export function NodePage() {
         return;
       }
 
-      // ESC - закрытие модалок или переход к родителю
+      // ESC - переход к родителю
       if (e.key === 'Escape') {
-        if (showEditor || showImportExport || showMoveModal) {
-          return; // Модалки сами обработают
-        }
         if (currentNode && currentNode.parentId && currentNode.id !== 'root-node') {
           navigateToNode(currentNode.parentId);
         }
@@ -101,20 +103,16 @@ export function NodePage() {
 
       // T - добавить шаг (используем code для независимости от раскладки)
       if (e.code === 'KeyT' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
-        if (!showEditor && !showImportExport && !showMoveModal) {
-          e.preventDefault();
-          handleCreateChild();
-        }
+        e.preventDefault();
+        handleCreateChild();
         return;
       }
 
       // R - редактировать текущую мапу (используем code для независимости от раскладки)
-      if (e.code === 'KeyR' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
-        if (!showEditor && !showImportExport && !showMoveModal && currentNode) {
-          e.preventDefault();
-          setEditingNode(currentNode);
-          setShowEditor(true);
-        }
+      if (e.code === 'KeyR' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && currentNode) {
+        e.preventDefault();
+        setEditingNode(currentNode);
+        setShowEditor(true);
         return;
       }
 
@@ -149,35 +147,97 @@ export function NodePage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentNode, showEditor, showImportExport, showMoveModal, navigateToNode, breadcrumbs, getVisibleSteps, handleEdit, handleCreateChild]);
+  }, [currentNode, showEditor, showImportExport, showMoveModal, navigateToNode, breadcrumbs, getVisibleSteps, handleCreateChild]);
 
   // Загрузка узла
   useEffect(() => {
+    let cancelled = false;
+    
     const loadNode = async () => {
       setLoading(true);
       try {
         await initDB();
         
         const targetId = nodeId || 'root-node';
-        const node = await getNode(targetId);
+        let node = await getNode(targetId);
+        
+        if (cancelled) return;
+        
+        // Если узел не найден и это не root-node, пытаемся загрузить root-node
+        if (!node && targetId !== 'root-node') {
+          node = await getNode('root-node');
+          if (cancelled) return;
+          
+          if (node) {
+            navigateToNode('root-node');
+            setLoading(false);
+            return;
+          }
+        }
+        
+        // Если root-node не найден, создаём его
+        if (!node && targetId === 'root-node') {
+          // Пытаемся получить root через getRoot, который создаст его если нужно
+          try {
+            node = await getRoot();
+          } catch (error) {
+            console.error('Error getting root:', error);
+            if (cancelled) return;
+            
+            // Если и это не помогло, создаём корневой узел вручную
+            const rootNode: Node = {
+              id: 'root-node',
+              parentId: null,
+              title: 'Ваши Life Roadmaps',
+              completed: false,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              children: [],
+            };
+            await saveNode(rootNode);
+            node = rootNode;
+          }
+        }
+        
+        if (cancelled) return;
         
         if (!node) {
-          navigateToNode('root-node');
+          console.error('Failed to load or create root node');
+          showToast('Ошибка загрузки задачи');
+          setLoading(false);
           return;
         }
         
         setCurrentNode(node);
-        const crumbs = await buildBreadcrumbs(targetId, getNode);
-        setBreadcrumbs(crumbs);
+        
+        try {
+          const crumbs = await buildBreadcrumbs(targetId, getNode);
+          
+          if (cancelled) return;
+          
+          setBreadcrumbs(crumbs);
+        } catch (breadcrumbError) {
+          console.error('Error building breadcrumbs:', breadcrumbError);
+          // Устанавливаем пустые breadcrumbs, чтобы не блокировать загрузку
+          setBreadcrumbs([]);
+        }
       } catch (error) {
         console.error('Error loading node:', error);
-        showToast('Ошибка загрузки задачи');
+        if (!cancelled) {
+          showToast('Ошибка загрузки задачи');
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
     
     loadNode();
+    
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId]);
 
@@ -315,18 +375,22 @@ export function NodePage() {
       return;
     }
 
+    // Сохраняем старый родитель для отмены
+    const oldParentId = sourceNode.parentId;
+    let oldParent: Node | null = null;
+    if (oldParentId) {
+      oldParent = await getNode(oldParentId);
+    }
+
     // Удаляем из старого родителя
-    if (sourceNode.parentId) {
-      const oldParent = await getNode(sourceNode.parentId);
-      if (oldParent) {
-        const updatedChildren = oldParent.children.filter(child => child.id !== sourceNodeId);
-        const updatedParent: Node = {
-          ...oldParent,
-          children: updatedChildren,
-          updatedAt: new Date().toISOString(),
-        };
-        await saveNode(updatedParent);
-      }
+    if (oldParent) {
+      const updatedChildren = oldParent.children.filter(child => child.id !== sourceNodeId);
+      const updatedParent: Node = {
+        ...oldParent,
+        children: updatedChildren,
+        updatedAt: new Date().toISOString(),
+      };
+      await saveNode(updatedParent);
     }
 
     // Обновляем parentId у перемещаемого узла и всех его потомков
@@ -352,6 +416,48 @@ export function NodePage() {
     };
     await saveNode(updatedTarget);
 
+    // Синхронизируем изменения с Firestore (в фоне, не блокируем UI)
+    // Запускаем синхронизацию полностью в фоне, чтобы не блокировать перемещение
+    (async () => {
+      try {
+        const { syncNodeNow } = await import('../db-sync');
+        
+        // Синхронизируем только критически важные узлы параллельно
+        const syncPromises: Promise<void>[] = [];
+        if (oldParent) {
+          syncPromises.push(syncNodeNow(oldParent));
+        }
+        syncPromises.push(syncNodeNow(sourceNode));
+        syncPromises.push(syncNodeNow(updatedTarget));
+        
+        // Не ждем завершения синхронизации - запускаем в фоне
+        Promise.all(syncPromises).then(() => {
+          console.log('[NodePage] Critical nodes synced after move');
+        }).catch(error => {
+          console.error('[NodePage] Error syncing critical nodes:', error);
+        });
+        
+        // Синхронизируем потомков в фоне (не блокируем UI)
+        const syncSubtree = async (node: Node) => {
+          for (const child of node.children) {
+            try {
+              await syncNodeNow(child);
+              await syncSubtree(child);
+            } catch (error) {
+              console.error(`[NodePage] Error syncing child ${child.id}:`, error);
+            }
+          }
+        };
+        
+        // Запускаем синхронизацию потомков в фоне без await
+        syncSubtree(sourceNode).catch(error => {
+          console.error('[NodePage] Error syncing subtree:', error);
+        });
+      } catch (error) {
+        console.error('[NodePage] Error starting sync:', error);
+      }
+    })();
+
     // Перезагружаем текущий узел
     const reloaded = await getNode(currentNode.id);
     if (reloaded) {
@@ -360,33 +466,147 @@ export function NodePage() {
       setBreadcrumbs(breadcrumbs);
     }
 
-    showToast(t('toast.nodeMoved'));
+    // Показываем toast с возможностью отмены
+    const undoMove = async () => {
+      if (!oldParentId || !sourceNode) return;
+      
+      // Получаем актуальные данные из БД
+      const currentSourceNode = await getNode(sourceNodeId);
+      const currentTargetNode = await getNode(targetNodeId);
+      const currentOldParent = oldParentId ? await getNode(oldParentId) : null;
+      
+      if (!currentSourceNode || !currentTargetNode) return;
+
+      // Удаляем из нового родителя (целевого) ПЕРВЫМ ДЕЛОМ
+      const updatedTargetChildren = currentTargetNode.children.filter(child => child.id !== sourceNodeId);
+      const updatedTarget: Node = {
+        ...currentTargetNode,
+        children: updatedTargetChildren,
+        updatedAt: new Date().toISOString(),
+      };
+      await saveNode(updatedTarget);
+
+      // Затем обновляем parentId у перемещенного узла и всех его потомков
+      updateParentIds(currentSourceNode, oldParentId || null);
+      await saveNode(currentSourceNode);
+      // saveNode автоматически добавит узел в старого родителя, если parentId установлен
+
+      // Проверяем, что узел действительно удален из нового родителя и добавлен в старый
+      // Перезагружаем узлы для проверки
+      const reloadedTarget = await getNode(targetNodeId);
+      const reloadedOldParent = currentOldParent ? await getNode(oldParentId) : null;
+      
+      // Если узел все еще в новом родителе, удаляем его вручную
+      if (reloadedTarget && reloadedTarget.children.some(child => child.id === sourceNodeId)) {
+        const fixedTargetChildren = reloadedTarget.children.filter(child => child.id !== sourceNodeId);
+        const fixedTarget: Node = {
+          ...reloadedTarget,
+          children: fixedTargetChildren,
+          updatedAt: new Date().toISOString(),
+        };
+        await saveNode(fixedTarget);
+      }
+      
+      // Если узел не в старом родителе, добавляем его вручную
+      if (reloadedOldParent && !reloadedOldParent.children.some(child => child.id === sourceNodeId)) {
+        const fixedOldParent: Node = {
+          ...reloadedOldParent,
+          children: [...reloadedOldParent.children, currentSourceNode],
+          updatedAt: new Date().toISOString(),
+        };
+        await saveNode(fixedOldParent);
+      }
+
+      // Синхронизируем изменения (в фоне)
+      (async () => {
+        try {
+          const { syncNodeNow } = await import('../db-sync');
+          
+          // Получаем финальные версии узлов для синхронизации
+          const finalTarget = await getNode(targetNodeId);
+          const finalSource = await getNode(sourceNodeId);
+          const finalOldParent = currentOldParent ? await getNode(oldParentId) : null;
+          
+          // Синхронизируем только критически важные узлы
+          const syncPromises: Promise<void>[] = [];
+          if (finalTarget) syncPromises.push(syncNodeNow(finalTarget));
+          if (finalSource) syncPromises.push(syncNodeNow(finalSource));
+          if (finalOldParent) syncPromises.push(syncNodeNow(finalOldParent));
+          
+          Promise.all(syncPromises).then(() => {
+            console.log('[NodePage] Nodes synced after undo');
+          }).catch(error => {
+            console.error('[NodePage] Error syncing nodes after undo:', error);
+          });
+          
+          // Синхронизируем потомков в фоне
+          if (finalSource) {
+            const syncSubtree = async (node: Node) => {
+              for (const child of node.children) {
+                try {
+                  await syncNodeNow(child);
+                  await syncSubtree(child);
+                } catch (error) {
+                  console.error(`[NodePage] Error syncing child ${child.id}:`, error);
+                }
+              }
+            };
+            
+            syncSubtree(finalSource).catch(error => {
+              console.error('[NodePage] Error syncing subtree:', error);
+            });
+          }
+        } catch (error) {
+          console.error('[NodePage] Error starting sync:', error);
+        }
+      })();
+
+      // Перезагружаем текущий узел
+      const reloaded = await getNode(currentNode.id);
+      if (reloaded) {
+        setCurrentNode(reloaded);
+        const breadcrumbs = await buildBreadcrumbs(reloaded.id, getNode);
+        setBreadcrumbs(breadcrumbs);
+      }
+    };
+
+    showToast(t('toast.nodeMoved'), undoMove);
   };
 
   // Обработчик drag для перемещения внутрь другого шага
   const handleDragStart = (node: Node) => {
+    console.log('[NodePage] handleDragStart', { nodeId: node.id });
     // Предотвращаем перетаскивание корневого узла
     if (node.id === 'root-node') {
+      console.log('[NodePage] Root node cannot be dragged');
       return;
     }
+    console.log('[NodePage] Setting draggedNode', node.id);
     setDraggedNode(node);
   };
 
   const handleDragEnd = () => {
+    console.log('[NodePage] handleDragEnd', { draggedNodeId: draggedNode?.id, dragOverNodeId });
     if (draggedNode && dragOverNodeId) {
+      console.log('[NodePage] Moving node', draggedNode.id, 'to', dragOverNodeId);
       handleMoveNode(draggedNode.id, dragOverNodeId);
     }
+    // Сбрасываем состояние перетаскивания
     setDraggedNode(null);
     setDragOverNodeId(null);
   };
 
   const handleDragOver = (nodeId: string) => {
+    console.log('[NodePage] handleDragOver', { nodeId, draggedNodeId: draggedNode?.id });
     if (draggedNode && draggedNode.id !== nodeId) {
+      console.log('[NodePage] Setting dragOverNodeId', nodeId);
       setDragOverNodeId(nodeId);
     }
   };
 
   const handleDragLeave = () => {
+    console.log('[NodePage] handleDragLeave');
+    // Сбрасываем подсветку только если мышь ушла с карточки
     setDragOverNodeId(null);
   };
 
@@ -433,6 +653,7 @@ export function NodePage() {
         onEdit={handleEdit}
         onImportExport={handleImportExport}
         onMove={() => setShowMoveModal(true)}
+        currentNodeId={currentNode.id}
       />
       
             <main className="container mx-auto px-4 py-6">
@@ -458,6 +679,7 @@ export function NodePage() {
                     onSortChange={setSortType}
                     filterType={filterType}
                     onFilterChange={setFilterType}
+                    currentNodeId={currentNode.id}
                   />
                 </div>
                 

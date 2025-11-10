@@ -10,12 +10,12 @@ interface DeadlineListProps {
   onNavigate: (id: string) => void;
 }
 
-// Группировка дедлайнов: возвращаем ближайший дедлайн для каждого первого уровня дочерних узлов
+// Группировка дедлайнов: возвращаем все задачи с минимальным дедлайном для каждого первого уровня дочерних узлов
 // Учитываем как сам шаг первого уровня, так и все его подшаги
-function groupDeadlines(node: Node): Map<string, Node> {
-  const groupMap = new Map<string, Node>();
+function groupDeadlines(node: Node): Node[] {
+  const result: Node[] = [];
   
-  // Для каждого первого уровня дочерних узлов находим ближайший дедлайн
+  // Для каждого первого уровня дочерних узлов находим все задачи с минимальным дедлайном
   for (const child of node.children) {
     // Проверяем дедлайн самого шага первого уровня
     const childHasDeadline = child.deadline && !child.completed;
@@ -32,20 +32,23 @@ function groupDeadlines(node: Node): Map<string, Node> {
     
     if (allDeadlines.length === 0) continue;
     
-    // Сортируем и берём ближайший
+    // Сортируем и находим минимальный дедлайн
     const sorted = sortByDeadlineAsc(allDeadlines);
-    const nearest = sorted[0];
+    const minDeadline = sorted[0]?.deadline;
     
-    if (!nearest) continue;
+    if (!minDeadline) continue;
     
-    // Используем ID дочернего узла первого уровня как ключ группы
-    const existing = groupMap.get(child.id);
-    if (!existing || new Date(nearest.deadline!).getTime() < new Date(existing.deadline!).getTime()) {
-      groupMap.set(child.id, nearest);
-    }
+    // Находим все задачи с минимальным дедлайном
+    const minDeadlineTime = new Date(minDeadline).getTime();
+    const tasksWithMinDeadline = sorted.filter(task => 
+      task.deadline && new Date(task.deadline).getTime() === minDeadlineTime
+    );
+    
+    // Добавляем все задачи с минимальным дедлайном
+    result.push(...tasksWithMinDeadline);
   }
   
-  return groupMap;
+  return result;
 }
 
 export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
@@ -57,7 +60,7 @@ export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
               const grouped = groupDeadlines(node);
               const result: Array<{ node: Node; breadcrumbs: Node[] }> = [];
 
-              for (const [, deadlineNode] of grouped) {
+              for (const deadlineNode of grouped) {
         const breadcrumbs = await buildBreadcrumbs(deadlineNode.id, getNode);
         // Исключаем сам текущий узел и саму задачу из breadcrumbs
         // Оставляем только путь от текущего узла до задачи

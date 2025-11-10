@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { generateId } from '../utils';
@@ -22,6 +22,8 @@ export function EditorModal({ node, parentId, onSave, onClose }: EditorModalProp
     node?.deadline ? new Date(node.deadline).toISOString().slice(11, 16) : ''
   );
   const [priority, setPriority] = useState(node?.priority || false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const clickStartRef = useRef<{ target: EventTarget | null; inside: boolean } | null>(null);
 
   useEffect(() => {
     if (node) {
@@ -49,6 +51,25 @@ export function EditorModal({ node, parentId, onSave, onClose }: EditorModalProp
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
+
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    // Запоминаем, где начался клик
+    clickStartRef.current = {
+      target: e.target,
+      inside: modalRef.current?.contains(e.target as Node) || false
+    };
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    // Закрываем только если клик начался и закончился вне модалки
+    if (clickStartRef.current && !clickStartRef.current.inside) {
+      const endedInside = modalRef.current?.contains(e.target as Node) || false;
+      if (!endedInside) {
+        onClose();
+      }
+    }
+    clickStartRef.current = null;
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,9 +116,11 @@ export function EditorModal({ node, parentId, onSave, onClose }: EditorModalProp
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onClose}
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
     >
       <div 
+        ref={modalRef}
         className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md mx-4"
         onClick={(e) => e.stopPropagation()}
       >

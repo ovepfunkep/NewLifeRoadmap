@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { computeProgress, getDeadlineColor, getProgressCounts } from '../utils';
@@ -20,6 +20,7 @@ interface NodeCardProps {
   onDragLeave?: () => void;
   isDragOver?: boolean;
   draggedNode?: Node | null;
+  currentNodeId?: string;
 }
 
 export function NodeCard({ 
@@ -34,7 +35,8 @@ export function NodeCard({
   onDragOver,
   onDragLeave,
   isDragOver = false,
-  draggedNode
+  draggedNode,
+  currentNodeId
 }: NodeCardProps) {
   useDeadlineTicker();
   const progress = computeProgress(node);
@@ -42,6 +44,16 @@ export function NodeCard({
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [justDragged, setJustDragged] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Очищаем таймер при размонтировании
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -50,24 +62,97 @@ export function NodeCard({
       setDragPosition({ x: e.clientX, y: e.clientY });
     };
 
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        const touch = e.touches[0];
+        setDragPosition({ x: touch.clientX, y: touch.clientY });
+      }
+    };
+
     const handleMouseUp = () => {
       setIsDragging(false);
       setJustDragged(true);
-      setTimeout(() => setJustDragged(false), 100);
-      onDragEnd?.();
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => setJustDragged(false), 100);
+      // Не вызываем onDragEnd здесь - он будет вызван в handleCardMouseUp при наведении на карточку
+    };
+
+    const handleTouchEnd = () => {
+      setIsDragging(false);
+      setJustDragged(true);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => setJustDragged(false), 100);
+      // Не вызываем onDragEnd здесь - он будет вызван в handleCardTouchEnd при наведении на карточку
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
     };
-  }, [isDragging, onDragEnd]);
+  }, [isDragging]);
+
+  // Обработчики для drag over - по аналогии с крошками
+  const handleMouseEnter = () => {
+    console.log('[NodeCard] handleMouseEnter', { nodeId: node.id, draggedNodeId: draggedNode?.id, currentNodeId });
+    // Запрещаем перетаскивание в текущий узел
+    if (currentNodeId && node.id === currentNodeId) {
+      console.log('[NodeCard] Cannot drag to current node');
+      return;
+    }
+    if (draggedNode && draggedNode.id !== node.id) {
+      console.log('[NodeCard] Calling onDragOver', node.id);
+      onDragOver?.(node.id);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    console.log('[NodeCard] handleMouseLeave', { nodeId: node.id });
+    // Сбрасываем подсветку при уходе мышки с карточки
+    onDragLeave?.();
+  };
+
+  const handleCardMouseUp = () => {
+    console.log('[NodeCard] handleCardMouseUp', { nodeId: node.id, draggedNodeId: draggedNode?.id });
+    if (draggedNode && draggedNode.id !== node.id) {
+      console.log('[NodeCard] Calling onDragEnd');
+      // Сбрасываем justDragged сразу после завершения перетаскивания
+      setJustDragged(false);
+      // Небольшая задержка перед вызовом onDragEnd, чтобы избежать конфликта с onClick
+      setTimeout(() => {
+        onDragEnd?.();
+      }, 10);
+    } else {
+      // Если не было перетаскивания, сбрасываем justDragged сразу
+      setJustDragged(false);
+    }
+  };
+
+  const handleCardTouchEnd = () => {
+    console.log('[NodeCard] handleCardTouchEnd', { nodeId: node.id, draggedNodeId: draggedNode?.id });
+    if (draggedNode && draggedNode.id !== node.id) {
+      console.log('[NodeCard] Calling onDragEnd (touch)');
+      onDragEnd?.();
+    }
+  };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // только левая кнопка мыши
+    console.log('[NodeCard] handleMouseDown', { nodeId: node.id });
     // Запоминаем начальную позицию
     const startX = e.clientX;
     const startY = e.clientY;
@@ -79,9 +164,12 @@ export function NodeCard({
       const deltaY = Math.abs(moveEvent.clientY - startY);
       if (!hasStartedDrag && (deltaX > 3 || deltaY > 3)) {
         hasStartedDrag = true;
+        console.log('[NodeCard] Drag started', { nodeId: node.id });
         setIsDragging(true);
         setDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
         onDragStart?.(node);
+        // Предотвращаем выделение текста только после начала перетаскивания
+        document.body.style.userSelect = 'none';
       }
       if (hasStartedDrag) {
         setDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
@@ -89,12 +177,17 @@ export function NodeCard({
     };
     
     const handleMouseUp = () => {
+      console.log('[NodeCard] handleMouseUp (in handleMouseDown)', { nodeId: node.id, hasStartedDrag });
+      document.body.style.userSelect = ''; // Восстанавливаем выделение текста
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       if (hasStartedDrag) {
         setIsDragging(false);
         setJustDragged(true);
-        setTimeout(() => setJustDragged(false), 100);
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+        }
+        timeoutRef.current = setTimeout(() => setJustDragged(false), 100);
         onDragEnd?.();
       }
     };
@@ -103,19 +196,53 @@ export function NodeCard({
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  const handleMouseEnter = () => {
-    if (draggedNode && draggedNode.id !== node.id) {
-      onDragOver?.(node.id);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    onDragLeave?.();
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const startX = touch.clientX;
+    const startY = touch.clientY;
+    let hasStartedDrag = false;
+    
+    const handleTouchMove = (moveEvent: TouchEvent) => {
+      if (moveEvent.touches.length !== 1) return;
+      const touch = moveEvent.touches[0];
+      const deltaX = Math.abs(touch.clientX - startX);
+      const deltaY = Math.abs(touch.clientY - startY);
+      if (!hasStartedDrag && (deltaX > 5 || deltaY > 5)) {
+        hasStartedDrag = true;
+        setIsDragging(true);
+        setDragPosition({ x: touch.clientX, y: touch.clientY });
+        onDragStart?.(node);
+        moveEvent.preventDefault(); // Предотвращаем скролл
+      }
+      if (hasStartedDrag) {
+        setDragPosition({ x: touch.clientX, y: touch.clientY });
+        moveEvent.preventDefault();
+      }
+    };
+    
+    const handleTouchEnd = () => {
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      if (hasStartedDrag) {
+        setIsDragging(false);
+        setJustDragged(true);
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+        }
+        timeoutRef.current = setTimeout(() => setJustDragged(false), 100);
+        onDragEnd?.();
+      }
+    };
+    
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
   };
 
   return (
     <>
       <div 
+        data-node-id={node.id}
         className={`bg-white dark:bg-gray-800 rounded-lg border transition-all p-3 ${
           node.priority 
             ? 'border-2 shadow-md' 
@@ -131,19 +258,22 @@ export function NodeCard({
             boxShadow: `0 0 0 3px var(--accent), 0 4px 6px -1px rgba(0, 0, 0, 0.1)`,
             transition: 'all 0.5s ease'
           } : {}),
-          ...(draggedNode && draggedNode.id !== node.id ? {
+          ...(draggedNode && draggedNode.id !== node.id && (!currentNodeId || node.id !== currentNodeId) ? {
             borderColor: 'var(--accent)',
             opacity: 0.7
           } : {})
         }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        onMouseUp={handleCardMouseUp}
+        onTouchEnd={handleCardTouchEnd}
       >
         <div className="flex items-center gap-3">
           {/* Заголовок и описание (кликабельный) */}
           <div
             className="flex-1 min-w-0"
             onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
           >
             <button
               onClick={(e) => {
@@ -240,22 +370,22 @@ export function NodeCard({
                      </button>
                    </Tooltip>
                    
-                   <Tooltip text={node.priority ? 'Убрать приоритет' : 'Приоритетная задача'}>
-                     <button
-                       onClick={() => onTogglePriority(node.id, !node.priority)}
-                       className={`p-2 rounded-lg transition-all border hover:brightness-150 ${
-                         node.priority
-                           ? 'border-transparent'
-                           : 'border-current hover:bg-accent/10'
-                       }`}
-                       style={{ 
-                         color: 'var(--accent)',
-                         backgroundColor: node.priority ? 'var(--accent)' : 'transparent'
-                       }}
-                     >
-                       <FiArrowUp size={18} style={{ color: node.priority ? 'white' : 'var(--accent)' }} />
-                     </button>
-                   </Tooltip>
+                  <Tooltip text={node.priority ? t('tooltip.removePriority') : t('tooltip.priority')}>
+                    <button
+                      onClick={() => onTogglePriority(node.id, !node.priority)}
+                      className={`p-2 rounded-lg transition-all border hover:brightness-150 ${
+                        node.priority
+                          ? 'border-transparent'
+                          : 'border-current hover:bg-accent/10'
+                      }`}
+                      style={{ 
+                        color: 'var(--accent)',
+                        backgroundColor: node.priority ? 'var(--accent)' : 'transparent'
+                      }}
+                    >
+                      <FiArrowUp size={18} style={{ color: node.priority ? 'white' : 'var(--accent)' }} />
+                    </button>
+                  </Tooltip>
                    
                    <Tooltip text={t('general.edit')}>
                      <button

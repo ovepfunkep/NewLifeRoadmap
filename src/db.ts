@@ -1,7 +1,13 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Node, ImportStrategy } from './types';
-import { syncNodeDebounced } from './db-sync';
-import { deleteNodeFromFirestore } from './firebase/sync';
+
+const isDev = import.meta.env.DEV;
+
+function log(message: string, ...args: any[]) {
+  if (isDev) {
+    console.log(`[DB] ${message}`, ...args);
+  }
+}
 
 interface LifeRoadmapDB extends DBSchema {
   nodes: {
@@ -19,10 +25,15 @@ let dbInstance: IDBPDatabase<LifeRoadmapDB> | null = null;
 
 // Инициализация БД
 export async function initDB(): Promise<void> {
-  if (dbInstance) return;
+  if (dbInstance) {
+    log('DB already initialized');
+    return;
+  }
   
+  log('Initializing DB');
   dbInstance = await openDB<LifeRoadmapDB>(DB_NAME, DB_VERSION, {
     upgrade(db, oldVersion) {
+      log(`DB upgrade from version ${oldVersion} to ${DB_VERSION}`);
       // Если версия < 2, удаляем старый store (он был без keyPath)
       if (oldVersion < 2 && db.objectStoreNames.contains(STORE_NAME)) {
         db.deleteObjectStore(STORE_NAME);
@@ -30,13 +41,17 @@ export async function initDB(): Promise<void> {
       // Создаём store с keyPath для автоматического использования id как ключа
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        log('Created object store');
       }
     },
   });
   
+  log('DB initialized');
+  
   // Создаём корневой узел, если его нет
   const existingRoot = await dbInstance.get(STORE_NAME, ROOT_ID);
   if (!existingRoot) {
+    log('Root node not found, creating...');
     const now = new Date().toISOString();
     const rootNode: Node = {
       id: ROOT_ID,
@@ -48,6 +63,9 @@ export async function initDB(): Promise<void> {
       children: [],
     };
     await dbInstance.put(STORE_NAME, rootNode);
+    log('Root node created');
+  } else {
+    log('Root node already exists');
   }
 }
 
@@ -58,25 +76,72 @@ export async function getRoot(): Promise<Node> {
   if (!node) {
     throw new Error('Root node not found');
   }
+  // Исправляем parentId если он неправильный
+  if (node.parentId !== null) {
+    log(`Fixing root node parentId: ${node.parentId} -> null`);
+    node.parentId = null;
+    await dbInstance!.put(STORE_NAME, node);
+  }
   return node;
 }
 
 // Получить узел по ID
 export async function getNode(id: string): Promise<Node | null> {
   if (!dbInstance) await initDB();
-  return await dbInstance!.get(STORE_NAME, id) || null;
+  const node = await dbInstance!.get(STORE_NAME, id) || null;
+  // Исправляем корневой узел если нужно
+  if (node && node.id === ROOT_ID && node.parentId !== null) {
+    log(`Fixing root node parentId: ${node.parentId} -> null`);
+    node.parentId = null;
+    await dbInstance!.put(STORE_NAME, node);
+  }
+  return node;
 }
 
 // Получить все узлы из БД
 export async function getAllNodes(): Promise<Node[]> {
   if (!dbInstance) await initDB();
-  return await dbInstance!.getAll(STORE_NAME);
+  const nodes = await dbInstance!.getAll(STORE_NAME);
+  
+  // Исправляем корневой узел: если это root-node, parentId должен быть null
+  for (const node of nodes) {
+    if (node.id === ROOT_ID && node.parentId !== null) {
+      log(`Fixing root node: parentId should be null, got ${node.parentId}`);
+      node.parentId = null;
+      // Сохраняем исправленный узел
+      try {
+        await dbInstance!.put(STORE_NAME, node);
+        log('Root node fixed');
+      } catch (err) {
+        console.error('Error fixing root node:', err);
+      }
+    }
+  }
+  
+  log(`Retrieved ${nodes.length} nodes from DB`);
+  return nodes;
+}
+
+// Очистить все узлы из БД (кроме корневого)
+export async function clearAllNodes(): Promise<void> {
+  if (!dbInstance) await initDB();
+  log('Clearing all nodes from DB');
+  const allNodes = await dbInstance!.getAll(STORE_NAME);
+  const tx = dbInstance!.transaction(STORE_NAME, 'readwrite');
+  for (const node of allNodes) {
+    if (node.id !== ROOT_ID) {
+      await tx.store.delete(node.id);
+    }
+  }
+  await tx.done;
+  log('All nodes cleared (except root)');
 }
 
 // Сохранить узел (и поддерево через denormalized структуру)
 // Сохраняем сам узел и всех потомков в БД отдельно
 export async function saveNode(node: Node): Promise<void> {
   if (!dbInstance) await initDB();
+  log(`Saving node: ${node.id} (${node.title})`);
   const nodeToSave: Node = {
     ...node,
     updatedAt: new Date().toISOString(),
@@ -84,6 +149,7 @@ export async function saveNode(node: Node): Promise<void> {
   
   // Сохраняем сам узел (keyPath автоматически использует nodeToSave.id)
   await dbInstance!.put(STORE_NAME, nodeToSave);
+  log(`Node saved: ${node.id}`);
   
   // Сохраняем всех потомков рекурсивно
   const saveSubtree = async (n: Node) => {
@@ -126,21 +192,23 @@ export async function saveNode(node: Node): Promise<void> {
       await saveNode(updatedParent);
     }
   }
-
-  // Синхронизируем с Firestore (если пользователь авторизован)
-  syncNodeDebounced(nodeToSave);
 }
 
 // Удалить узел и всех потомков
 export async function deleteNode(id: string): Promise<void> {
   if (!dbInstance) await initDB();
   
+  log(`Deleting node: ${id}`);
   // Находим узел
   const node = await getNode(id);
-  if (!node) return;
+  if (!node) {
+    log(`Node not found: ${id}`);
+    return;
+  }
   
   // Удаляем узел из БД
   await dbInstance!.delete(STORE_NAME, id);
+  log(`Node deleted: ${id}`);
   
   // Удаляем всех потомков рекурсивно
   for (const child of node.children) {
@@ -159,24 +227,6 @@ export async function deleteNode(id: string): Promise<void> {
       };
       await saveNode(updatedParent);
     }
-  }
-
-  // Удаляем из Firestore (если пользователь авторизован)
-  try {
-    // Собираем всех потомков рекурсивно
-    const collectChildrenIds = (n: Node): string[] => {
-      const ids: string[] = [];
-      for (const child of n.children) {
-        ids.push(child.id);
-        ids.push(...collectChildrenIds(child));
-      }
-      return ids;
-    };
-    const allChildrenIds = collectChildrenIds(node);
-    await deleteNodeFromFirestore(id, allChildrenIds);
-  } catch (error) {
-    console.error('Error deleting node from Firestore:', error);
-    // Не прерываем выполнение при ошибке синхронизации
   }
 }
 

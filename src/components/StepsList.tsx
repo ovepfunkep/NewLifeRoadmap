@@ -26,6 +26,7 @@ interface StepsListProps {
   onSortChange: (sort: SortType) => void;
   filterType: FilterType;
   onFilterChange: (filter: FilterType) => void;
+  currentNodeId?: string;
 }
 
 export function StepsList({ 
@@ -45,7 +46,8 @@ export function StepsList({
   sortType,
   onSortChange,
   filterType,
-  onFilterChange
+  onFilterChange,
+  currentNodeId
 }: StepsListProps) {
   // Фильтрация
   const filteredChildren = children.filter(child => {
@@ -210,8 +212,9 @@ export function StepsList({
               onDragEnd={onDragEnd}
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
-              isDragOver={dragOverNodeId === child.id}
+              isDragOver={dragOverNodeId === child.id && (!currentNodeId || child.id !== currentNodeId)}
               draggedNode={draggedNode}
+              currentNodeId={currentNodeId}
             />
           </div>
         ))}

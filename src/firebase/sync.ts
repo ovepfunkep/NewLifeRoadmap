@@ -3,6 +3,14 @@ import { getFirebaseDB } from './config';
 import { getCurrentUser } from './auth';
 import { Node } from '../types';
 
+const isDev = import.meta.env.DEV;
+
+function log(message: string, ...args: any[]) {
+  if (isDev) {
+    console.log(`[Sync] ${message}`, ...args);
+  }
+}
+
 /**
  * Получить путь к коллекции узлов пользователя
  */
@@ -16,13 +24,14 @@ function getUserNodesPath(userId: string): string {
 export async function syncNodeToFirestore(node: Node): Promise<void> {
   const user = getCurrentUser();
   if (!user) {
-    console.warn('User not authenticated, skipping sync');
+    log('User not authenticated, skipping sync');
     return;
   }
 
   const db = getFirebaseDB();
 
   try {
+    log(`Syncing node to Firestore: ${node.id} (${node.title})`);
     const nodeRef = doc(db, getUserNodesPath(user.uid), node.id);
     // Сохраняем узел без детей (дети хранятся отдельно)
     const { children, ...nodeData } = node;
@@ -30,7 +39,9 @@ export async function syncNodeToFirestore(node: Node): Promise<void> {
       ...nodeData,
       syncedAt: new Date().toISOString(),
     });
+    log(`Node synced successfully: ${node.id}`);
   } catch (error) {
+    log(`Error syncing node ${node.id}:`, error);
     console.error('Error syncing node to Firestore:', error);
     throw error;
   }
@@ -42,13 +53,14 @@ export async function syncNodeToFirestore(node: Node): Promise<void> {
 export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
   const user = getCurrentUser();
   if (!user) {
-    console.warn('User not authenticated, skipping sync');
+    log('User not authenticated, skipping sync');
     return;
   }
 
   const db = getFirebaseDB();
 
   try {
+    log(`Starting bulk sync: ${allNodes.length} nodes`);
     const batch = writeBatch(db);
     const nodesRef = collection(db, getUserNodesPath(user.uid));
 
@@ -62,8 +74,9 @@ export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
     }
 
     await batch.commit();
-    console.log(`Synced ${allNodes.length} nodes to Firestore`);
+    log(`Bulk sync completed: ${allNodes.length} nodes synced`);
   } catch (error) {
+    log(`Error in bulk sync:`, error);
     console.error('Error syncing all nodes to Firestore:', error);
     throw error;
   }
@@ -106,15 +119,18 @@ export async function loadNodeFromFirestore(nodeId: string): Promise<Node | null
 export async function loadAllNodesFromFirestore(): Promise<Node[]> {
   const user = getCurrentUser();
   if (!user) {
+    log('User not authenticated, cannot load nodes');
     return [];
   }
 
   const db = getFirebaseDB();
   if (!db) {
+    log('Firebase DB not initialized');
     return [];
   }
 
   try {
+    log('Loading all nodes from Firestore');
     const nodesRef = collection(db, getUserNodesPath(user.uid));
     const querySnapshot = await getDocs(nodesRef);
     
@@ -127,6 +143,8 @@ export async function loadAllNodesFromFirestore(): Promise<Node[]> {
       } as unknown as Node);
     });
 
+    log(`Loaded ${nodes.length} nodes from Firestore`);
+
     // Восстанавливаем иерархию (дети)
     const nodeMap = new Map<string, Node>();
     nodes.forEach(node => {
@@ -137,6 +155,12 @@ export async function loadAllNodesFromFirestore(): Promise<Node[]> {
     const rootNodes: Node[] = [];
     nodes.forEach(node => {
       const nodeWithChildren = nodeMap.get(node.id)!;
+      
+      // Исправляем корневой узел: если это root-node, parentId должен быть null
+      if (nodeWithChildren.id === 'root-node') {
+        nodeWithChildren.parentId = null;
+      }
+      
       if (node.parentId && nodeMap.has(node.parentId)) {
         const parent = nodeMap.get(node.parentId)!;
         if (!parent.children) {
@@ -158,9 +182,11 @@ export async function loadAllNodesFromFirestore(): Promise<Node[]> {
     };
     rootNodes.forEach(sortChildren);
 
+    log(`Restored hierarchy: ${rootNodes.length} root nodes`);
     // Возвращаем все узлы (не только корневые)
     return Array.from(nodeMap.values());
   } catch (error) {
+    log(`Error loading nodes:`, error);
     console.error('Error loading all nodes from Firestore:', error);
     return [];
   }
@@ -205,16 +231,21 @@ export async function deleteNodeFromFirestore(nodeId: string, childrenIds: strin
 export async function hasDataInFirestore(): Promise<boolean> {
   const user = getCurrentUser();
   if (!user) {
+    log('User not authenticated, no data in Firestore');
     return false;
   }
 
   const db = getFirebaseDB();
 
   try {
+    log('Checking if data exists in Firestore');
     const nodesRef = collection(db, getUserNodesPath(user.uid));
     const querySnapshot = await getDocs(query(nodesRef));
-    return !querySnapshot.empty;
+    const hasData = !querySnapshot.empty;
+    log(`Firestore has data: ${hasData} (${querySnapshot.size} documents)`);
+    return hasData;
   } catch (error) {
+    log(`Error checking Firestore data:`, error);
     console.error('Error checking Firestore data:', error);
     return false;
   }
