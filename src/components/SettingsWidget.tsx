@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTheme } from '../hooks/useTheme';
 import { useAccent } from '../hooks/useAccent';
 import { useEffects } from '../hooks/useEffects';
@@ -86,10 +86,24 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
     setTheme(theme === 'light' ? 'dark' : 'light');
   };
 
-  const handleLanguageClick = () => {
+  const handleLanguageClick = async () => {
     const newLang = language === 'ru' ? 'en' : 'ru';
     setLanguage(newLang);
     onLanguageChange?.(newLang);
+    
+    // Сохраняем все настройки перед перезагрузкой
+    try {
+      const { saveAllUserSettings } = await import('../firebase/settingsSync');
+      await saveAllUserSettings({
+        theme,
+        accent,
+        language: newLang,
+        effectsEnabled,
+      });
+    } catch (error) {
+      console.error('Error saving settings before reload:', error);
+    }
+    
     // Перезагружаем страницу для применения изменений
     window.location.reload();
   };
@@ -101,8 +115,23 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
     />
   );
 
-  const handleEffectsClick = () => {
-    setEffectsEnabled(!effectsEnabled);
+  const handleEffectsClick = async () => {
+    const newEffectsEnabled = !effectsEnabled;
+    setEffectsEnabled(newEffectsEnabled);
+    
+    // Сохраняем все настройки перед перезагрузкой
+    try {
+      const { saveAllUserSettings } = await import('../firebase/settingsSync');
+      await saveAllUserSettings({
+        theme,
+        accent,
+        language,
+        effectsEnabled: newEffectsEnabled,
+      });
+    } catch (error) {
+      console.error('Error saving settings before reload:', error);
+    }
+    
     // Перезагружаем страницу для применения изменений
     window.location.reload();
   };
@@ -123,13 +152,13 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
     />
   );
 
-  // Углы для кнопок: тема сверху (270°), цвет слева снизу (150°), язык справа снизу (30°), эффекты слева сверху (210°)
-  const buttonPositions = [
+  // Мемоизируем buttonPositions, чтобы они обновлялись при изменении настроек
+  const buttonPositions = useMemo(() => [
     { angle: 270, icon: theme === 'light' ? FiSun : FiMoon, action: handleThemeClick, label: language === 'en' ? 'Theme' : 'Тема' },
     { angle: 150, icon: ColorIcon, action: () => setShowPalette(!showPalette), label: language === 'en' ? 'Color' : 'Цвет' },
     { angle: 30, icon: LanguageIcon, action: handleLanguageClick, label: language === 'en' ? 'Language' : 'Язык' },
     { angle: 210, icon: EffectsIcon, action: handleEffectsClick, label: language === 'en' ? 'Effects' : 'Эффекты' },
-  ];
+  ], [theme, accent, language, effectsEnabled, handleLanguageClick, handleEffectsClick]);
 
   return (
     <div 

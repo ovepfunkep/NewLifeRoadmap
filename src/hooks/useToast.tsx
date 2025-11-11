@@ -50,6 +50,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   // Обработчик предупреждения при перезагрузке страницы во время синхронизации
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Не показываем предупреждение, если перезагрузка программная
+      if ((window as any).__isProgrammaticReload) {
+        return;
+      }
+      
       if (activeSyncCount > 0) {
         e.preventDefault();
         e.returnValue = ''; // Chrome требует установить returnValue

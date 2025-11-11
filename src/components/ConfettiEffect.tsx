@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
+import { useEffects } from '../hooks/useEffects';
 
 const isDev = import.meta.env.DEV;
 
@@ -20,12 +21,19 @@ let globalLastTrigger = 0;
 let globalIsLaunching = false;
 
 export function ConfettiEffect({ trigger, childCount = 0 }: ConfettiEffectProps) {
+  const { effectsEnabled } = useEffects();
   const cleanupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    log('ConfettiEffect useEffect triggered', { trigger, childCount, globalLastTrigger, globalIsLaunching });
+    log('ConfettiEffect useEffect triggered', { trigger, childCount, globalLastTrigger, globalIsLaunching, effectsEnabled });
+    
+    // Если эффекты выключены, не запускаем конфетти
+    if (!effectsEnabled) {
+      log('Effects disabled, skipping confetti');
+      return;
+    }
     
     // Запускаем конфетти только если trigger увеличился (новый запуск) и мы не запускаем уже
     if (trigger === 0 || trigger <= globalLastTrigger || globalIsLaunching) {
@@ -160,7 +168,7 @@ export function ConfettiEffect({ trigger, childCount = 0 }: ConfettiEffectProps)
       }
       // Не удаляем canvas в cleanup, чтобы он мог использоваться для следующих запусков
     };
-  }, [trigger]); // Запускаем только при изменении trigger, не childCount
+  }, [trigger, childCount, effectsEnabled]); // Добавляем effectsEnabled в зависимости
 
   return null;
 }

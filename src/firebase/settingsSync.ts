@@ -19,6 +19,7 @@ export interface UserSettings {
 
 /**
  * Сохранить настройки пользователя в Firestore
+ * Использует merge: true, чтобы не перезаписывать другие поля
  */
 export async function saveUserSettings(settings: UserSettings): Promise<void> {
   const user = getCurrentUser();
@@ -36,11 +37,38 @@ export async function saveUserSettings(settings: UserSettings): Promise<void> {
     await setDoc(settingsRef, {
       ...settings,
       updatedAt: new Date().toISOString(),
-    });
+    }, { merge: true }); // Используем merge, чтобы не перезаписывать другие поля
     log('User settings saved successfully');
   } catch (error) {
     log('Error saving user settings:', error);
     console.error('Error saving user settings to Firestore:', error);
+    throw error;
+  }
+}
+
+/**
+ * Сохранить все настройки пользователя сразу (для использования перед перезагрузкой страницы)
+ */
+export async function saveAllUserSettings(settings: UserSettings): Promise<void> {
+  const user = getCurrentUser();
+  if (!user) {
+    log('User not authenticated, skipping settings save');
+    return;
+  }
+
+  const db = getFirebaseDB();
+
+  try {
+    log('Saving all user settings:', settings);
+    const settingsRef = doc(db, 'users', user.uid, 'settings', 'data');
+    await setDoc(settingsRef, {
+      ...settings,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    log('All user settings saved successfully');
+  } catch (error) {
+    log('Error saving all user settings:', error);
+    console.error('Error saving all user settings to Firestore:', error);
     throw error;
   }
 }
