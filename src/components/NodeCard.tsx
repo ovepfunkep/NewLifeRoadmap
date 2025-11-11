@@ -283,7 +283,7 @@ export function NodeCard({
           } : {})
         }}
         onMouseEnter={(e) => {
-          handleMouseEnter(e);
+          handleMouseEnter();
           // Увеличиваем elevation при hover
           if (!isDragOver && !draggedNode) {
             e.currentTarget.style.boxShadow = node.priority
@@ -292,7 +292,7 @@ export function NodeCard({
           }
         }}
         onMouseLeave={(e) => {
-          handleMouseLeave(e);
+          handleMouseLeave();
           // Возвращаем обычный elevation
           if (!isDragOver && !draggedNode) {
             e.currentTarget.style.boxShadow = node.priority

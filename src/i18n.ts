@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useLanguage } from './contexts/LanguageContext';
 
-type Language = 'ru' | 'en';
+export type Language = 'ru' | 'en';
 
 // Локализация
 export const i18n: Record<Language, Record<string, any>> = {
@@ -263,7 +263,7 @@ export function useTranslation() {
   return useMemo(() => {
     return (key: string): string => {
       const keys = key.split('.');
-      let value: any = i18n[language];
+      let value: any = i18n[language as Language];
       for (const k of keys) {
         value = value?.[k];
       }

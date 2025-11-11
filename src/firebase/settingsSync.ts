@@ -17,10 +17,6 @@ export interface UserSettings {
   effectsEnabled?: boolean;
 }
 
-function getUserSettingsPath(userId: string): string {
-  return `users/${userId}/settings`;
-}
-
 /**
  * Сохранить настройки пользователя в Firestore
  */

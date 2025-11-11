@@ -438,7 +438,22 @@ export function NodePage() {
     
     await deleteNode(id);
     
-    // Синхронизируем удаление с облаком в фоне
+    // Показываем объединенный тост с иконкой загрузки для синхронизации
+    const syncToastId = showToast(t('toast.nodeDeleted'), async () => {
+      // Отмена удаления
+      await saveNode(deletedNode);
+      const reload = async () => {
+        const reloaded = await getNode(currentNode?.id || 'root-node');
+        if (reloaded) setCurrentNode(reloaded);
+      };
+      reload();
+    }, {
+      isLoading: true,
+      persistent: true,
+      subtitle: t('toast.syncingCloud')
+    });
+    
+    // Синхронизируем удаление с облаком асинхронно
     (async () => {
       try {
         const { deleteNodeFromFirestore } = await import('../firebase/sync');
@@ -452,16 +467,35 @@ export function NodePage() {
         };
         const childrenIds = collectChildrenIds(nodeToDelete);
         await deleteNodeFromFirestore(id, childrenIds.slice(1)); // Убираем сам узел из списка детей
+        
         // Также синхронизируем родителя если есть
         if (deletedParentId) {
           const parent = await getNode(deletedParentId);
           if (parent) {
             const { syncNodeNow } = await import('../db-sync');
             await syncNodeNow(parent);
+            
+            // Синхронизируем всех родителей вверх по иерархии до корня
+            let currentParentId = parent.parentId;
+            while (currentParentId) {
+              const grandParent = await getNode(currentParentId);
+              if (grandParent) {
+                await syncNodeNow(grandParent);
+                currentParentId = grandParent.parentId;
+              } else {
+                break;
+              }
+            }
           }
         }
+        
+        // Обновляем тост: заменяем иконку загрузки на галочку
+        updateToast(syncToastId, { isLoading: false, isSuccess: true, persistent: false });
       } catch (error) {
         console.error('[NodePage] Error syncing after delete:', error);
+        // При ошибке просто закрываем тост
+        removeToast(syncToastId);
+        showToast(t('toast.syncError'));
       }
     })();
     
@@ -477,16 +511,6 @@ export function NodePage() {
         navigateToNode('root-node');
       }
     }
-    
-    showToast(t('toast.nodeDeleted'), () => {
-      saveNode(deletedNode).then(() => {
-        const reload = async () => {
-          const reloaded = await getNode(currentNode?.id || 'root-node');
-          if (reloaded) setCurrentNode(reloaded);
-        };
-        reload();
-      });
-    });
   };
 
   // Перемещение шага внутрь другого шага
@@ -558,63 +582,7 @@ export function NodePage() {
     };
     await saveNode(updatedTarget);
 
-    // Показываем объединенный тост с иконкой загрузки
-    const syncToastId = showToast(t('toast.nodeMoved'), undefined, {
-      isLoading: true
-    });
-
-    // Синхронизируем изменения с Firestore (в фоне, не блокируем UI)
-    (async () => {
-      try {
-        const { syncNodeNow } = await import('../db-sync');
-        
-        // Синхронизируем только критически важные узлы параллельно
-        const syncPromises: Promise<void>[] = [];
-        if (oldParent) {
-          syncPromises.push(syncNodeNow(oldParent));
-        }
-        syncPromises.push(syncNodeNow(sourceNode));
-        syncPromises.push(syncNodeNow(updatedTarget));
-        
-        // Ждем завершения критических синхронизаций
-        await Promise.all(syncPromises);
-        
-        // Обновляем тост: заменяем иконку загрузки на галочку
-        updateToast(syncToastId, { isLoading: false, isSuccess: true });
-        
-        // Синхронизируем потомков в фоне (не блокируем UI)
-        const syncSubtree = async (node: Node) => {
-          for (const child of node.children) {
-            try {
-              await syncNodeNow(child);
-              await syncSubtree(child);
-            } catch (error) {
-              console.error(`[NodePage] Error syncing child ${child.id}:`, error);
-            }
-          }
-        };
-        
-        // Запускаем синхронизацию потомков в фоне без await
-        syncSubtree(sourceNode).catch(error => {
-          console.error('[NodePage] Error syncing subtree:', error);
-        });
-      } catch (error) {
-        console.error('[NodePage] Error syncing after move:', error);
-        // При ошибке просто закрываем тост
-        removeToast(syncToastId);
-        showToast(t('toast.syncError'));
-      }
-    })();
-
-    // Перезагружаем текущий узел
-    const reloaded = await getNode(currentNode.id);
-    if (reloaded) {
-      setCurrentNode(reloaded);
-      const breadcrumbs = await buildBreadcrumbs(reloaded.id, getNode);
-      setBreadcrumbs(breadcrumbs);
-    }
-
-    // Показываем toast с возможностью отмены
+    // Функция отмены перемещения
     const undoMove = async () => {
       if (!oldParentId || !sourceNode) return;
       
@@ -717,6 +685,62 @@ export function NodePage() {
         setBreadcrumbs(breadcrumbs);
       }
     };
+
+    // Показываем объединенный тост с иконкой загрузки и возможностью отмены
+    const syncToastId = showToast(t('toast.nodeMoved'), undoMove, {
+      isLoading: true
+    });
+
+    // Синхронизируем изменения с Firestore (в фоне, не блокируем UI)
+    (async () => {
+      try {
+        const { syncNodeNow } = await import('../db-sync');
+        
+        // Синхронизируем только критически важные узлы параллельно
+        const syncPromises: Promise<void>[] = [];
+        if (oldParent) {
+          syncPromises.push(syncNodeNow(oldParent));
+        }
+        syncPromises.push(syncNodeNow(sourceNode));
+        syncPromises.push(syncNodeNow(updatedTarget));
+        
+        // Ждем завершения критических синхронизаций
+        await Promise.all(syncPromises);
+        
+        // Обновляем тост: заменяем иконку загрузки на галочку
+        updateToast(syncToastId, { isLoading: false, isSuccess: true });
+        
+        // Синхронизируем потомков в фоне (не блокируем UI)
+        const syncSubtree = async (node: Node) => {
+          for (const child of node.children) {
+            try {
+              await syncNodeNow(child);
+              await syncSubtree(child);
+            } catch (error) {
+              console.error(`[NodePage] Error syncing child ${child.id}:`, error);
+            }
+          }
+        };
+        
+        // Запускаем синхронизацию потомков в фоне без await
+        syncSubtree(sourceNode).catch(error => {
+          console.error('[NodePage] Error syncing subtree:', error);
+        });
+      } catch (error) {
+        console.error('[NodePage] Error syncing after move:', error);
+        // При ошибке просто закрываем тост
+        removeToast(syncToastId);
+        showToast(t('toast.syncError'));
+      }
+    })();
+
+    // Перезагружаем текущий узел
+    const reloaded = await getNode(currentNode.id);
+    if (reloaded) {
+      setCurrentNode(reloaded);
+      const breadcrumbs = await buildBreadcrumbs(reloaded.id, getNode);
+      setBreadcrumbs(breadcrumbs);
+    }
 
     // Undo функциональность сохранена, но тост уже показан выше с индикатором загрузки
   };
