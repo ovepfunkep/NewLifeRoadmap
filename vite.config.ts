@@ -3,12 +3,12 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // GitHub Pages base path (пустой для username.github.io, или '/reponame/' для обычного репозитория)
+// В GitHub Actions это устанавливается через GITHUB_PAGES_BASE
 const base = process.env.GITHUB_PAGES_BASE || '/';
 
 // Отладочный вывод для проверки base path при сборке
-if (process.env.NODE_ENV === 'production') {
-  console.log('Building with base path:', base || '(root)');
-}
+console.log('Vite config - GITHUB_PAGES_BASE:', process.env.GITHUB_PAGES_BASE);
+console.log('Vite config - base:', base);
 
 export default defineConfig({
   base,
