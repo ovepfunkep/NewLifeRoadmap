@@ -1,3 +1,6 @@
+import { useMemo } from 'react';
+import { useLanguage } from './contexts/LanguageContext';
+
 type Language = 'ru' | 'en';
 
 // Локализация
@@ -12,6 +15,7 @@ export const i18n: Record<Language, Record<string, any>> = {
       edit: 'Edit',
       create: 'Create',
       close: 'Close',
+      notFound: 'Task not found',
     },
     node: {
       markCompleted: 'Mark as completed',
@@ -81,6 +85,9 @@ export const i18n: Record<Language, Record<string, any>> = {
       syncSuccess: 'Data synchronized',
       syncError: 'Sync error',
       syncLoading: 'Syncing...',
+      syncInProgress: 'Updating cloud data...',
+      doNotClose: 'Do not close the page',
+      syncingCloud: 'Updating cloud data...',
     },
     sync: {
       signIn: 'Sign in with Google',
@@ -115,6 +122,7 @@ export const i18n: Record<Language, Record<string, any>> = {
       edit: 'Редактировать',
       create: 'Создать',
       close: 'Закрыть',
+      notFound: 'Задача не найдена',
     },
     node: {
       markCompleted: 'Отметить готовым',
@@ -184,6 +192,9 @@ export const i18n: Record<Language, Record<string, any>> = {
       syncSuccess: 'Данные синхронизированы',
       syncError: 'Ошибка синхронизации',
       syncLoading: 'Синхронизация...',
+      syncInProgress: 'Обновление данных в облаке...',
+      doNotClose: 'Не закрывайте страницу',
+      syncingCloud: 'Обновляем данные в облаке...',
     },
     sync: {
       signIn: 'Войти через Google',
@@ -233,6 +244,7 @@ export function setLanguage(lang: Language): void {
 }
 
 // Получить локализованную строку (поддержка вложенных ключей)
+// Эта функция теперь использует глобальное состояние языка
 export function t(key: string): string {
   const lang = getLanguage();
   const keys = key.split('.');
@@ -241,4 +253,21 @@ export function t(key: string): string {
     value = value?.[k];
   }
   return value || key;
+}
+
+// Хук для реактивного получения перевода (используется в компонентах)
+// Должен использоваться внутри LanguageProvider
+export function useTranslation() {
+  const { language } = useLanguage();
+  
+  return useMemo(() => {
+    return (key: string): string => {
+      const keys = key.split('.');
+      let value: any = i18n[language];
+      for (const k of keys) {
+        value = value?.[k];
+      }
+      return value || key;
+    };
+  }, [language]);
 }

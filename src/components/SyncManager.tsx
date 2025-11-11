@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { onAuthChange } from '../firebase/auth';
 import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore } from '../firebase/sync';
 import { getAllNodes, clearAllNodes } from '../db';
@@ -20,16 +20,16 @@ export function SyncManager() {
   const [localNodes, setLocalNodes] = useState<any[]>([]);
   const [cloudNodes, setCloudNodes] = useState<any[]>([]);
   const { showToast } = useToast();
+  const isInitialLoadRef = useRef<boolean>(true); // Флаг первой загрузки
 
   const handleFirstSync = useCallback(async () => {
     try {
       log('Starting first sync check');
       
-      // Загружаем локальные данные
-      const local = await getAllNodes();
-      log(`Loaded ${local.length} local nodes`);
-      setLocalNodes(local);
-
+      // Делаем снимок локальных данных СРАЗУ, до любых изменений
+      const localSnapshot = await getAllNodes();
+      log(`Loaded ${localSnapshot.length} local nodes snapshot`);
+      
       // Проверяем наличие данных в облаке
       const hasCloudData = await hasDataInFirestore();
       
@@ -37,23 +37,47 @@ export function SyncManager() {
         log('Cloud data exists, loading...');
         const cloud = await loadAllNodesFromFirestore();
         log(`Loaded ${cloud.length} cloud nodes`);
-        setCloudNodes(cloud);
-
-        // Проверяем различия
-        if (hasDifferences(local, cloud)) {
-          log('Differences detected, showing conflict dialog');
-          setShowConflictDialog(true);
+        
+        // Сравниваем снимок локальных данных с облачными данными
+        if (hasDifferences(localSnapshot, cloud)) {
+          // Если это первая загрузка, даем время на синхронизацию локальных изменений
+          // Не показываем конфликт сразу после загрузки страницы
+          if (isInitialLoadRef.current) {
+            log('Initial load detected, waiting before conflict check');
+            // Ждем 3 секунды перед проверкой конфликтов на первой загрузке
+            setTimeout(async () => {
+              // Повторно проверяем локальные данные после задержки
+              const currentLocal = await getAllNodes();
+              const currentCloud = await loadAllNodesFromFirestore();
+              
+              if (hasDifferences(currentLocal, currentCloud)) {
+                log('Differences still exist after delay, showing conflict dialog');
+                setLocalNodes(currentLocal);
+                setCloudNodes(currentCloud);
+                setShowConflictDialog(true);
+              } else {
+                log('Differences resolved during delay, no conflict');
+              }
+              isInitialLoadRef.current = false;
+            }, 3000);
+          } else {
+            log('Differences detected, showing conflict dialog');
+            setLocalNodes(localSnapshot);
+            setCloudNodes(cloud);
+            setShowConflictDialog(true);
+          }
         } else {
           log('No differences, data is in sync');
+          isInitialLoadRef.current = false;
         }
       } else {
         log('No cloud data, skipping conflict check');
-        // Не загружаем локальные данные в облако автоматически
-        // Пользователь должен сделать это вручную
+        isInitialLoadRef.current = false;
       }
     } catch (error) {
       log('Error in first sync:', error);
       console.error('Sync error:', error);
+      isInitialLoadRef.current = false;
     }
   }, []);
 
@@ -79,13 +103,24 @@ export function SyncManager() {
   const handleChooseLocal = async () => {
     try {
       log('User chose local data, syncing to cloud');
-      await syncAllNodesToFirestore(localNodes);
       setShowConflictDialog(false);
-      showToast('Локальные данные сохранены в облако');
-      log('Local data synced to cloud');
+      showToast('Синхронизация с облаком...');
+      
+      // Запускаем синхронизацию в фоне, не блокируя UI
+      (async () => {
+        try {
+          await syncAllNodesToFirestore(localNodes);
+          showToast('Локальные данные сохранены в облако');
+          log('Local data synced to cloud');
+        } catch (error) {
+          log('Error syncing local data:', error);
+          console.error('Error syncing local data:', error);
+          showToast('Ошибка синхронизации');
+        }
+      })();
     } catch (error) {
-      log('Error syncing local data:', error);
-      console.error('Error syncing local data:', error);
+      log('Error in handleChooseLocal:', error);
+      console.error('Error in handleChooseLocal:', error);
       showToast('Ошибка синхронизации');
     }
   };

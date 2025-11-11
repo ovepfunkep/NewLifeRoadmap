@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import { NodePage } from './pages/NodePage';
 import { SyncManager } from './components/SyncManager';
+import { SettingsSyncManager } from './components/SettingsSyncManager';
+import { Garland } from './components/Garland';
+import { LanguageProvider } from './contexts/LanguageContext';
 import { useAccent } from './hooks/useAccent';
 import './index.css';
 
@@ -13,10 +16,12 @@ function App() {
   }, [accent]);
 
   return (
-    <>
+    <LanguageProvider>
+      <SettingsSyncManager />
+      <Garland />
       <NodePage />
       <SyncManager />
-    </>
+    </LanguageProvider>
   );
 }
 

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n';
 import { computeProgress, getDeadlineColor, getProgressCounts } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
+import { useEffects } from '../hooks/useEffects';
 import { FiCheck, FiEdit2, FiTrash2, FiArrowUp } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
 
@@ -39,12 +40,26 @@ export function NodeCard({
   currentNodeId
 }: NodeCardProps) {
   useDeadlineTicker();
+  const t = useTranslation();
   const progress = computeProgress(node);
   const deadlineDisplay = node.deadline ? new Date(node.deadline).toLocaleDateString('ru-RU') : null;
+  const { effectsEnabled } = useEffects();
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [justDragged, setJustDragged] = useState(false);
+  const [isBlinking, setIsBlinking] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Мигание прогресс-бара при 100% - пересчитывается при изменении node
+  useEffect(() => {
+    const currentProgress = computeProgress(node);
+    // Мигаем когда прогресс 100%, эффекты включены, и узел сам не помечен как выполненный
+    if (currentProgress === 100 && effectsEnabled && !node.completed) {
+      setIsBlinking(true);
+    } else {
+      setIsBlinking(false);
+    }
+  }, [node, effectsEnabled]);
 
   // Очищаем таймер при размонтировании
   useEffect(() => {
@@ -243,28 +258,48 @@ export function NodeCard({
     <>
       <div 
         data-node-id={node.id}
-        className={`bg-white dark:bg-gray-800 rounded-lg border transition-all p-3 ${
+        className={`bg-white dark:bg-gray-800 rounded-lg border transition-all p-4 ${
           node.priority 
-            ? 'border-2 shadow-md' 
-            : 'border-gray-200 dark:border-gray-700 shadow-sm'
-        } hover:shadow-md ${
-          isDragOver ? 'shadow-lg ring-2 ring-offset-2' : ''
+            ? 'border-2' 
+            : 'border-gray-300 dark:border-gray-700'
+        } ${
+          isDragOver ? 'ring-2 ring-offset-2' : ''
         } ${
           draggedNode && draggedNode.id !== node.id ? 'opacity-60' : ''
         }`}
         style={{
           ...(node.priority ? { borderColor: 'var(--accent)' } : {}),
+          // Material Design elevation shadows для светлой темы
+          boxShadow: node.priority 
+            ? '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)' // dp2 для приоритетных
+            : '0 1px 2px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.06)', // dp1 для обычных
           ...(isDragOver ? { 
-            boxShadow: `0 0 0 3px var(--accent), 0 4px 6px -1px rgba(0, 0, 0, 0.1)`,
-            transition: 'all 0.5s ease'
+            boxShadow: `0 0 0 3px var(--accent), 0 4px 8px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.1)`, // dp8 при drag-over
+            transition: 'all 0.3s ease'
           } : {}),
           ...(draggedNode && draggedNode.id !== node.id && (!currentNodeId || node.id !== currentNodeId) ? {
             borderColor: 'var(--accent)',
             opacity: 0.7
           } : {})
         }}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
+        onMouseEnter={(e) => {
+          handleMouseEnter(e);
+          // Увеличиваем elevation при hover
+          if (!isDragOver && !draggedNode) {
+            e.currentTarget.style.boxShadow = node.priority
+              ? '0 4px 8px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.1)' // dp4
+              : '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)'; // dp2
+          }
+        }}
+        onMouseLeave={(e) => {
+          handleMouseLeave(e);
+          // Возвращаем обычный elevation
+          if (!isDragOver && !draggedNode) {
+            e.currentTarget.style.boxShadow = node.priority
+              ? '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)' // dp2
+              : '0 1px 2px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.06)'; // dp1
+          }
+        }}
         onMouseUp={handleCardMouseUp}
         onTouchEnd={handleCardTouchEnd}
       >
@@ -307,7 +342,7 @@ export function NodeCard({
                 )}
                 {node.priority && (
                   <span className="flex-shrink-0 text-xs font-medium rounded border-2" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-                    Приоритет
+                    {t('node.priority')}
                   </span>
                 )}
               </div>
@@ -317,10 +352,11 @@ export function NodeCard({
                 <div className="flex items-center gap-1 mt-1">
                   <div className="w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div
-                      className="h-full transition-all duration-300"
+                      className={`h-full transition-all duration-300 ${isBlinking ? 'animate-pulse' : ''}`}
                       style={{
                         width: `${progress}%`,
                         backgroundColor: progress === 100 ? 'var(--accent)' : '#9ca3af',
+                        animation: isBlinking ? 'pulse 0.5s ease-in-out infinite' : undefined,
                       }}
                     />
                   </div>

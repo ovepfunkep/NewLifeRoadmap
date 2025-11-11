@@ -81,7 +81,13 @@ export function StepsList({
   });
   if (children.length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+      <div 
+        className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 p-5"
+        style={{
+          // Material Design elevation dp2 для контейнера списка
+          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)'
+        }}
+      >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {t('node.steps') || 'Шаги'}
@@ -104,7 +110,13 @@ export function StepsList({
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+    <div 
+      className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 p-5"
+      style={{
+        // Material Design elevation dp2 для контейнера списка
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)'
+      }}
+    >
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -194,7 +206,7 @@ export function StepsList({
           </button>
         </Tooltip>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-3">
         {sortedChildren.map((child, index) => (
           <div
             key={child.id}

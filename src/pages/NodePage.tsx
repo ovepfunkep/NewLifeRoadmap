@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { initDB, getNode, getRoot, saveNode, deleteNode } from '../db';
-import { buildBreadcrumbs } from '../utils';
+import { buildBreadcrumbs, getTotalChildCount } from '../utils';
 import { useNodeNavigation } from '../hooks/useHashRoute';
 import { useToast } from '../hooks/useToast';
+import { useEffects } from '../hooks/useEffects';
 import { Header } from '../components/Header';
 import { StepsList } from '../components/StepsList';
 import { DeadlineList } from '../components/DeadlineList';
@@ -14,6 +15,7 @@ import { MoveModal } from '../components/MoveModal';
 import { ToastList } from '../components/ToastList';
 import { SettingsWidget } from '../components/SettingsWidget';
 import { Footer } from '../components/Footer';
+import { ConfettiEffect } from '../components/ConfettiEffect';
 
 type SortType = 'none' | 'name' | 'deadline';
 
@@ -30,7 +32,10 @@ export function NodePage() {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [draggedNode, setDraggedNode] = useState<Node | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
-  const { toasts, showToast, removeToast } = useToast();
+  const { toasts, showToast, updateToast, removeToast } = useToast();
+  const { effectsEnabled } = useEffects();
+  const [confettiTrigger, setConfettiTrigger] = useState(0); // Изменено на number для поддержки нескольких запусков
+  const [confettiChildCount, setConfettiChildCount] = useState(0);
 
   // Мемоизированный список детей (сортировка и фильтрация теперь в StepsList)
   const sortedChildren = useMemo(() => {
@@ -256,6 +261,14 @@ export function NodePage() {
     const nodeToUpdate = id === currentNode.id ? currentNode : findNode(currentNode);
     if (!nodeToUpdate) return;
     
+    // Если задача завершена и эффекты включены, запускаем конфетти
+    if (completed && effectsEnabled) {
+      const childCount = getTotalChildCount(nodeToUpdate);
+      setConfettiChildCount(childCount);
+      // Увеличиваем счетчик триггера для нового запуска конфетти
+      setConfettiTrigger(prev => prev + 1);
+    }
+    
     const updated: Node = {
       ...nodeToUpdate,
       completed,
@@ -264,10 +277,50 @@ export function NodePage() {
     
     await saveNode(updated);
     
+    // Показываем объединенный тост с иконкой загрузки
+    const syncToastId = showToast(t('toast.nodeSaved'), undefined, {
+      isLoading: true
+    });
+    
+    // Синхронизируем с облаком асинхронно
+    (async () => {
+      try {
+        const { syncNodeNow } = await import('../db-sync');
+        await syncNodeNow(updated);
+        
+        // Синхронизируем всех родителей вверх по иерархии до корня
+        let currentParentId = updated.parentId;
+        while (currentParentId) {
+          const parent = await getNode(currentParentId);
+          if (parent) {
+            await syncNodeNow(parent);
+            currentParentId = parent.parentId;
+          } else {
+            break;
+          }
+        }
+        
+        // Обновляем тост: заменяем иконку загрузки на галочку
+        updateToast(syncToastId, { isLoading: false, isSuccess: true });
+      } catch (error) {
+        console.error('[NodePage] Error syncing after mark completed:', error);
+        // При ошибке просто закрываем тост
+        removeToast(syncToastId);
+        showToast(t('toast.syncError'));
+      }
+    })();
+    
+    // Перезагружаем текущий узел, чтобы обновить прогресс-бар
     const reloaded = await getNode(currentNode.id);
     if (reloaded) {
       setCurrentNode(reloaded);
-      showToast(t('toast.nodeSaved'));
+      // Также обновляем breadcrumbs если нужно
+      try {
+        const crumbs = await buildBreadcrumbs(reloaded.id, getNode);
+        setBreadcrumbs(crumbs);
+      } catch (error) {
+        console.error('Error updating breadcrumbs:', error);
+      }
     }
   };
 
@@ -294,15 +347,78 @@ export function NodePage() {
     
     await saveNode(updated);
     
+    // Показываем объединенный тост с иконкой загрузки
+    const syncToastId = showToast(t('toast.nodeSaved'), undefined, {
+      isLoading: true
+    });
+    
+    // Синхронизируем с облаком асинхронно
+    (async () => {
+      try {
+        const { syncNodeNow } = await import('../db-sync');
+        await syncNodeNow(updated);
+        // Также синхронизируем всех родителей вверх по иерархии до корня
+        let currentParentId = updated.parentId;
+        while (currentParentId) {
+          const parent = await getNode(currentParentId);
+          if (parent) {
+            await syncNodeNow(parent);
+            currentParentId = parent.parentId;
+          } else {
+            break;
+          }
+        }
+        
+        // Обновляем тост: заменяем иконку загрузки на галочку
+        updateToast(syncToastId, { isLoading: false, isSuccess: true });
+      } catch (error) {
+        console.error('[NodePage] Error syncing after toggle priority:', error);
+        // При ошибке просто закрываем тост
+        removeToast(syncToastId);
+        showToast(t('toast.syncError'));
+      }
+    })();
+    
     const reloaded = await getNode(currentNode.id);
     if (reloaded) {
       setCurrentNode(reloaded);
-      showToast(t('toast.nodeSaved'));
     }
   };
 
   const handleSave = async (node: Node) => {
     await saveNode(node);
+    
+    // Показываем объединенный тост с иконкой загрузки
+    const syncToastId = showToast(t('toast.nodeSaved'), undefined, {
+      isLoading: true
+    });
+    
+    // Синхронизируем с облаком асинхронно
+    (async () => {
+      try {
+        const { syncNodeNow } = await import('../db-sync');
+        await syncNodeNow(node);
+        // Также синхронизируем всех родителей вверх по иерархии до корня
+        let currentParentId = node.parentId;
+        while (currentParentId) {
+          const parent = await getNode(currentParentId);
+          if (parent) {
+            await syncNodeNow(parent);
+            currentParentId = parent.parentId;
+          } else {
+            break;
+          }
+        }
+        
+        // Обновляем тост: заменяем иконку загрузки на галочку
+        updateToast(syncToastId, { isLoading: false, isSuccess: true });
+      } catch (error) {
+        console.error('[NodePage] Error syncing after save:', error);
+        // При ошибке просто закрываем тост
+        removeToast(syncToastId);
+        showToast(t('toast.syncError'));
+      }
+    })();
     
     const reloaded = await getNode(currentNode!.id);
     if (reloaded) {
@@ -310,7 +426,6 @@ export function NodePage() {
       // Обновляем хлебные крошки после переименования/изменения
       const breadcrumbs = await buildBreadcrumbs(reloaded.id, getNode);
       setBreadcrumbs(breadcrumbs);
-      showToast(t('toast.nodeSaved'));
     }
   };
 
@@ -322,6 +437,33 @@ export function NodePage() {
     const deletedParentId = nodeToDelete.parentId;
     
     await deleteNode(id);
+    
+    // Синхронизируем удаление с облаком в фоне
+    (async () => {
+      try {
+        const { deleteNodeFromFirestore } = await import('../firebase/sync');
+        // Собираем все ID потомков для удаления
+        const collectChildrenIds = (node: Node): string[] => {
+          const ids = [node.id];
+          for (const child of node.children) {
+            ids.push(...collectChildrenIds(child));
+          }
+          return ids;
+        };
+        const childrenIds = collectChildrenIds(nodeToDelete);
+        await deleteNodeFromFirestore(id, childrenIds.slice(1)); // Убираем сам узел из списка детей
+        // Также синхронизируем родителя если есть
+        if (deletedParentId) {
+          const parent = await getNode(deletedParentId);
+          if (parent) {
+            const { syncNodeNow } = await import('../db-sync');
+            await syncNodeNow(parent);
+          }
+        }
+      } catch (error) {
+        console.error('[NodePage] Error syncing after delete:', error);
+      }
+    })();
     
     const reloaded = await getNode(currentNode!.id);
     if (reloaded) {
@@ -416,8 +558,12 @@ export function NodePage() {
     };
     await saveNode(updatedTarget);
 
+    // Показываем объединенный тост с иконкой загрузки
+    const syncToastId = showToast(t('toast.nodeMoved'), undefined, {
+      isLoading: true
+    });
+
     // Синхронизируем изменения с Firestore (в фоне, не блокируем UI)
-    // Запускаем синхронизацию полностью в фоне, чтобы не блокировать перемещение
     (async () => {
       try {
         const { syncNodeNow } = await import('../db-sync');
@@ -430,12 +576,11 @@ export function NodePage() {
         syncPromises.push(syncNodeNow(sourceNode));
         syncPromises.push(syncNodeNow(updatedTarget));
         
-        // Не ждем завершения синхронизации - запускаем в фоне
-        Promise.all(syncPromises).then(() => {
-          console.log('[NodePage] Critical nodes synced after move');
-        }).catch(error => {
-          console.error('[NodePage] Error syncing critical nodes:', error);
-        });
+        // Ждем завершения критических синхронизаций
+        await Promise.all(syncPromises);
+        
+        // Обновляем тост: заменяем иконку загрузки на галочку
+        updateToast(syncToastId, { isLoading: false, isSuccess: true });
         
         // Синхронизируем потомков в фоне (не блокируем UI)
         const syncSubtree = async (node: Node) => {
@@ -454,7 +599,10 @@ export function NodePage() {
           console.error('[NodePage] Error syncing subtree:', error);
         });
       } catch (error) {
-        console.error('[NodePage] Error starting sync:', error);
+        console.error('[NodePage] Error syncing after move:', error);
+        // При ошибке просто закрываем тост
+        removeToast(syncToastId);
+        showToast(t('toast.syncError'));
       }
     })();
 
@@ -570,7 +718,7 @@ export function NodePage() {
       }
     };
 
-    showToast(t('toast.nodeMoved'), undoMove);
+    // Undo функциональность сохранена, но тост уже показан выше с индикатором загрузки
   };
 
   // Обработчик drag для перемещения внутрь другого шага
@@ -635,13 +783,13 @@ export function NodePage() {
   if (!currentNode) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <p className="text-gray-600 dark:text-gray-400">Задача не найдена</p>
+        <p className="text-gray-600 dark:text-gray-400">{t('general.notFound')}</p>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
+      return (
+        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col" style={{ paddingTop: effectsEnabled ? '30px' : '0' }}>
       <Header 
         node={currentNode} 
         breadcrumbs={breadcrumbs}
@@ -653,6 +801,7 @@ export function NodePage() {
         onEdit={handleEdit}
         onImportExport={handleImportExport}
         onMove={() => setShowMoveModal(true)}
+        onMarkCompleted={handleMarkCompleted}
         currentNodeId={currentNode.id}
       />
       
@@ -727,6 +876,9 @@ export function NodePage() {
       
       {/* Footer */}
       <Footer />
+      
+      {/* Конфетти эффект */}
+      <ConfettiEffect trigger={confettiTrigger} childCount={confettiChildCount} />
     </div>
   );
 }

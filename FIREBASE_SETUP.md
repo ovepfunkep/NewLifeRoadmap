@@ -75,8 +75,13 @@ VITE_FIREBASE_APP_ID=1:123456789:web:abc123
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Пользователь может читать/писать только свои данные
+    // Пользователь может читать/писать только свои данные узлов
     match /users/{userId}/nodes/{nodeId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Пользователь может читать/писать только свои настройки
+    match /users/{userId}/settings/{settingsId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }

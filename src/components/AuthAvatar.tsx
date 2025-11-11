@@ -88,6 +88,13 @@ export function AuthAvatar() {
                 src={user.photoURL}
                 alt={user.email}
                 className="w-full h-full object-cover"
+                onLoad={() => {
+                  log('Google avatar loaded successfully:', user.photoURL);
+                }}
+                onError={(e) => {
+                  log('Error loading Google avatar:', user.photoURL, e);
+                  console.error('[Auth] Failed to load Google avatar:', user.photoURL);
+                }}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gray-200 dark:bg-gray-700">

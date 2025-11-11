@@ -22,6 +22,16 @@ export function useAccent() {
   useEffect(() => {
     document.documentElement.style.setProperty('--accent', accent);
     localStorage.setItem('accent', accent);
+    
+    // Синхронизируем с облаком в фоне
+    (async () => {
+      try {
+        const { saveUserSettings } = await import('../firebase/settingsSync');
+        await saveUserSettings({ accent });
+      } catch (error) {
+        // Игнорируем ошибки синхронизации настроек
+      }
+    })();
   }, [accent]);
 
   const setAccent = (color: string) => {

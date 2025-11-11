@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Node } from '../types';
-import { t } from '../i18n';
+import { useTranslation } from '../i18n';
 import { useNodeNavigation } from '../hooks/useHashRoute';
 import { computeProgress, getDeadlineColor, getProgressCounts } from '../utils';
-import { FiEdit2, FiDownload, FiMove } from 'react-icons/fi';
+import { useEffects } from '../hooks/useEffects';
+import { FiEdit2, FiDownload, FiMove, FiCheck } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
 
 interface HeaderProps {
@@ -17,6 +18,7 @@ interface HeaderProps {
   onEdit?: (node: Node) => void;
   onImportExport?: () => void;
   onMove?: () => void;
+  onMarkCompleted?: (id: string, completed: boolean) => void;
   currentNodeId?: string;
 }
 
@@ -31,10 +33,25 @@ export function Header({
   onEdit,
   onImportExport,
   onMove,
+  onMarkCompleted,
   currentNodeId
 }: HeaderProps) {
   const [, navigateToNode] = useNodeNavigation();
+  const t = useTranslation();
   const progress = computeProgress(node);
+  const { effectsEnabled } = useEffects();
+  const [isBlinking, setIsBlinking] = useState(false);
+  
+  // Мигание прогресс-бара при 100% - пересчитывается при изменении node
+  useEffect(() => {
+    const currentProgress = computeProgress(node);
+    // Мигаем когда прогресс 100%, эффекты включены, и узел сам не помечен как выполненный
+    if (currentProgress === 100 && effectsEnabled && !node.completed) {
+      setIsBlinking(true);
+    } else {
+      setIsBlinking(false);
+    }
+  }, [node, effectsEnabled]);
 
   const handleBreadcrumbDragOver = (nodeId: string) => {
     // Запрещаем перетаскивание в текущий узел
@@ -68,7 +85,13 @@ export function Header({
   };
 
   return (
-          <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md shadow-sm border-b border-gray-200 dark:border-gray-800 overflow-visible">
+          <header 
+            className="sticky top-0 z-50 bg-white dark:bg-gray-900 backdrop-blur-md border-b border-gray-300 dark:border-gray-800 overflow-visible"
+            style={{
+              // Material Design elevation dp4 для header (выше чем контейнеры)
+              boxShadow: '0 4px 8px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.08)'
+            }}
+          >
             <div className="container mx-auto px-4 py-3 relative">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -124,7 +147,7 @@ export function Header({
                   </h1>
                   {node.priority && (
                     <span className="flex-shrink-0 px-2 py-1 text-xs font-medium rounded border-2" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-                      Приоритет
+                      {t('node.priority')}
                     </span>
                   )}
                   {node.deadline && !node.completed && (
@@ -136,6 +159,24 @@ export function Header({
                 
                 {/* Кнопки действий - aligned right */}
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  {onMarkCompleted && node.id !== 'root-node' && (
+                    <Tooltip text={node.completed ? t('node.markIncomplete') : t('node.markCompleted')}>
+                      <button
+                        onClick={() => onMarkCompleted(node.id, !node.completed)}
+                        className={`p-2 rounded-lg transition-all border hover:brightness-150 ${
+                          node.completed
+                            ? 'border-transparent'
+                            : 'border-current hover:bg-accent/10'
+                        }`}
+                        style={{ 
+                          color: 'var(--accent)',
+                          backgroundColor: node.completed ? 'var(--accent)' : 'transparent'
+                        }}
+                      >
+                        <FiCheck size={18} style={{ color: node.completed ? 'white' : 'var(--accent)' }} />
+                      </button>
+                    </Tooltip>
+                  )}
                   {onEdit && (
                     <Tooltip text={t('general.edit')}>
                       <button
@@ -178,10 +219,11 @@ export function Header({
                   <Tooltip text={`${getProgressCounts(node).completed} / ${getProgressCounts(node).total}`}>
                     <div className="w-32 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden" style={{ padding: '2px' }}>
                       <div
-                        className="h-full transition-all duration-300"
+                        className={`h-full transition-all duration-300 ${isBlinking ? 'animate-pulse' : ''}`}
                         style={{
                           width: `${progress}%`,
                           backgroundColor: progress === 100 ? 'var(--accent)' : '#9ca3af',
+                          animation: isBlinking ? 'pulse 0.5s ease-in-out infinite' : undefined,
                         }}
                       />
                     </div>

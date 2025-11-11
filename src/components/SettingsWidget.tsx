@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../hooks/useTheme';
 import { useAccent } from '../hooks/useAccent';
+import { useEffects } from '../hooks/useEffects';
+import { useLanguage } from '../contexts/LanguageContext';
 import { FiSun, FiMoon } from 'react-icons/fi';
-import { setLanguage as setI18nLanguage, getLanguage as getI18nLanguage } from '../i18n';
+import { SparklesIcon } from './SparklesIcon';
 
 type Language = 'ru' | 'en';
 
@@ -13,14 +15,10 @@ interface SettingsWidgetProps {
 export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
   const { theme, setTheme } = useTheme();
   const { accent, setAccent, colors } = useAccent();
+  const { effectsEnabled, setEffectsEnabled } = useEffects();
+  const { language, setLanguage } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
-  const [language, setLanguageState] = useState<Language>(() => {
-    if (typeof window !== 'undefined') {
-      return getI18nLanguage();
-    }
-    return 'en';
-  });
   const containerRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<number | null>(null);
   const radius = 60; // Радиус спиннера в пикселях
@@ -90,13 +88,10 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
 
   const handleLanguageClick = () => {
     const newLang = language === 'ru' ? 'en' : 'ru';
-    setLanguageState(newLang);
-    setI18nLanguage(newLang);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('language', newLang);
-      window.location.reload();
-    }
+    setLanguage(newLang);
     onLanguageChange?.(newLang);
+    // Перезагружаем страницу для применения изменений
+    window.location.reload();
   };
 
   const ColorIcon = () => (
@@ -106,17 +101,34 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
     />
   );
 
+  const handleEffectsClick = () => {
+    setEffectsEnabled(!effectsEnabled);
+    // Перезагружаем страницу для применения изменений
+    window.location.reload();
+  };
+
   const LanguageIcon = () => (
     <span className="text-xs font-bold" style={{ color: 'var(--accent)' }}>
       {language.toUpperCase()}
     </span>
   );
 
-  // Углы для кнопок: тема сверху (270°), цвет слева снизу (150°), язык справа снизу (30°)
+  const EffectsIcon = () => (
+    <SparklesIcon 
+      size={18}
+      style={{ 
+        color: effectsEnabled ? 'white' : 'var(--accent)',
+        transition: 'all 0.5s ease',
+      }} 
+    />
+  );
+
+  // Углы для кнопок: тема сверху (270°), цвет слева снизу (150°), язык справа снизу (30°), эффекты слева сверху (210°)
   const buttonPositions = [
     { angle: 270, icon: theme === 'light' ? FiSun : FiMoon, action: handleThemeClick, label: language === 'en' ? 'Theme' : 'Тема' },
     { angle: 150, icon: ColorIcon, action: () => setShowPalette(!showPalette), label: language === 'en' ? 'Color' : 'Цвет' },
     { angle: 30, icon: LanguageIcon, action: handleLanguageClick, label: language === 'en' ? 'Language' : 'Язык' },
+    { angle: 210, icon: EffectsIcon, action: handleEffectsClick, label: language === 'en' ? 'Effects' : 'Эффекты' },
   ];
 
   return (
@@ -259,6 +271,8 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
           const rad = (pos.angle * Math.PI) / 180;
           const buttonRadius = radius - 20;
           const Icon = pos.icon;
+          const isEffectsButton = idx === 3; // Четвертая кнопка - эффекты
+          const isActive = isEffectsButton && effectsEnabled;
 
           return (
             <button
@@ -267,16 +281,21 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
                 e.stopPropagation();
                 pos.action();
               }}
-              className="absolute w-8 h-8 rounded-lg border-2 border-current hover:bg-accent/10 hover:brightness-150 transition-all duration-[333ms] flex items-center justify-center group z-10 bg-white dark:bg-gray-800 shadow-sm"
+              className={`absolute w-8 h-8 rounded-lg border-2 transition-all duration-[333ms] flex items-center justify-center group z-10 shadow-sm ${
+                isActive
+                  ? 'border-transparent bg-white dark:bg-gray-800'
+                  : 'border-current hover:bg-accent/10 hover:brightness-150 bg-white dark:bg-gray-800'
+              }`}
               style={{
                 left: '50%',
                 top: '50%',
                 color: 'var(--accent)',
+                backgroundColor: isActive ? 'var(--accent)' : 'transparent',
                 transform: isExpanded 
                   ? `translate(calc(-50% + ${buttonRadius * Math.cos(rad)}px), calc(-50% + ${buttonRadius * Math.sin(rad)}px)) scale(1)` 
                   : 'translate(-50%, -50%) scale(0)',
                 opacity: isExpanded ? 1 : 0,
-                transition: 'transform 333ms ease-in-out, opacity 333ms ease-in-out',
+                transition: 'transform 333ms ease-in-out, opacity 333ms ease-in-out, background-color 0.5s ease',
               }}
               title={pos.label}
             >

@@ -14,6 +14,15 @@ export function flattenLeaves(node: Node): Node[] {
   return node.children.flatMap(child => flattenLeaves(child));
 }
 
+// Подсчитать общее количество всех потомков узла (рекурсивно)
+export function getTotalChildCount(node: Node): number {
+  let count = 0;
+  for (const child of node.children) {
+    count += 1 + getTotalChildCount(child);
+  }
+  return count;
+}
+
 // Вычислить прогресс узла (доля выполненных листьев)
 // Важно: если узел помечен completed, все потомки считаются выполненными
 export function computeProgress(node: Node): number {

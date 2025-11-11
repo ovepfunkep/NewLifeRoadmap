@@ -85,7 +85,13 @@ export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
 
   if (deadlinesWithBreadcrumbs.length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+      <div 
+        className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 p-5"
+        style={{
+          // Material Design elevation dp2 для контейнера дедлайнов
+          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)'
+        }}
+      >
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
           {t('deadline.title')}
         </h2>
@@ -97,11 +103,17 @@ export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+    <div 
+      className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 p-5"
+      style={{
+        // Material Design elevation dp2 для контейнера дедлайнов
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)'
+      }}
+    >
       <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
         {t('deadline.title')}
       </h2>
-      <div className="space-y-2">
+      <div className="space-y-3">
         {deadlinesWithBreadcrumbs.map(({ node: dl, breadcrumbs }) => {
           const dateStr = dl.deadline ? new Date(dl.deadline).toLocaleDateString('ru-RU') : '';
           const deadlineColor = getDeadlineColor(dl);
@@ -110,7 +122,19 @@ export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
             <button
               key={dl.id}
               onClick={() => onNavigate(dl.id)}
-              className="w-full text-left p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:shadow-sm transition-colors"
+              className="w-full text-left p-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 transition-all"
+              style={{
+                // Material Design elevation dp0 для элементов списка дедлайнов
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+              }}
+              onMouseEnter={(e) => {
+                // Увеличиваем elevation при hover
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)';
+              }}
+              onMouseLeave={(e) => {
+                // Возвращаем обычный elevation
+                e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+              }}
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex-1 min-w-0 flex items-center gap-2">
