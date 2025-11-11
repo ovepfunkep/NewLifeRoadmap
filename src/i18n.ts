@@ -88,6 +88,7 @@ export const i18n: Record<Language, Record<string, any>> = {
       syncInProgress: 'Updating cloud data...',
       doNotClose: 'Do not close the page',
       syncingCloud: 'Updating cloud data...',
+      syncChecking: 'Checking data synchronization...',
     },
     sync: {
       signIn: 'Sign in with Google',
@@ -195,6 +196,7 @@ export const i18n: Record<Language, Record<string, any>> = {
       syncInProgress: 'Обновление данных в облаке...',
       doNotClose: 'Не закрывайте страницу',
       syncingCloud: 'Обновляем данные в облаке...',
+      syncChecking: 'Проверка синхронизации данных...',
     },
     sync: {
       signIn: 'Войти через Google',

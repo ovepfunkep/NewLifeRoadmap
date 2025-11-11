@@ -33,15 +33,15 @@ interface ToastItemProps {
 function ToastItem({ toast, onRemove }: ToastItemProps) {
   const [progress, setProgress] = useState(100);
   const hasUndo = !!toast.undo;
-  const duration = hasUndo ? 5000 : 3000;
+  const duration = 2500; // 2.5 секунды для всех тостов
   const isPersistent = toast.persistent === true;
   const showIcon = toast.isLoading !== undefined || toast.isSuccess !== undefined;
   const showProgressBar = !isPersistent && !toast.isLoading; // Показываем прогресс для всех не persistent тостов
 
   useEffect(() => {
-    // Если тост успешно завершен, показываем его 1 секунду и закрываем
+    // Если тост успешно завершен, показываем его 2.5 секунды и закрываем
     if (toast.isSuccess && !toast.isLoading) {
-      const successDuration = 1000; // 1 секунда
+      const successDuration = 2500; // 2.5 секунды
       const startTime = Date.now();
       const interval = setInterval(() => {
         const elapsed = Date.now() - startTime;

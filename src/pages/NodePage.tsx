@@ -12,7 +12,6 @@ import { DeadlineList } from '../components/DeadlineList';
 import { EditorModal } from '../components/EditorModal';
 import { ImportExportModal } from '../components/ImportExportModal';
 import { MoveModal } from '../components/MoveModal';
-import { ToastList } from '../components/ToastList';
 import { SettingsWidget } from '../components/SettingsWidget';
 import { Footer } from '../components/Footer';
 import { ConfettiEffect } from '../components/ConfettiEffect';
@@ -793,7 +792,31 @@ export function NodePage() {
         setCurrentNode(reloaded);
       }
     }
-    showToast(t('toast.importSuccess'));
+    
+    // Показываем тост с индикатором загрузки для синхронизации
+    const syncToastId = showToast(t('toast.importSuccess'), undefined, {
+      isLoading: true,
+      persistent: true,
+      subtitle: t('toast.syncingCloud')
+    });
+    
+    // Синхронизируем все узлы с облаком асинхронно
+    (async () => {
+      try {
+        const { getAllNodes } = await import('../db');
+        const { syncAllNodesToFirestore } = await import('../firebase/sync');
+        const allNodes = await getAllNodes();
+        await syncAllNodesToFirestore(allNodes);
+        
+        // Обновляем тост: заменяем иконку загрузки на галочку
+        updateToast(syncToastId, { isLoading: false, isSuccess: true, persistent: false });
+      } catch (error) {
+        console.error('[NodePage] Error syncing after import:', error);
+        // При ошибке просто закрываем тост
+        removeToast(syncToastId);
+        showToast(t('toast.syncError'));
+      }
+    })();
   };
 
   if (loading) {
@@ -891,9 +914,6 @@ export function NodePage() {
           onClose={() => setShowMoveModal(false)}
         />
       )}
-      
-      {/* Тосты */}
-      <ToastList toasts={toasts} onRemove={removeToast} />
       
       {/* Виджет настроек - закреплен снизу справа */}
       <SettingsWidget />

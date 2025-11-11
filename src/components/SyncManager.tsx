@@ -5,6 +5,7 @@ import { getAllNodes, clearAllNodes } from '../db';
 import { SyncConflictDialog } from './SyncConflictDialog';
 import { hasDifferences } from '../utils/syncCompare';
 import { useToast } from '../hooks/useToast';
+import { t } from '../i18n';
 import { openDB } from 'idb';
 
 const isDev = import.meta.env.DEV;
@@ -19,12 +20,20 @@ export function SyncManager() {
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [localNodes, setLocalNodes] = useState<any[]>([]);
   const [cloudNodes, setCloudNodes] = useState<any[]>([]);
-  const { showToast } = useToast();
+  const { showToast, removeToast } = useToast();
   const isInitialLoadRef = useRef<boolean>(true); // Флаг первой загрузки
+  const checkToastIdRef = useRef<string | null>(null); // Ref для ID тоста проверки
 
   const handleFirstSync = useCallback(async () => {
     try {
       log('Starting first sync check');
+      
+      // Показываем тост о проверке синхронизации
+      const checkToastId = showToast(t('toast.syncChecking'), undefined, {
+        isLoading: true,
+        persistent: true
+      });
+      checkToastIdRef.current = checkToastId;
       
       // Делаем снимок локальных данных СРАЗУ, до любых изменений
       const localSnapshot = await getAllNodes();
@@ -55,8 +64,18 @@ export function SyncManager() {
                 setLocalNodes(currentLocal);
                 setCloudNodes(currentCloud);
                 setShowConflictDialog(true);
+                // Закрываем тост проверки при показе диалога конфликта
+                if (checkToastIdRef.current) {
+                  removeToast(checkToastIdRef.current);
+                  checkToastIdRef.current = null;
+                }
               } else {
                 log('Differences resolved during delay, no conflict');
+                // Закрываем тост проверки, если конфликтов нет
+                if (checkToastIdRef.current) {
+                  removeToast(checkToastIdRef.current);
+                  checkToastIdRef.current = null;
+                }
               }
               isInitialLoadRef.current = false;
             }, 3000);
@@ -65,21 +84,41 @@ export function SyncManager() {
             setLocalNodes(localSnapshot);
             setCloudNodes(cloud);
             setShowConflictDialog(true);
+            // Закрываем тост проверки при показе диалога конфликта
+            if (checkToastIdRef.current) {
+              removeToast(checkToastIdRef.current);
+              checkToastIdRef.current = null;
+            }
           }
         } else {
           log('No differences, data is in sync');
+          // Закрываем тост проверки, если конфликтов нет
+          if (checkToastIdRef.current) {
+            removeToast(checkToastIdRef.current);
+            checkToastIdRef.current = null;
+          }
           isInitialLoadRef.current = false;
         }
       } else {
         log('No cloud data, skipping conflict check');
+        // Закрываем тост проверки, если данных в облаке нет
+        if (checkToastIdRef.current) {
+          removeToast(checkToastIdRef.current);
+          checkToastIdRef.current = null;
+        }
         isInitialLoadRef.current = false;
       }
     } catch (error) {
       log('Error in first sync:', error);
       console.error('Sync error:', error);
+      // Закрываем тост проверки при ошибке
+      if (checkToastIdRef.current) {
+        removeToast(checkToastIdRef.current);
+        checkToastIdRef.current = null;
+      }
       isInitialLoadRef.current = false;
     }
-  }, []);
+  }, [showToast, removeToast]);
 
   useEffect(() => {
     log('Initializing sync manager');

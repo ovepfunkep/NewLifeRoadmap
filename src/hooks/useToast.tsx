@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, createContext, useContext } from 'react';
 
 export interface Toast {
   id: string;
@@ -15,9 +15,37 @@ let toastIdCounter = 0;
 // Глобальный счетчик активных синхронизаций для предупреждения при перезагрузке
 let activeSyncCount = 0;
 
-export function useToast() {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+// Глобальное состояние тостов
+let globalToasts: Toast[] = [];
+let globalListeners: Set<() => void> = new Set();
+
+function notifyListeners() {
+  globalListeners.forEach(listener => listener());
+}
+
+interface ToastContextType {
+  toasts: Toast[];
+  showToast: (message: string, undo?: () => void, options?: { subtitle?: string; persistent?: boolean; isLoading?: boolean }) => string;
+  updateToast: (id: string, updates: Partial<Toast>) => void;
+  removeToast: (id: string) => void;
+}
+
+const ToastContext = createContext<ToastContextType | null>(null);
+
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const [toasts, setToasts] = useState<Toast[]>(globalToasts);
   const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // Синхронизируем локальное состояние с глобальным
+  useEffect(() => {
+    const listener = () => {
+      setToasts([...globalToasts]);
+    };
+    globalListeners.add(listener);
+    return () => {
+      globalListeners.delete(listener);
+    };
+  }, []);
 
   // Обработчик предупреждения при перезагрузке страницы во время синхронизации
   useEffect(() => {
@@ -55,7 +83,8 @@ export function useToast() {
       createdAt: Date.now() 
     };
     
-    setToasts(prev => [...prev, toast]);
+    globalToasts = [...globalToasts, toast];
+    notifyListeners();
     
     // Увеличиваем счетчик активных синхронизаций
     if (options?.isLoading) {
@@ -64,11 +93,12 @@ export function useToast() {
     
     // Автоудаление только для не persistent тостов
     if (!options?.persistent) {
-      // Автоудаление через 5 секунд для toast с undo, 3 секунды для обычных
+      // Автоудаление через 2.5 секунды для всех тостов
       const timeout = setTimeout(() => {
-        setToasts(prev => prev.filter(t => t.id !== id));
+        globalToasts = globalToasts.filter(t => t.id !== id);
+        notifyListeners();
         timeoutsRef.current.delete(id);
-      }, undo ? 5000 : 3000);
+      }, 2500);
       
       timeoutsRef.current.set(id, timeout);
     }
@@ -76,7 +106,7 @@ export function useToast() {
   }, []);
 
   const updateToast = useCallback((id: string, updates: Partial<Toast>) => {
-    setToasts(prev => prev.map(toast => {
+    globalToasts = globalToasts.map(toast => {
       if (toast.id === id) {
         // Уменьшаем счетчик если синхронизация завершена
         if (toast.isLoading && updates.isLoading === false) {
@@ -85,18 +115,19 @@ export function useToast() {
         return { ...toast, ...updates };
       }
       return toast;
-    }));
+    });
+    notifyListeners();
   }, []);
 
   const removeToast = useCallback((id: string) => {
     // Уменьшаем счетчик если удаляем тост с активной синхронизацией
-    setToasts(prev => {
-      const toast = prev.find(t => t.id === id);
-      if (toast?.isLoading) {
-        activeSyncCount = Math.max(0, activeSyncCount - 1);
-      }
-      return prev.filter(t => t.id !== id);
-    });
+    const toast = globalToasts.find(t => t.id === id);
+    if (toast?.isLoading) {
+      activeSyncCount = Math.max(0, activeSyncCount - 1);
+    }
+    
+    globalToasts = globalToasts.filter(t => t.id !== id);
+    notifyListeners();
     
     // Очищаем таймер если он существует
     const timeout = timeoutsRef.current.get(id);
@@ -106,6 +137,17 @@ export function useToast() {
     }
   }, []);
 
-  return { toasts, showToast, updateToast, removeToast };
+  return (
+    <ToastContext.Provider value={{ toasts, showToast, updateToast, removeToast }}>
+      {children}
+    </ToastContext.Provider>
+  );
 }
 
+export function useToast() {
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error('useToast must be used within ToastProvider');
+  }
+  return context;
+}

@@ -61,20 +61,77 @@ export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
 
   try {
     log(`Starting bulk sync: ${allNodes.length} nodes`);
-    const batch = writeBatch(db);
+    
+    // Создаем Set из ID локальных узлов для быстрого поиска
+    const localNodeIds = new Set(allNodes.map(node => node.id));
+    
+    // Загружаем все существующие узлы из Firestore
     const nodesRef = collection(db, getUserNodesPath(user.uid));
-
-    for (const node of allNodes) {
-      const { children, ...nodeData } = node;
-      const nodeRef = doc(nodesRef, node.id);
-      batch.set(nodeRef, {
-        ...nodeData,
-        syncedAt: new Date().toISOString(),
-      });
+    const querySnapshot = await getDocs(query(nodesRef));
+    
+    // Определяем узлы, которые нужно удалить (есть в облаке, но нет в локальных)
+    const nodesToDelete: string[] = [];
+    const cloudNodeIds = new Set<string>();
+    querySnapshot.forEach((docSnap) => {
+      cloudNodeIds.add(docSnap.id);
+      if (!localNodeIds.has(docSnap.id)) {
+        nodesToDelete.push(docSnap.id);
+        log(`Node to delete: ${docSnap.id} (exists in cloud but not in local)`);
+      }
+    });
+    
+    log(`Cloud nodes: ${cloudNodeIds.size}, Local nodes: ${localNodeIds.size}`);
+    log(`Found ${nodesToDelete.length} nodes to delete, ${allNodes.length} nodes to sync`);
+    
+    // Проверяем, есть ли локальные узлы, которых нет в облаке
+    const nodesToAdd: string[] = [];
+    allNodes.forEach(node => {
+      if (!cloudNodeIds.has(node.id)) {
+        nodesToAdd.push(node.id);
+      }
+    });
+    log(`Found ${nodesToAdd.length} nodes to add (exist in local but not in cloud)`);
+    
+    // Firestore batch ограничен 500 операциями
+    const BATCH_LIMIT = 500;
+    
+    // СНАЧАЛА удаляем все старые узлы батчами
+    if (nodesToDelete.length > 0) {
+      for (let i = 0; i < nodesToDelete.length; i += BATCH_LIMIT) {
+        const batch = writeBatch(db);
+        const batchToDelete = nodesToDelete.slice(i, i + BATCH_LIMIT);
+        
+        for (const nodeId of batchToDelete) {
+          const nodeRef = doc(nodesRef, nodeId);
+          batch.delete(nodeRef);
+        }
+        
+        await batch.commit();
+        log(`Delete batch ${Math.floor(i / BATCH_LIMIT) + 1} completed: ${batchToDelete.length} nodes deleted`);
+      }
     }
-
-    await batch.commit();
-    log(`Bulk sync completed: ${allNodes.length} nodes synced`);
+    
+    // ЗАТЕМ сохраняем все новые узлы батчами
+    if (allNodes.length > 0) {
+      for (let i = 0; i < allNodes.length; i += BATCH_LIMIT) {
+        const batch = writeBatch(db);
+        const batchToSave = allNodes.slice(i, i + BATCH_LIMIT);
+        
+        for (const node of batchToSave) {
+          const { children, ...nodeData } = node;
+          const nodeRef = doc(nodesRef, node.id);
+          batch.set(nodeRef, {
+            ...nodeData,
+            syncedAt: new Date().toISOString(),
+          });
+        }
+        
+        await batch.commit();
+        log(`Save batch ${Math.floor(i / BATCH_LIMIT) + 1} completed: ${batchToSave.length} nodes saved`);
+      }
+    }
+    
+    log(`Bulk sync completed: ${nodesToDelete.length} nodes deleted, ${allNodes.length} nodes synced`);
   } catch (error) {
     log(`Error in bulk sync:`, error);
     console.error('Error syncing all nodes to Firestore:', error);
