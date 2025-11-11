@@ -31,7 +31,7 @@ export function NodePage() {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [draggedNode, setDraggedNode] = useState<Node | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
-  const { toasts, showToast, updateToast, removeToast } = useToast();
+  const { showToast, updateToast, removeToast } = useToast();
   const { effectsEnabled } = useEffects();
   const [confettiTrigger, setConfettiTrigger] = useState(0); // Изменено на number для поддержки нескольких запусков
   const [confettiChildCount, setConfettiChildCount] = useState(0);
