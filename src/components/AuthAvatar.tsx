@@ -81,8 +81,8 @@ export function AuthAvatar() {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <Tooltip text={user.email}>
-          <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-gray-300 dark:border-gray-600 cursor-pointer transition-all hover:border-accent">
+        <Tooltip text={user.email} position="right">
+          <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-gray-300 dark:border-gray-600 cursor-pointer transition-all hover:border-accent">
             {user.photoURL ? (
               <img
                 src={user.photoURL}
@@ -98,17 +98,19 @@ export function AuthAvatar() {
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gray-200 dark:bg-gray-700">
-                <FiUser className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                <FiUser className="w-6 h-6 text-gray-600 dark:text-gray-400" />
               </div>
             )}
             {isHovered && (
-              <button
-                onClick={handleSignOut}
-                className="absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity"
-                title={t('tooltip.signOut')}
-              >
-                <FiLogOut className="w-5 h-5 text-white" />
-              </button>
+              <Tooltip text={t('tooltip.signOut')}>
+                <button
+                  onClick={handleSignOut}
+                  className="absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity z-10"
+                  style={{ transform: 'translateY(-10px)' }}
+                >
+                  <FiLogOut className="w-3 h-3 text-white" />
+                </button>
+              </Tooltip>
             )}
           </div>
         </Tooltip>
@@ -117,13 +119,13 @@ export function AuthAvatar() {
   }
 
   return (
-    <Tooltip text={t('tooltip.signIn')}>
+    <Tooltip text={t('tooltip.signIn')} position="right">
       <button
         onClick={handleSignIn}
-        className="w-10 h-10 rounded-full flex items-center justify-center border-2 border-gray-300 dark:border-gray-600 hover:border-accent transition-all bg-gray-100 dark:bg-gray-800"
+        className="w-12 h-12 rounded-full flex items-center justify-center border-2 border-gray-300 dark:border-gray-600 hover:border-accent transition-all bg-gray-100 dark:bg-gray-800"
         style={{ color: 'var(--accent)' }}
       >
-        <FiUser className="w-5 h-5" />
+        <FiUser className="w-6 h-6" />
       </button>
     </Tooltip>
   );

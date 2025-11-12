@@ -326,7 +326,6 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
                 opacity: isExpanded ? 1 : 0,
                 transition: 'transform 333ms ease-in-out, opacity 333ms ease-in-out, background-color 0.5s ease',
               }}
-              title={pos.label}
             >
               <Icon size={18} />
               {/* Tooltip */}
