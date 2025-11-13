@@ -19,6 +19,22 @@ function getUserNodesPath(userId: string): string {
 }
 
 /**
+ * Очистить объект от undefined значений для Firestore
+ * Firestore не принимает undefined, заменяем на null или удаляем
+ */
+function cleanForFirestore<T extends Record<string, any>>(obj: T): T {
+  const cleaned: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) {
+      // Пропускаем undefined поля - Firestore их не поддерживает
+      continue;
+    }
+    cleaned[key] = value;
+  }
+  return cleaned as T;
+}
+
+/**
  * Сохранить узел в Firestore
  */
 export async function syncNodeToFirestore(node: Node): Promise<void> {
@@ -35,10 +51,12 @@ export async function syncNodeToFirestore(node: Node): Promise<void> {
     const nodeRef = doc(db, getUserNodesPath(user.uid), node.id);
     // Сохраняем узел без детей (дети хранятся отдельно)
     const { children, ...nodeData } = node;
-    await setDoc(nodeRef, {
+    // Очищаем от undefined значений перед сохранением
+    const cleanedData = cleanForFirestore({
       ...nodeData,
       syncedAt: new Date().toISOString(),
     });
+    await setDoc(nodeRef, cleanedData);
     log(`Node synced successfully: ${node.id}`);
   } catch (error) {
     log(`Error syncing node ${node.id}:`, error);
@@ -120,10 +138,12 @@ export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
         for (const node of batchToSave) {
           const { children, ...nodeData } = node;
           const nodeRef = doc(nodesRef, node.id);
-          batch.set(nodeRef, {
+          // Очищаем от undefined значений перед сохранением
+          const cleanedData = cleanForFirestore({
             ...nodeData,
             syncedAt: new Date().toISOString(),
           });
+          batch.set(nodeRef, cleanedData);
         }
         
         await batch.commit();
