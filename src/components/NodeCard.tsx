@@ -123,15 +123,22 @@ export function NodeCard({
 
   // Обработчики для drag over - по аналогии с крошками
   const handleMouseEnter = () => {
-    console.log('[NodeCard] handleMouseEnter', { nodeId: node.id, draggedNodeId: draggedNode?.id, currentNodeId });
+    console.log('[NodeCard] handleMouseEnter', { 
+      nodeId: node.id, 
+      draggedNodeId: draggedNode?.id, 
+      currentNodeId,
+      hasDraggedNode: !!draggedNode
+    });
     // Запрещаем перетаскивание в текущий узел
     if (currentNodeId && node.id === currentNodeId) {
-      console.log('[NodeCard] Cannot drag to current node');
+      console.log('[NodeCard] Blocked: cannot drag to current node');
       return;
     }
     if (draggedNode && draggedNode.id !== node.id) {
       console.log('[NodeCard] Calling onDragOver', node.id);
       onDragOver?.(node.id);
+    } else {
+      console.log('[NodeCard] No drag over: no draggedNode or same node');
     }
   };
 
@@ -142,9 +149,7 @@ export function NodeCard({
   };
 
   const handleCardMouseUp = () => {
-    console.log('[NodeCard] handleCardMouseUp', { nodeId: node.id, draggedNodeId: draggedNode?.id });
     if (draggedNode && draggedNode.id !== node.id) {
-      console.log('[NodeCard] Calling onDragEnd');
       // Сбрасываем justDragged сразу после завершения перетаскивания
       setJustDragged(false);
       // Небольшая задержка перед вызовом onDragEnd, чтобы избежать конфликта с onClick
@@ -158,9 +163,13 @@ export function NodeCard({
   };
 
   const handleCardTouchEnd = () => {
-    console.log('[NodeCard] handleCardTouchEnd', { nodeId: node.id, draggedNodeId: draggedNode?.id });
+    console.log('[NodeCard] handleCardTouchEnd', { 
+      nodeId: node.id, 
+      draggedNodeId: draggedNode?.id,
+      isDifferent: draggedNode && draggedNode.id !== node.id
+    });
     if (draggedNode && draggedNode.id !== node.id) {
-      console.log('[NodeCard] Calling onDragEnd (touch)');
+      console.log('[NodeCard] Calling onDragEnd from touch end');
       onDragEnd?.();
     }
   };
@@ -179,7 +188,7 @@ export function NodeCard({
       const deltaY = Math.abs(moveEvent.clientY - startY);
       if (!hasStartedDrag && (deltaX > 3 || deltaY > 3)) {
         hasStartedDrag = true;
-        console.log('[NodeCard] Drag started', { nodeId: node.id });
+        console.log('[NodeCard] Drag started (mouse)', { nodeId: node.id, deltaX, deltaY });
         setIsDragging(true);
         setDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
         onDragStart?.(node);
@@ -192,7 +201,6 @@ export function NodeCard({
     };
     
     const handleMouseUp = () => {
-      console.log('[NodeCard] handleMouseUp (in handleMouseDown)', { nodeId: node.id, hasStartedDrag });
       document.body.style.userSelect = ''; // Восстанавливаем выделение текста
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
@@ -213,6 +221,7 @@ export function NodeCard({
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length !== 1) return;
+    console.log('[NodeCard] handleTouchStart', { nodeId: node.id });
     const touch = e.touches[0];
     const startX = touch.clientX;
     const startY = touch.clientY;
@@ -225,6 +234,7 @@ export function NodeCard({
       const deltaY = Math.abs(touch.clientY - startY);
       if (!hasStartedDrag && (deltaX > 5 || deltaY > 5)) {
         hasStartedDrag = true;
+        console.log('[NodeCard] Drag started (touch)', { nodeId: node.id, deltaX, deltaY });
         setIsDragging(true);
         setDragPosition({ x: touch.clientX, y: touch.clientY });
         onDragStart?.(node);
@@ -253,6 +263,7 @@ export function NodeCard({
     window.addEventListener('touchmove', handleTouchMove, { passive: false });
     window.addEventListener('touchend', handleTouchEnd);
   };
+
 
   return (
     <>

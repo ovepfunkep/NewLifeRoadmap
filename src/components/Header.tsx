@@ -101,8 +101,7 @@ export function Header({
               {breadcrumbs.map((crumb, idx) => {
                 // Запрещаем перетаскивание в текущий узел
                 const isCurrentNode = currentNodeId && crumb.id === currentNodeId;
-                const isDragOver = !isCurrentNode && dragOverNodeId === crumb.id;
-                const isDraggedOver = !isCurrentNode && draggedNode && draggedNode.id !== crumb.id;
+                const isDragOver = !isCurrentNode && draggedNode && dragOverNodeId === crumb.id;
                 return (
                   <React.Fragment key={crumb.id}>
                     <button
@@ -111,9 +110,10 @@ export function Header({
                       onMouseLeave={handleBreadcrumbMouseLeave}
                       onMouseUp={() => handleBreadcrumbMouseUp(crumb.id)}
                       onTouchEnd={() => handleBreadcrumbTouchEnd(crumb.id)}
+                      data-node-id={crumb.id}
                       className="hover:text-gray-900 dark:hover:text-gray-100 truncate max-w-[200px] px-2 py-1 rounded transition-all"
                       style={{
-                        ...((isDragOver || isDraggedOver) ? {
+                        ...(isDragOver ? {
                           borderColor: 'var(--accent)',
                           borderWidth: '1px',
                           borderStyle: 'solid',

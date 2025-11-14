@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { initDB, getNode, getRoot, saveNode, deleteNode } from '../db';
@@ -33,6 +33,102 @@ export function NodePage() {
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
   const { showToast, updateToast, removeToast } = useToast();
   const { effectsEnabled } = useEffects();
+
+  // Сохраняем последнюю позицию touch для проверки в handleDragEnd
+  const lastTouchPositionRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Глобальный обработчик touchmove для определения карточки под пальцем при перетаскивании
+  useEffect(() => {
+    if (!draggedNode) {
+      lastTouchPositionRef.current = null;
+      return;
+    }
+
+    let lastHoveredNodeId: string | null = null;
+
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      const x = touch.clientX;
+      const y = touch.clientY;
+      
+      // Сохраняем позицию для проверки в handleDragEnd
+      lastTouchPositionRef.current = { x, y };
+      
+      // Находим все карточки и крошки
+      const allCards = document.querySelectorAll('[data-node-id]');
+      let foundCard: HTMLElement | null = null;
+      
+      // Проверяем каждую карточку, находится ли палец внутри её границ
+      for (const card of allCards) {
+        const htmlCard = card as HTMLElement;
+        const nodeId = htmlCard.getAttribute('data-node-id');
+        
+        // Пропускаем перетаскиваемую карточку
+        if (!nodeId || nodeId === draggedNode.id) continue;
+        
+        const rect = htmlCard.getBoundingClientRect();
+        const isInside = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+        
+        if (isInside) {
+          foundCard = htmlCard;
+          break;
+        }
+      }
+      
+      // Если нашли карточку или крошку
+      if (foundCard) {
+        const hoveredNodeId = foundCard.getAttribute('data-node-id');
+        
+        if (!hoveredNodeId) {
+          if (lastHoveredNodeId) {
+            console.log('[NodePage] Global touchmove: leaving card', lastHoveredNodeId);
+            setDragOverNodeId(null);
+            lastHoveredNodeId = null;
+          }
+          return;
+        }
+        
+        // Запрещаем перетаскивание в текущий узел
+        if (nodeId && hoveredNodeId === nodeId) {
+          if (lastHoveredNodeId) {
+            console.log('[NodePage] Global touchmove: blocked - current node');
+            setDragOverNodeId(null);
+            lastHoveredNodeId = null;
+          }
+          return;
+        }
+        
+        // Если это новая карточка или крошка, обновляем состояние
+        if (hoveredNodeId !== lastHoveredNodeId) {
+          const rect = foundCard.getBoundingClientRect();
+          const isBreadcrumb = foundCard.tagName === 'BUTTON' && foundCard.closest('nav');
+          console.log('[NodePage] Global touchmove: entering', isBreadcrumb ? 'breadcrumb' : 'card', hoveredNodeId, {
+            touch: { x, y },
+            rect: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom },
+            isInside: x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+          });
+          lastHoveredNodeId = hoveredNodeId;
+          setDragOverNodeId(hoveredNodeId);
+        }
+      } else {
+        // Палец не над карточкой - сбрасываем состояние
+        if (lastHoveredNodeId) {
+          console.log('[NodePage] Global touchmove: leaving card', lastHoveredNodeId);
+          setDragOverNodeId(null);
+          lastHoveredNodeId = null;
+        }
+      }
+    };
+
+    window.addEventListener('touchmove', handleGlobalTouchMove, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchmove', handleGlobalTouchMove);
+      lastTouchPositionRef.current = null;
+    };
+  }, [draggedNode, nodeId]);
+
   const [confettiTrigger, setConfettiTrigger] = useState(0); // Изменено на number для поддержки нескольких запусков
   const [confettiChildCount, setConfettiChildCount] = useState(0);
 
@@ -648,9 +744,7 @@ export function NodePage() {
           if (finalSource) syncPromises.push(syncNodeNow(finalSource));
           if (finalOldParent) syncPromises.push(syncNodeNow(finalOldParent));
           
-          Promise.all(syncPromises).then(() => {
-            console.log('[NodePage] Nodes synced after undo');
-          }).catch(error => {
+          Promise.all(syncPromises).catch(error => {
             console.error('[NodePage] Error syncing nodes after undo:', error);
           });
           
@@ -749,29 +843,86 @@ export function NodePage() {
     console.log('[NodePage] handleDragStart', { nodeId: node.id });
     // Предотвращаем перетаскивание корневого узла
     if (node.id === 'root-node') {
-      console.log('[NodePage] Root node cannot be dragged');
+      console.log('[NodePage] Blocked: root node cannot be dragged');
       return;
     }
     console.log('[NodePage] Setting draggedNode', node.id);
     setDraggedNode(node);
   };
 
-  const handleDragEnd = () => {
-    console.log('[NodePage] handleDragEnd', { draggedNodeId: draggedNode?.id, dragOverNodeId });
-    if (draggedNode && dragOverNodeId) {
-      console.log('[NodePage] Moving node', draggedNode.id, 'to', dragOverNodeId);
-      handleMoveNode(draggedNode.id, dragOverNodeId);
-    }
-    // Сбрасываем состояние перетаскивания
-    setDraggedNode(null);
-    setDragOverNodeId(null);
-  };
+  const handleDragEnd = useCallback(() => {
+    // Используем функциональное обновление состояния для получения актуальных значений
+    setDragOverNodeId((currentDragOverNodeId) => {
+      setDraggedNode((currentDraggedNode) => {
+        // Проверяем позицию в момент touchend, если есть сохраненная позиция
+        let finalDragOverNodeId = currentDragOverNodeId;
+        
+        if (lastTouchPositionRef.current && currentDraggedNode) {
+          const { x, y } = lastTouchPositionRef.current;
+          const allCards = document.querySelectorAll('[data-node-id]');
+          
+          // Проверяем, над какой карточкой или крошкой палец в момент touchend
+          for (const card of allCards) {
+            const htmlCard = card as HTMLElement;
+            const cardNodeId = htmlCard.getAttribute('data-node-id');
+            
+            if (!cardNodeId || cardNodeId === currentDraggedNode.id) continue;
+            // Запрещаем перетаскивание в текущий узел
+            if (cardNodeId === nodeId) continue;
+            
+            const rect = htmlCard.getBoundingClientRect();
+            const isInside = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+            
+            if (isInside) {
+              finalDragOverNodeId = cardNodeId;
+              break;
+            }
+          }
+        }
+        
+        console.log('[NodePage] handleDragEnd', { 
+          draggedNodeId: currentDraggedNode?.id, 
+          dragOverNodeId: currentDragOverNodeId,
+          finalDragOverNodeId,
+          lastTouchPosition: lastTouchPositionRef.current
+        });
+        
+        if (currentDraggedNode && finalDragOverNodeId) {
+          console.log('[NodePage] Moving node', currentDraggedNode.id, 'to', finalDragOverNodeId);
+          const nodeIdToMove = currentDraggedNode.id;
+          const targetId = finalDragOverNodeId;
+          setTimeout(() => {
+            handleMoveNode(nodeIdToMove, targetId);
+          }, 0);
+        } else {
+          console.log('[NodePage] No move: missing draggedNode or dragOverNodeId', {
+            hasDraggedNode: !!currentDraggedNode,
+            hasDragOverNodeId: !!finalDragOverNodeId,
+            draggedNodeId: currentDraggedNode?.id,
+            dragOverNodeId: finalDragOverNodeId
+          });
+        }
+        
+        // Сбрасываем сохраненную позицию
+        lastTouchPositionRef.current = null;
+        
+        return null; // Сбрасываем draggedNode
+      });
+      return null; // Сбрасываем dragOverNodeId
+    });
+  }, [handleMoveNode, nodeId]);
 
   const handleDragOver = (nodeId: string) => {
-    console.log('[NodePage] handleDragOver', { nodeId, draggedNodeId: draggedNode?.id });
+    console.log('[NodePage] handleDragOver', { 
+      nodeId, 
+      draggedNodeId: draggedNode?.id,
+      currentNodeId: nodeId 
+    });
     if (draggedNode && draggedNode.id !== nodeId) {
       console.log('[NodePage] Setting dragOverNodeId', nodeId);
       setDragOverNodeId(nodeId);
+    } else {
+      console.log('[NodePage] No drag over: no draggedNode or same node');
     }
   };
 
