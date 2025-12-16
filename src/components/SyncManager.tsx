@@ -3,7 +3,7 @@ import { onAuthChange } from '../firebase/auth';
 import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore } from '../firebase/sync';
 import { getAllNodes, clearAllNodes } from '../db';
 import { SyncConflictDialog } from './SyncConflictDialog';
-import { hasDifferences } from '../utils/syncCompare';
+import { hasDifferences, compareNodes } from '../utils/syncCompare';
 import { useToast } from '../hooks/useToast';
 import { t } from '../i18n';
 import { openDB } from 'idb';
@@ -48,6 +48,49 @@ export function SyncManager() {
         log(`Loaded ${cloud.length} cloud nodes`);
         
         // Сравниваем снимок локальных данных с облачными данными
+        const diff = compareNodes(localSnapshot, cloud);
+        
+        // Если в облаке данных больше и локальных изменений нет, тихо загружаем облачные данные
+        if (diff.cloudOnly.length > 0 && diff.localOnly.length === 0 && diff.different.length === 0) {
+          log('Cloud has more data and no local changes, silently loading cloud data');
+          // Закрываем тост проверки
+          if (checkToastIdRef.current) {
+            removeToast(checkToastIdRef.current);
+            checkToastIdRef.current = null;
+          }
+          
+          // Тихо загружаем облачные данные
+          let db: Awaited<ReturnType<typeof openDB>> | null = null;
+          try {
+            await clearAllNodes();
+            db = await openDB('LifeRoadmapDB', 2);
+            const tx = db.transaction('nodes', 'readwrite');
+            
+            for (const node of cloud) {
+              await tx.store.put(node);
+            }
+            
+            await tx.done;
+            log(`Silently loaded ${cloud.length} nodes from cloud to local DB`);
+            // Перезагружаем страницу для применения изменений
+            (window as any).__isProgrammaticReload = true;
+            window.location.reload();
+          } catch (error) {
+            log('Error silently loading cloud data:', error);
+            console.error('Error silently loading cloud data:', error);
+          } finally {
+            if (db) {
+              try {
+                await db.close();
+              } catch (closeError) {
+                console.error('Error closing DB:', closeError);
+              }
+            }
+          }
+          isInitialLoadRef.current = false;
+          return;
+        }
+        
         if (hasDifferences(localSnapshot, cloud)) {
           // Если это первая загрузка, даем время на синхронизацию локальных изменений
           // Не показываем конфликт сразу после загрузки страницы
@@ -58,8 +101,43 @@ export function SyncManager() {
               // Повторно проверяем локальные данные после задержки
               const currentLocal = await getAllNodes();
               const currentCloud = await loadAllNodesFromFirestore();
+              const currentDiff = compareNodes(currentLocal, currentCloud);
               
-              if (hasDifferences(currentLocal, currentCloud)) {
+              // Проверяем, можно ли тихо загрузить облачные данные
+              if (currentDiff.cloudOnly.length > 0 && currentDiff.localOnly.length === 0 && currentDiff.different.length === 0) {
+                log('After delay: cloud has more data and no local changes, silently loading');
+                // Тихо загружаем облачные данные
+                let db: Awaited<ReturnType<typeof openDB>> | null = null;
+                try {
+                  await clearAllNodes();
+                  db = await openDB('LifeRoadmapDB', 2);
+                  const tx = db.transaction('nodes', 'readwrite');
+                  
+                  for (const node of currentCloud) {
+                    await tx.store.put(node);
+                  }
+                  
+                  await tx.done;
+                  log(`Silently loaded ${currentCloud.length} nodes from cloud to local DB`);
+                  (window as any).__isProgrammaticReload = true;
+                  window.location.reload();
+                } catch (error) {
+                  log('Error silently loading cloud data:', error);
+                  console.error('Error silently loading cloud data:', error);
+                } finally {
+                  if (db) {
+                    try {
+                      await db.close();
+                    } catch (closeError) {
+                      console.error('Error closing DB:', closeError);
+                    }
+                  }
+                }
+                if (checkToastIdRef.current) {
+                  removeToast(checkToastIdRef.current);
+                  checkToastIdRef.current = null;
+                }
+              } else if (hasDifferences(currentLocal, currentCloud)) {
                 log('Differences still exist after delay, showing conflict dialog');
                 setLocalNodes(currentLocal);
                 setCloudNodes(currentCloud);

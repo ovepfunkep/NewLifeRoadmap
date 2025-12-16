@@ -1,16 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { collectDeadlines, sortByDeadlineAsc, getDeadlineColor, buildBreadcrumbs } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { getNode } from '../db';
+import { FiList, FiCalendar } from 'react-icons/fi';
+import { CalendarView } from './CalendarView';
+import { DayTasksModal } from './DayTasksModal';
 
 interface DeadlineListProps {
   node: Node;
   onNavigate: (id: string) => void;
 }
 
+// Проверка, является ли дедлайн срочным (в ближайшую неделю)
+function isUrgentDeadline(deadline: string): boolean {
+  const deadlineDate = new Date(deadline);
+  const now = new Date();
+  const diffMs = deadlineDate.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  return diffDays >= 0 && diffDays <= 7;
+}
+
 // Группировка дедлайнов: возвращаем все задачи с минимальным дедлайном для каждого первого уровня дочерних узлов
+// Для срочных дедлайнов (ближайшая неделя) показываем ВСЕ дедлайны из ветки, игнорируя правило "1 ветка - 1 правило"
 // Учитываем как сам шаг первого уровня, так и все его подшаги
 function groupDeadlines(node: Node): Node[] {
   const result: Node[] = [];
@@ -38,29 +51,60 @@ function groupDeadlines(node: Node): Node[] {
     
     if (!minDeadline) continue;
     
-    // Находим все задачи с минимальным дедлайном
-    const minDeadlineTime = new Date(minDeadline).getTime();
-    const tasksWithMinDeadline = sorted.filter(task => 
-      task.deadline && new Date(task.deadline).getTime() === minDeadlineTime
+    // Проверяем, есть ли срочные дедлайны в этой ветке
+    const urgentDeadlines = sorted.filter(task => 
+      task.deadline && isUrgentDeadline(task.deadline)
     );
     
-    // Добавляем все задачи с минимальным дедлайном
-    result.push(...tasksWithMinDeadline);
+    if (urgentDeadlines.length > 0) {
+      // Если есть срочные дедлайны - добавляем ВСЕ срочные дедлайны из этой ветки
+      result.push(...urgentDeadlines);
+    } else {
+      // Иначе применяем стандартную логику: находим все задачи с минимальным дедлайном
+      const minDeadlineTime = new Date(minDeadline).getTime();
+      const tasksWithMinDeadline = sorted.filter(task => 
+        task.deadline && new Date(task.deadline).getTime() === minDeadlineTime
+      );
+      
+      // Добавляем все задачи с минимальным дедлайном
+      result.push(...tasksWithMinDeadline);
+    }
   }
   
-  return result;
+  // Убираем дубликаты по ID
+  const seenIds = new Set<string>();
+  return result.filter(task => {
+    if (seenIds.has(task.id)) {
+      return false;
+    }
+    seenIds.add(task.id);
+    return true;
+  });
 }
 
 export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
   useDeadlineTicker(); // подписка на тикер
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('deadlineViewMode');
+      return (stored === 'list' || stored === 'calendar') ? stored : 'list';
+    }
+    return 'list';
+  });
   const [deadlinesWithBreadcrumbs, setDeadlinesWithBreadcrumbs] = useState<Array<{ node: Node; breadcrumbs: Node[] }>>([]);
+  const [selectedDay, setSelectedDay] = useState<{ date: Date; tasks: Node[] } | null>(null);
+  const [groupedDeadlines, setGroupedDeadlines] = useState<Node[]>([]);
 
-          useEffect(() => {
-            const loadBreadcrumbs = async () => {
-              const grouped = groupDeadlines(node);
-              const result: Array<{ node: Node; breadcrumbs: Node[] }> = [];
+  useEffect(() => {
+    const grouped = groupDeadlines(node);
+    setGroupedDeadlines(grouped);
+  }, [node]);
 
-              for (const deadlineNode of grouped) {
+  useEffect(() => {
+    const loadBreadcrumbs = async () => {
+      const result: Array<{ node: Node; breadcrumbs: Node[] }> = [];
+
+      for (const deadlineNode of groupedDeadlines) {
         const breadcrumbs = await buildBreadcrumbs(deadlineNode.id, getNode);
         // Исключаем сам текущий узел и саму задачу из breadcrumbs
         // Оставляем только путь от текущего узла до задачи
@@ -80,11 +124,38 @@ export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
       setDeadlinesWithBreadcrumbs(result);
     };
     
-    loadBreadcrumbs();
-  }, [node]);
+    if (viewMode === 'list') {
+      loadBreadcrumbs();
+    }
+  }, [node, groupedDeadlines, viewMode]);
 
-  if (deadlinesWithBreadcrumbs.length === 0) {
-    return (
+  const handleDayClick = (date: Date, tasks: Node[]) => {
+    setSelectedDay({ date, tasks });
+  };
+
+  useEffect(() => {
+    localStorage.setItem('deadlineViewMode', viewMode);
+  }, [viewMode]);
+
+  // Определяем компактный режим для больших экранов в календарном виде
+  const [isCompact, setIsCompact] = useState(false);
+  
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const checkCompact = () => {
+      setIsCompact(viewMode === 'calendar' && window.innerWidth >= 1024);
+    };
+    
+    checkCompact();
+    window.addEventListener('resize', checkCompact);
+    return () => window.removeEventListener('resize', checkCompact);
+  }, [viewMode]);
+
+  const hasDeadlines = groupedDeadlines.length > 0;
+
+  return (
+    <>
       <div 
         className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 p-5"
         style={{
@@ -92,81 +163,135 @@ export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
           boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)'
         }}
       >
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-          {t('deadline.title')}
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {t('deadline.noDeadlines')}
-        </p>
-      </div>
-    );
-  }
+        {/* Заголовок с тумблером */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            {t('deadline.title')}
+          </h2>
+          {hasDeadlines && (
+            <div className="flex items-center gap-1 p-1 rounded-lg bg-gray-100 dark:bg-gray-700">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded-md transition-all ${
+                  viewMode === 'list'
+                    ? 'shadow-sm'
+                    : 'opacity-60 hover:opacity-100'
+                }`}
+                aria-label="Вид списка"
+                style={{
+                  backgroundColor: viewMode === 'list' ? 'var(--accent)' : 'transparent',
+                  color: viewMode === 'list' ? 'white' : 'var(--accent)'
+                }}
+              >
+                <FiList className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('calendar')}
+                className={`p-2 rounded-md transition-all ${
+                  viewMode === 'calendar'
+                    ? 'shadow-sm'
+                    : 'opacity-60 hover:opacity-100'
+                }`}
+                aria-label="Вид календаря"
+                style={{
+                  backgroundColor: viewMode === 'calendar' ? 'var(--accent)' : 'transparent',
+                  color: viewMode === 'calendar' ? 'white' : 'var(--accent)'
+                }}
+              >
+                <FiCalendar className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
 
-  return (
-    <div 
-      className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 p-5"
-      style={{
-        // Material Design elevation dp2 для контейнера дедлайнов
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)'
-      }}
-    >
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-        {t('deadline.title')}
-      </h2>
-      <div className="space-y-3">
-        {deadlinesWithBreadcrumbs.map(({ node: dl, breadcrumbs }) => {
-          const dateStr = dl.deadline ? new Date(dl.deadline).toLocaleDateString('ru-RU') : '';
-          const deadlineColor = getDeadlineColor(dl);
-          
-          return (
-            <button
-              key={dl.id}
-              onClick={() => onNavigate(dl.id)}
-              className="w-full text-left p-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 transition-all"
-              style={{
-                // Material Design elevation dp0 для элементов списка дедлайнов
-                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
-              }}
-              onMouseEnter={(e) => {
-                // Увеличиваем elevation при hover
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)';
-              }}
-              onMouseLeave={(e) => {
-                // Возвращаем обычный elevation
-                e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
-              }}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex-1 min-w-0 flex items-center gap-2">
-                  <div className="flex-1 min-w-0">
-                    {/* Breadcrumbs - мелким шрифтом, полупрозрачным, над названием */}
-                    {breadcrumbs.length > 0 && (
-                      <div className="text-[10px] text-gray-400 dark:text-gray-500 opacity-60 mb-0.5 truncate">
-                        {breadcrumbs.map((b, idx) => (
-                          <span key={b.id}>
-                            {b.title}
-                            {idx < breadcrumbs.length - 1 && ' / '}
-                          </span>
-                        ))}
+        {/* Контент в зависимости от вида */}
+        {!hasDeadlines ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {t('deadline.noDeadlines')}
+          </p>
+        ) : viewMode === 'list' ? (
+          <div className="space-y-3">
+            {deadlinesWithBreadcrumbs.map(({ node: dl, breadcrumbs }) => {
+              const dateStr = dl.deadline ? new Date(dl.deadline).toLocaleDateString('ru-RU') : '';
+              const deadlineColor = getDeadlineColor(dl);
+              
+              return (
+                <button
+                  key={dl.id}
+                  onClick={() => onNavigate(dl.id)}
+                  className="w-full text-left p-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 transition-all"
+                  style={{
+                    // Material Design elevation dp0 для элементов списка дедлайнов
+                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                  }}
+                  onMouseEnter={(e) => {
+                    // Увеличиваем elevation при hover
+                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)';
+                  }}
+                  onMouseLeave={(e) => {
+                    // Возвращаем обычный elevation
+                    e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        {/* Breadcrumbs - мелким шрифтом, полупрозрачным, над названием */}
+                        {breadcrumbs.length > 0 && (
+                          <div className="text-[10px] text-gray-400 dark:text-gray-500 opacity-60 mb-0.5 truncate">
+                            {breadcrumbs.map((b, idx) => (
+                              <span key={b.id}>
+                                {b.title}
+                                {idx < breadcrumbs.length - 1 && ' / '}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <span className="font-medium text-gray-900 dark:text-gray-100">
+                          {dl.title}
+                        </span>
                       </div>
-                    )}
-                    <span className="font-medium text-gray-900 dark:text-gray-100">
-                      {dl.title}
+                    </div>
+                    <span
+                      className="text-xs px-2 py-1 rounded text-white flex-shrink-0 self-center"
+                      style={{ backgroundColor: deadlineColor }}
+                    >
+                      {dateStr}
                     </span>
                   </div>
-                </div>
-                <span
-                  className="text-xs px-2 py-1 rounded text-white flex-shrink-0 self-center"
-                  style={{ backgroundColor: deadlineColor }}
-                >
-                  {dateStr}
-                </span>
-              </div>
-            </button>
-          );
-        })}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div 
+            className={isCompact ? '' : 'max-h-[70vh] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]'}
+            style={isCompact ? {} : {
+              scrollBehavior: 'smooth'
+            }}
+          >
+            <CalendarView
+              node={node}
+              deadlines={groupedDeadlines}
+              onNavigate={onNavigate}
+              onDayClick={handleDayClick}
+              compact={isCompact}
+            />
+          </div>
+        )}
       </div>
-    </div>
+
+      {/* Модалка со списком задач на день */}
+      {selectedDay && (
+        <DayTasksModal
+          date={selectedDay.date}
+          tasks={selectedDay.tasks}
+          currentNodeId={node.id}
+          onNavigate={onNavigate}
+          onClose={() => setSelectedDay(null)}
+        />
+      )}
+    </>
   );
 }
 

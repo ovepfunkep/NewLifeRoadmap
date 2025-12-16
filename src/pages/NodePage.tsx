@@ -1004,10 +1004,15 @@ export function NodePage() {
       />
       
             <main className="container mx-auto px-4 py-6">
-              {/* Контент: шаги и дедлайны */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Блок шагов */}
-                <div className="lg:col-span-2">
+              {/* Контент: дедлайны и шаги */}
+              <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6">
+                {/* Блок дедлайнов - сверху на мобильных, справа на больших экранах */}
+                <div className="lg:col-span-1 lg:order-2">
+                  <DeadlineList node={currentNode} onNavigate={navigateToNode} />
+                </div>
+                
+                {/* Блок шагов - снизу на мобильных, слева на больших экранах */}
+                <div className="lg:col-span-2 lg:order-1">
                   <StepsList
                     children={sortedChildren}
                     onCreateChild={handleCreateChild}
@@ -1028,11 +1033,6 @@ export function NodePage() {
                     onFilterChange={setFilterType}
                     currentNodeId={currentNode.id}
                   />
-                </div>
-                
-                {/* Боковая панель с дедлайнами */}
-                <div className="lg:col-span-1">
-                  <DeadlineList node={currentNode} onNavigate={navigateToNode} />
                 </div>
               </div>
       </main>
