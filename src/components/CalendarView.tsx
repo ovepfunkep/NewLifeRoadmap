@@ -1,7 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Node } from '../types';
-import { getDeadlineColor, buildBreadcrumbs } from '../utils';
-import { getNode } from '../db';
 import { FiChevronLeft, FiChevronRight, FiRotateCw, FiPlus, FiMinus } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
 
@@ -95,7 +93,7 @@ function formatDay(date: Date): { day: number; weekday: string } {
   return { day, weekday };
 }
 
-export function CalendarView({ node, deadlines, onNavigate, onDayClick, compact = false }: CalendarViewProps) {
+export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, onDayClick, compact = false }: CalendarViewProps) {
   const [rangeSize, setRangeSize] = useState<RangeSize>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('calendarRangeSize');
@@ -402,58 +400,11 @@ export function CalendarView({ node, deadlines, onNavigate, onDayClick, compact 
     return rows;
   }, [days]);
 
-  // Callback ref для объединения ref и логирования
+  // Callback ref для установки ref
   const setCalendarRef = useCallback((el: HTMLDivElement | null) => {
     calendarRef.current = el;
-    
-    if (el) {
-      fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'CalendarView.tsx:250',
-          message: 'Calendar grid mounted',
-          data: { 
-            className: el.className,
-            childrenCount: el.children.length,
-            rowsCount: calendarRows.length
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          runId: 'run2',
-          hypothesisId: 'F'
-        })
-      }).catch(() => {});
-    }
-  }, [calendarRows.length]);
+  }, []);
 
-  // #region agent log
-  useEffect(() => {
-    fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'CalendarView.tsx:160',
-        message: 'CalendarView render',
-        data: { 
-          rangeSize, 
-          compact, 
-          daysCount: days.length,
-          calendarRowsCount: calendarRows.length,
-          calendarRows: calendarRows.map(r => ({
-            type: r.type,
-            rowIndex: r.rowIndex,
-            ...(r.type === 'month' ? { month: r.month, columnStart: r.columnStart } : { weekIndex: r.weekIndex, daysCount: r.days.length })
-          }))
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'D'
-      })
-    }).catch(() => {});
-  }, [rangeSize, compact, days.length, calendarRows]);
-  // #endregion
 
   return (
     <div className="space-y-4">
@@ -521,9 +472,7 @@ export function CalendarView({ node, deadlines, onNavigate, onDayClick, compact 
           rowGap: rangeSize === 'month' ? '12px' : '8px', // Общее расстояние между строками
           gridTemplateColumns: (compact || isLargeScreen) ? 'repeat(7, 1fr)' : '1fr' // Явно указываем равномерное распределение: 7 колонок на больших экранах, 1 колонка на мобильных
         }}
-        // #region agent log
         ref={setCalendarRef}
-        // #endregion
       >
         {calendarRows.flatMap((row) => {
           if (row.type === 'month') {
@@ -545,7 +494,7 @@ export function CalendarView({ node, deadlines, onNavigate, onDayClick, compact 
             );
           } else {
             // Строка с днями недели - на мобильных каждый день в отдельной строке
-            return row.days.map((day, dayIndex) => {
+            return row.days.map((day) => {
               const key = day.toISOString().split('T')[0];
               const dayData = tasksByDay.get(key);
               const { day: dayNum, weekday } = formatDay(day);

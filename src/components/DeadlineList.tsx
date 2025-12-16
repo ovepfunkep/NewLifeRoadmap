@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { collectDeadlines, sortByDeadlineAsc, getDeadlineColor, buildBreadcrumbs } from '../utils';
