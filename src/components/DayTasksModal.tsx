@@ -2,17 +2,18 @@ import { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
 import { buildBreadcrumbs, getDeadlineColor } from '../utils';
 import { getNode } from '../db';
-import { FiX } from 'react-icons/fi';
+import { FiX, FiPlus } from 'react-icons/fi';
 
 interface DayTasksModalProps {
   date: Date;
   tasks: Node[];
   currentNodeId: string;
   onNavigate: (id: string) => void;
+  onCreateTask?: (date: Date) => void; // Обработчик создания задачи с датой
   onClose: () => void;
 }
 
-export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onClose }: DayTasksModalProps) {
+export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onCreateTask, onClose }: DayTasksModalProps) {
   const [tasksWithBreadcrumbs, setTasksWithBreadcrumbs] = useState<Array<{ node: Node; breadcrumbs: Node[] }>>([]);
   const modalRef = useRef<HTMLDivElement>(null);
   const clickStartRef = useRef<{ target: EventTarget | null; inside: boolean } | null>(null);
@@ -111,13 +112,38 @@ export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onClose 
 
         {/* Список задач */}
         <div className="flex-1 overflow-y-auto p-4">
-          {tasksWithBreadcrumbs.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
-              Нет задач на этот день
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {tasksWithBreadcrumbs.map(({ node: task, breadcrumbs }) => {
+          <div className="space-y-2">
+            {tasksWithBreadcrumbs.length === 0 ? (
+              onCreateTask ? (
+                <button
+                  onClick={() => {
+                    onCreateTask(date);
+                    onClose();
+                  }}
+                  className="w-full text-left p-3 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all flex items-center justify-center gap-2"
+                  style={{
+                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+                  }}
+                >
+                  <FiPlus className="w-5 h-5" style={{ color: 'var(--accent)' }} />
+                  <span className="font-medium text-gray-700 dark:text-gray-300" style={{ color: 'var(--accent)' }}>
+                    Создать задачу
+                  </span>
+                </button>
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
+                  Нет задач на этот день
+                </p>
+              )
+            ) : (
+              <>
+                {tasksWithBreadcrumbs.map(({ node: task, breadcrumbs }) => {
                 const deadlineColor = getDeadlineColor(task);
                 const dateStr = task.deadline ? new Date(task.deadline).toLocaleDateString('ru-RU') : '';
 
@@ -167,8 +193,33 @@ export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onClose 
                   </button>
                 );
               })}
-            </div>
-          )}
+              {/* Кнопка создания задачи в конце списка */}
+              {onCreateTask && (
+                <button
+                  onClick={() => {
+                    onCreateTask(date);
+                    onClose();
+                  }}
+                  className="w-full text-left p-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all flex items-center gap-2"
+                  style={{
+                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+                  }}
+                >
+                  <FiPlus className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+                  <span className="font-medium text-gray-900 dark:text-gray-100" style={{ color: 'var(--accent)' }}>
+                    Создать задачу
+                  </span>
+                </button>
+              )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

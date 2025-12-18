@@ -11,6 +11,7 @@ import { DayTasksModal } from './DayTasksModal';
 interface DeadlineListProps {
   node: Node;
   onNavigate: (id: string) => void;
+  onCreateTask?: (date: Date) => void; // Обработчик создания задачи с датой
 }
 
 // Проверка, является ли дедлайн срочным (в ближайшую неделю)
@@ -82,7 +83,7 @@ function groupDeadlines(node: Node): Node[] {
   });
 }
 
-export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
+export function DeadlineList({ node, onNavigate, onCreateTask }: DeadlineListProps) {
   useDeadlineTicker(); // подписка на тикер
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>(() => {
     if (typeof window !== 'undefined') {
@@ -267,7 +268,7 @@ export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
           <div 
             className={isCompact ? '' : 'max-h-[70vh] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]'}
             style={isCompact ? {} : {
-              scrollBehavior: 'smooth'
+              overflowAnchor: 'none'
             }}
           >
             <CalendarView
@@ -275,6 +276,7 @@ export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
               deadlines={groupedDeadlines}
               onNavigate={onNavigate}
               onDayClick={handleDayClick}
+              onCreateTask={onCreateTask}
               compact={isCompact}
             />
           </div>
@@ -288,6 +290,7 @@ export function DeadlineList({ node, onNavigate }: DeadlineListProps) {
           tasks={selectedDay.tasks}
           currentNodeId={node.id}
           onNavigate={onNavigate}
+          onCreateTask={onCreateTask}
           onClose={() => setSelectedDay(null)}
         />
       )}

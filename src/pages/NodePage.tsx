@@ -26,6 +26,7 @@ export function NodePage() {
   const [showEditor, setShowEditor] = useState(false);
   const [showImportExport, setShowImportExport] = useState(false);
   const [editingNode, setEditingNode] = useState<Node | null>(null);
+  const [initialDeadline, setInitialDeadline] = useState<Date | undefined>(undefined);
   const [sortType, setSortType] = useState<SortType>('none');
   const [filterType, setFilterType] = useState<'all' | 'completed' | 'incomplete'>('all');
   const [showMoveModal, setShowMoveModal] = useState(false);
@@ -176,6 +177,14 @@ export function NodePage() {
 
   const handleCreateChild = useCallback(() => {
     setEditingNode(null);
+    setInitialDeadline(undefined);
+    setShowEditor(true);
+  }, []);
+
+  // Обработчик создания задачи с установленной датой
+  const handleCreateTaskWithDate = useCallback((date: Date) => {
+    setEditingNode(null);
+    setInitialDeadline(date);
     setShowEditor(true);
   }, []);
 
@@ -1008,7 +1017,11 @@ export function NodePage() {
               <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6">
                 {/* Блок дедлайнов - сверху на мобильных, справа на больших экранах */}
                 <div className="lg:col-span-1 lg:order-2">
-                  <DeadlineList node={currentNode} onNavigate={navigateToNode} />
+                  <DeadlineList 
+                    node={currentNode} 
+                    onNavigate={navigateToNode}
+                    onCreateTask={handleCreateTaskWithDate}
+                  />
                 </div>
                 
                 {/* Блок шагов - снизу на мобильных, слева на больших экранах */}
@@ -1043,9 +1056,11 @@ export function NodePage() {
           node={editingNode}
           parentId={currentNode.id}
           onSave={handleSave}
+          initialDeadline={initialDeadline}
           onClose={() => {
             setShowEditor(false);
             setEditingNode(null);
+            setInitialDeadline(undefined);
           }}
         />
       )}

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { Node } from '../types';
 import { FiChevronLeft, FiChevronRight, FiRotateCw, FiPlus, FiMinus } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
@@ -8,6 +8,7 @@ interface CalendarViewProps {
   deadlines: Node[];
   onNavigate: (id: string) => void;
   onDayClick: (date: Date, tasks: Node[]) => void;
+  onCreateTask?: (date: Date) => void; // Обработчик создания задачи с датой
   compact?: boolean;
 }
 
@@ -57,13 +58,21 @@ function generateDays(startDate: Date, rangeSize: RangeSize, isMobile: boolean =
   return days;
 }
 
+// Вспомогательная функция для получения ключа даты в локальном времени (YYYY-MM-DD)
+function getDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // Группировка задач по дням
 function groupTasksByDay(deadlines: Node[], days: Date[]): Map<string, DayData> {
   const map = new Map<string, DayData>();
   
   // Инициализируем все дни
   days.forEach(day => {
-    const key = day.toISOString().split('T')[0];
+    const key = getDateKey(day);
     map.set(key, {
       date: day,
       tasks: []
@@ -75,7 +84,7 @@ function groupTasksByDay(deadlines: Node[], days: Date[]): Map<string, DayData> 
     if (!task.deadline) return;
     
     const taskDate = new Date(task.deadline);
-    const taskKey = taskDate.toISOString().split('T')[0];
+    const taskKey = getDateKey(taskDate);
     
     const dayData = map.get(taskKey);
     if (dayData) {
@@ -93,7 +102,7 @@ function formatDay(date: Date): { day: number; weekday: string } {
   return { day, weekday };
 }
 
-export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, onDayClick, compact = false }: CalendarViewProps) {
+export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, onDayClick, onCreateTask, compact = false }: CalendarViewProps) {
   const [rangeSize, setRangeSize] = useState<RangeSize>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('calendarRangeSize');
@@ -123,8 +132,8 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
   // Диапазон дней для мобильных устройств (для бесконечной прокрутки)
   const [daysRange, setDaysRange] = useState<{ start: number; end: number } | undefined>(() => {
     if (!(compact || (typeof window !== 'undefined' && window.innerWidth >= 1024))) {
-      // Изначально показываем неделю: 3 дня назад, сегодня, 3 дня вперед
-      return { start: -3, end: 3 };
+      // Изначально показываем 4 недели: 14 дней назад, сегодня, 14 дней вперед
+      return { start: -14, end: 14 };
     }
     return undefined;
   });
@@ -148,7 +157,7 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
       setIsLargeScreen(isLarge);
       // Обновляем daysRange при изменении размера экрана
       if (!(compact || isLarge)) {
-        setDaysRange({ start: -3, end: 3 });
+        setDaysRange({ start: -14, end: 14 });
       } else {
         setDaysRange(undefined);
       }
@@ -181,41 +190,152 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
+          const element = entry.target as HTMLElement;
+          const dayDate = element.getAttribute('data-day-date');
+          
           if (entry.isIntersecting) {
-            // Debounce для предотвращения множественных обновлений
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'CalendarView.tsx:observer',
+                message: 'Intersection detected',
+                data: {
+                  dayDate,
+                  intersectionRatio: entry.intersectionRatio,
+                  isLoading: isLoadingRef.current
+                },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                runId: 'run3',
+                hypothesisId: 'C'
+              })
+            }).catch(() => {});
+            // #endregion
+
             if (timeoutId) clearTimeout(timeoutId);
             
             timeoutId = setTimeout(() => {
-              const element = entry.target as HTMLElement;
-              const dayDate = element.getAttribute('data-day-date');
-              if (!dayDate) return;
+              if (!dayDate || isLoadingRef.current) return;
 
-              const dayIndex = days.findIndex(d => d.toISOString().split('T')[0] === dayDate);
+              const dayIndex = days.findIndex(d => getDateKey(d) === dayDate);
               if (dayIndex === -1) return;
 
-              // Если видим первый день - добавляем дни назад
-              if (dayIndex === 0 && daysRange.start > -365 * 2) {
-                setDaysRange(prev => prev ? { start: prev.start - 7, end: prev.end } : undefined);
+              const rect = element.getBoundingClientRect();
+              const containerRect = scrollContainer 
+                ? scrollContainer.getBoundingClientRect() 
+                : { top: 0, bottom: window.innerHeight, height: window.innerHeight };
+              
+              const elementTopRelative = rect.top - containerRect.top;
+              const elementBottomRelative = rect.bottom - containerRect.top;
+              const viewportHeight = containerRect.height;
+              
+              const isVisible = elementBottomRelative > 0 && elementTopRelative < viewportHeight;
+              if (!isVisible) return;
+
+              const SENTINEL_COUNT = 7;
+              const isNearTopEdge = dayIndex < SENTINEL_COUNT;
+              const isNearBottomEdge = dayIndex >= days.length - SENTINEL_COUNT;
+              
+              if (isNearTopEdge && daysRange.start > -365 * 2) {
+                const isNearTop = elementTopRelative < viewportHeight * 0.5; 
+                const currentFirstDayKey = getDateKey(days[0]);
+                
+                if (isNearTop && currentFirstDayKey !== lastLoadedFirstDayKeyRef.current && !isLoadingRef.current) {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      location: 'CalendarView.tsx:load-back',
+                      message: 'TRIGGERING LOAD BACK',
+                      data: {
+                        dayDate,
+                        dayIndex,
+                        currentFirstDayKey,
+                        daysRange
+                      },
+                      timestamp: Date.now(),
+                      sessionId: 'debug-session',
+                      runId: 'run3',
+                      hypothesisId: 'B'
+                    })
+                  }).catch(() => {});
+                  // #endregion
+
+                  isLoadingRef.current = true;
+                  lastLoadedFirstDayKeyRef.current = currentFirstDayKey;
+                  
+                  if (scrollContainer && calendarRef.current) {
+                    const anchorRect = element.getBoundingClientRect();
+                    const containerRectBefore = scrollContainer.getBoundingClientRect();
+                    referenceElementKeyRef.current = dayDate;
+                    referenceElementPositionRef.current = {
+                      top: anchorRect.top - containerRectBefore.top,
+                      scrollTop: scrollContainer.scrollTop
+                    };
+                  }
+                  
+                  setDaysRange(prev => prev ? { start: prev.start - 14, end: prev.end } : undefined);
+                }
               }
-              // Если видим последний день - добавляем дни вперед
-              if (dayIndex === days.length - 1 && daysRange.end < 365 * 2) {
-                setDaysRange(prev => prev ? { start: prev.start, end: prev.end + 7 } : undefined);
+              if (isNearBottomEdge && daysRange.end < 365 * 2) {
+                const isNearBottom = elementBottomRelative > viewportHeight * 0.5;
+                const currentLastDayKey = getDateKey(days[days.length - 1]);
+                
+                if (isNearBottom && currentLastDayKey !== lastLoadedLastDayKeyRef.current && !isLoadingRef.current) {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      location: 'CalendarView.tsx:load-forward',
+                      message: 'TRIGGERING LOAD FORWARD',
+                      data: {
+                        dayDate,
+                        dayIndex,
+                        currentLastDayKey,
+                        daysRange
+                      },
+                      timestamp: Date.now(),
+                      sessionId: 'debug-session',
+                      runId: 'run3',
+                      hypothesisId: 'B'
+                    })
+                  }).catch(() => {});
+                  // #endregion
+
+                  isLoadingRef.current = true;
+                  lastLoadedLastDayKeyRef.current = currentLastDayKey;
+                  setDaysRange(prev => prev ? { start: prev.start, end: prev.end + 14 } : undefined);
+                }
               }
-            }, 300);
+            }, 50);
           }
         });
       },
       { 
         root: scrollContainer,
-        rootMargin: '200px' // Начинаем загрузку за 200px до границы
+        rootMargin: '400px', // Увеличил margin до 400px для еще более ранней загрузки
+        threshold: [0, 0.25, 0.5, 0.75, 1] 
       }
     );
 
-    // Наблюдаем за первым и последним днем
+    // Наблюдаем за группой элементов в начале и в конце списка (первые и последние 7 дней)
+    // Это гарантирует, что мы не пропустим точку срабатывания при быстром скролле
     const dayElements = calendarRef.current.querySelectorAll('[data-day-date]');
+    const SENTINEL_COUNT = 7;
+    
     if (dayElements.length > 0) {
-      observer.observe(dayElements[0]);
-      observer.observe(dayElements[dayElements.length - 1]);
+      // Наблюдаем за первыми 7 элементами
+      for (let i = 0; i < Math.min(SENTINEL_COUNT, dayElements.length); i++) {
+        observer.observe(dayElements[i]);
+      }
+      // Наблюдаем за последними 7 элементами
+      for (let i = Math.max(0, dayElements.length - SENTINEL_COUNT); i < dayElements.length; i++) {
+        observer.observe(dayElements[i]);
+      }
     }
 
     return () => {
@@ -227,6 +347,13 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
   // Ref для календаря для плавной прокрутки
   const calendarRef = useRef<HTMLDivElement | null>(null);
   const hasScrolledToTodayRef = useRef(false);
+  const lastLoadedFirstDayKeyRef = useRef<string | null>(null); // Отслеживаем последний загруженный первый день
+  const lastLoadedLastDayKeyRef = useRef<string | null>(null); // Отслеживаем последний загруженный последний день
+  const isLoadingRef = useRef(false); // Флаг для предотвращения одновременных загрузок
+  const previousDaysRangeStartRef = useRef<number | undefined>(undefined); // Отслеживаем предыдущее значение daysRange.start для обнаружения prepend
+  const previousDaysRangeEndRef = useRef<number | undefined>(undefined); // Отслеживаем предыдущее значение daysRange.end
+  const referenceElementKeyRef = useRef<string | null>(null); // Ключ элемента-якоря для восстановления позиции
+  const referenceElementPositionRef = useRef<{ top: number; scrollTop: number } | null>(null); // Позиция элемента-якоря перед обновлением
 
   const handlePrevious = () => {
     const newStartDate = new Date(startDate);
@@ -292,15 +419,23 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
     
     // Сбрасываем диапазон дней на мобильных устройствах
     if (!(compact || isLargeScreen)) {
-      setDaysRange({ start: -3, end: 3 });
+      setDaysRange({ start: -14, end: 14 });
       hasScrolledToTodayRef.current = false; // Сбрасываем флаг для повторной прокрутки
+      
+      // Сбрасываем refs для бесконечной прокрутки
+      lastLoadedFirstDayKeyRef.current = null;
+      lastLoadedLastDayKeyRef.current = null;
+      isLoadingRef.current = false;
+      referenceElementKeyRef.current = null;
+      referenceElementPositionRef.current = null;
+      previousDaysRangeStartRef.current = undefined;
     }
     
     // Прокрутка к текущей дате на мобильных устройствах
     if (calendarRef.current && !(compact || isLargeScreen)) {
       setTimeout(() => {
         // Находим элемент с текущей датой
-        const todayElement = calendarRef.current?.querySelector(`[data-day-date="${today.toISOString().split('T')[0]}"]`) as HTMLElement;
+        const todayElement = calendarRef.current?.querySelector(`[data-day-date="${getDateKey(today)}"]`) as HTMLElement;
         if (todayElement) {
           hasScrolledToTodayRef.current = true;
           scrollElementIntoView(todayElement, 'center');
@@ -314,11 +449,119 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
     }
   };
 
+  // Невидимая коррекция скролла при добавлении дней сверху (prepend)
+  // Используем useLayoutEffect для синхронной коррекции ДО отрисовки браузером
+  useLayoutEffect(() => {
+    if (!calendarRef.current || (compact || isLargeScreen) || !daysRange || days.length === 0) {
+      previousDaysRangeStartRef.current = daysRange?.start;
+      return;
+    }
+
+    // Находим родительский контейнер со скроллом
+    let scrollContainer: HTMLElement | null = calendarRef.current.parentElement;
+    while (scrollContainer && scrollContainer !== document.body && scrollContainer !== document.documentElement) {
+      const style = window.getComputedStyle(scrollContainer);
+      if (style.overflowY === 'auto' || style.overflowY === 'scroll' || scrollContainer.classList.contains('overflow-y-auto')) {
+        break;
+      }
+      scrollContainer = scrollContainer.parentElement;
+    }
+    if (!scrollContainer || scrollContainer === document.body || scrollContainer === document.documentElement) {
+      scrollContainer = null;
+    }
+    if (!scrollContainer) {
+      previousDaysRangeStartRef.current = daysRange.start;
+      return;
+    }
+
+    const previousStart = previousDaysRangeStartRef.current;
+    const currentStart = daysRange.start;
+
+    if (previousStart !== undefined && (currentStart !== previousStart || daysRange.end !== previousDaysRangeEndRef.current)) {
+      // Сбрасываем флаг загрузки ПОСЛЕ завершения коррекции скролла (или после рендера если коррекция не нужна)
+      isLoadingRef.current = false;
+
+      const isPrepend = currentStart < previousStart;
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'CalendarView.tsx:useLayoutEffect',
+          message: 'Effect triggered',
+          data: {
+            isPrepend,
+            previousStart,
+            currentStart,
+            referenceKey: referenceElementKeyRef.current,
+            hasSavedPosition: !!referenceElementPositionRef.current
+          },
+          timestamp: Date.now(),
+          sessionId: 'debug-session',
+          runId: 'run3',
+          hypothesisId: 'D'
+        })
+      }).catch(() => {});
+      // #endregion
+
+      if (isPrepend) {
+        const referenceKey = referenceElementKeyRef.current;
+        const savedPosition = referenceElementPositionRef.current;
+        
+        if (referenceKey && savedPosition) {
+          const referenceElement = calendarRef.current.querySelector(`[data-day-date="${referenceKey}"]`) as HTMLElement;
+          if (referenceElement) {
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const elementRect = referenceElement.getBoundingClientRect();
+            const newElementTopRelative = elementRect.top - containerRect.top;
+            const elementOffset = newElementTopRelative - savedPosition.top;
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'CalendarView.tsx:scroll-adjust',
+                message: 'ADJUSTING SCROLL',
+                data: {
+                  referenceKey,
+                  oldTop: savedPosition.top,
+                  newTop: newElementTopRelative,
+                  offset: elementOffset,
+                  oldScrollTop: savedPosition.scrollTop,
+                  newScrollTop: savedPosition.scrollTop + elementOffset
+                },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                runId: 'run3',
+                hypothesisId: 'D'
+              })
+            }).catch(() => {});
+            // #endregion
+
+            scrollContainer.scrollTop = savedPosition.scrollTop + elementOffset;
+            referenceElementPositionRef.current = null;
+          }
+        }
+      }
+    }
+
+    previousDaysRangeStartRef.current = currentStart;
+    previousDaysRangeEndRef.current = daysRange.end;
+  }, [days, daysRange, compact, isLargeScreen]);
+
   // Прокрутка к сегодняшнему дню при первой загрузке на мобильных
+  // НЕ срабатывает при загрузке дней назад/вперед (только при первой инициализации)
   useEffect(() => {
     if (!calendarRef.current || (compact || isLargeScreen) || !daysRange || hasScrolledToTodayRef.current) return;
     
-    const todayElement = calendarRef.current.querySelector(`[data-day-date="${today.toISOString().split('T')[0]}"]`) as HTMLElement;
+    // Прокручиваем к сегодня только если daysRange соответствует начальному состоянию (не было загрузки)
+    // Это предотвращает прокрутку после загрузки дней назад/вперед
+    const isInitialRange = daysRange.start === -14 && daysRange.end === 14;
+    if (!isInitialRange) return;
+    
+    const todayElement = calendarRef.current.querySelector(`[data-day-date="${getDateKey(today)}"]`) as HTMLElement;
     if (todayElement) {
       hasScrolledToTodayRef.current = true;
       setTimeout(() => {
@@ -330,6 +573,9 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
   const handleDayClick = (dayData: DayData) => {
     if (dayData.tasks.length > 0) {
       onDayClick(dayData.date, dayData.tasks);
+    } else if (onCreateTask) {
+      // Если задач нет и есть обработчик создания, открываем создание задачи
+      onCreateTask(dayData.date);
     }
   };
 
@@ -476,13 +722,16 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
       >
         {calendarRows.flatMap((row) => {
           if (row.type === 'month') {
-            // Строка с названием месяца
+            // Строка с названием месяца - скрываем на адаптиве
+            if (!(compact || isLargeScreen)) {
+              return null; // Не показываем названия месяцев на мобильных
+            }
             return (
               <div
                 key={`month-${row.rowIndex}`}
                 className="h-6 flex items-start"
                 style={{
-                  gridColumn: (compact || isLargeScreen) ? `${row.columnStart} / span ${Math.min(7 - (row.columnStart - 1), 7)}` : '1 / -1', // На мобильных занимает всю ширину
+                  gridColumn: `${row.columnStart} / span ${Math.min(7 - (row.columnStart - 1), 7)}`,
                   gridRow: row.rowIndex,
                   marginBottom: rangeSize === 'month' ? '-18px' : '-10px' // Уменьшаем расстояние до следующей строки (ещё меньше)
                 }}
@@ -495,14 +744,14 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
           } else {
             // Строка с днями недели - на мобильных каждый день в отдельной строке
             return row.days.map((day) => {
-              const key = day.toISOString().split('T')[0];
+              const key = getDateKey(day);
               const dayData = tasksByDay.get(key);
               const { day: dayNum, weekday } = formatDay(day);
               const isTodayDay = isToday(day);
               const hasTasks = dayData && dayData.tasks.length > 0;
               
               // Находим глобальный индекс дня в массиве days
-              const dayGlobalIndex = days.findIndex(d => d.toISOString().split('T')[0] === key);
+              const dayGlobalIndex = days.findIndex(d => getDateKey(d) === key);
               const isFirstDayOfMonth = dayGlobalIndex === 0 || (dayGlobalIndex > 0 && days[dayGlobalIndex - 1]?.getMonth() !== day.getMonth());
               const showMonthDivider = isFirstDayOfMonth && dayGlobalIndex > 0 && rangeSize === 'month' && (compact || isLargeScreen);
               
@@ -515,8 +764,8 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
               let dayRowIndex = row.rowIndex;
               if (!(compact || isLargeScreen)) {
                 // На мобильных: считаем все предыдущие строки месяцев и дни до текущего дня
-                const previousMonthRows = calendarRows.filter(r => r.type === 'month' && r.rowIndex < row.rowIndex).length;
-                dayRowIndex = previousMonthRows + dayGlobalIndex + 1;
+                // Но так как мы скрыли месяцы на мобильных, считаем только дни
+                dayRowIndex = dayGlobalIndex + 1;
               }
 
               return (
@@ -525,6 +774,7 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
                   className="relative"
                   style={{ 
                     gridRow: dayRowIndex,
+                    gridColumn: !(compact || isLargeScreen) ? '1 / -1' : undefined, // На мобильных занимаем всю ширину
                     minWidth: 0 // Позволяет элементу сжиматься меньше минимального размера контента
                   }}
                 >
@@ -541,7 +791,7 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
                   )}
                   <button
                     onClick={() => dayData && handleDayClick(dayData)}
-                    disabled={!hasTasks}
+                    disabled={!hasTasks && !onCreateTask}
                     data-day-date={key}
                     className={`
                       w-full rounded-lg border transition-all text-left
@@ -553,23 +803,23 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
                         ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20' 
                         : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800'
                       }
-                      ${hasTasks 
+                      ${hasTasks || onCreateTask
                         ? 'hover:shadow-md hover:scale-[1.02] cursor-pointer active:scale-[0.98]' 
                         : 'opacity-50 cursor-default'
                       }
                     `}
                     style={{
-                      boxShadow: hasTasks ? '0 1px 2px rgba(0, 0, 0, 0.05)' : 'none',
+                      boxShadow: (hasTasks || onCreateTask) ? '0 1px 2px rgba(0, 0, 0, 0.05)' : 'none',
                       minWidth: 0, // Позволяет кнопке сжиматься меньше минимального размера контента
                       overflow: 'hidden' // Предотвращает переполнение контента
                     }}
                     onMouseEnter={(e) => {
-                      if (hasTasks) {
+                      if (hasTasks || onCreateTask) {
                         e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06)';
                       }
                     }}
                     onMouseLeave={(e) => {
-                      if (hasTasks) {
+                      if (hasTasks || onCreateTask) {
                         e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
                       }
                     }}

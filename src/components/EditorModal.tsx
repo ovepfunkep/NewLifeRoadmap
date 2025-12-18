@@ -10,17 +10,49 @@ interface EditorModalProps {
   parentId: string | null;
   onSave: (node: Node) => void;
   onClose: () => void;
+  initialDeadline?: Date; // Начальная дата для новой задачи
 }
 
-export function EditorModal({ node, parentId, onSave, onClose }: EditorModalProps) {
+export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }: EditorModalProps) {
+  // Форматируем initialDeadline в строку для input type="date"
+  const formatDateForInput = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  // Форматируем initialDeadline в строку для input type="time"
+  const formatTimeForInput = (date: Date): string => {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+  
+  const getInitialDeadlineDate = (): string => {
+    if (node?.deadline) {
+      return new Date(node.deadline).toISOString().slice(0, 10);
+    }
+    if (initialDeadline) {
+      return formatDateForInput(initialDeadline);
+    }
+    return '';
+  };
+  
+  const getInitialDeadlineTime = (): string => {
+    if (node?.deadline) {
+      return new Date(node.deadline).toISOString().slice(11, 16);
+    }
+    if (initialDeadline) {
+      return formatTimeForInput(initialDeadline);
+    }
+    return '';
+  };
+  
   const [title, setTitle] = useState(node?.title || '');
   const [description, setDescription] = useState(node?.description || '');
-  const [deadlineDate, setDeadlineDate] = useState(
-    node?.deadline ? new Date(node.deadline).toISOString().slice(0, 10) : ''
-  );
-  const [deadlineTime, setDeadlineTime] = useState(
-    node?.deadline ? new Date(node.deadline).toISOString().slice(11, 16) : ''
-  );
+  const [deadlineDate, setDeadlineDate] = useState(getInitialDeadlineDate());
+  const [deadlineTime, setDeadlineTime] = useState(getInitialDeadlineTime());
   const [priority, setPriority] = useState(node?.priority || false);
   const modalRef = useRef<HTMLDivElement>(null);
   const clickStartRef = useRef<{ target: EventTarget | null; inside: boolean } | null>(null);
@@ -38,8 +70,15 @@ export function EditorModal({ node, parentId, onSave, onClose }: EditorModalProp
         setDeadlineTime('');
       }
       setPriority(node.priority || false);
+    } else {
+      // При создании новой задачи сбрасываем форму, но сохраняем initialDeadline
+      setTitle('');
+      setDescription('');
+      setDeadlineDate(initialDeadline ? formatDateForInput(initialDeadline) : '');
+      setDeadlineTime(initialDeadline ? formatTimeForInput(initialDeadline) : '');
+      setPriority(false);
     }
-  }, [node]);
+  }, [node, initialDeadline]);
 
   // Обработка ESC
   useEffect(() => {
