@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
-import { buildBreadcrumbs, getDeadlineColor } from '../utils';
+import { buildBreadcrumbs, getDeadlineColor, formatDeadline } from '../utils';
 import { getNode } from '../db';
 import { FiX, FiPlus } from 'react-icons/fi';
 
@@ -145,7 +145,7 @@ export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onCreate
               <>
                 {tasksWithBreadcrumbs.map(({ node: task, breadcrumbs }) => {
                 const deadlineColor = getDeadlineColor(task);
-                const dateStr = task.deadline ? new Date(task.deadline).toLocaleDateString('ru-RU') : '';
+                const dateStr = formatDeadline(task.deadline);
 
                 return (
                   <button

@@ -1,12 +1,13 @@
 import { ReactNode } from 'react';
 
 interface TooltipProps {
-  text: string;
+  text: string | ReactNode;
   children: ReactNode;
   position?: 'left' | 'right' | 'top' | 'bottom';
+  multiline?: boolean;
 }
 
-export function Tooltip({ text, children, position = 'top' }: TooltipProps) {
+export function Tooltip({ text, children, position = 'top', multiline = false }: TooltipProps) {
   // На мобильных устройствах для позиции 'right' показываем справа, на десктопе - сверху
   const positionClasses = {
     top: 'bottom-full left-1/2 transform -translate-x-1/2 mb-2',
@@ -25,7 +26,7 @@ export function Tooltip({ text, children, position = 'top' }: TooltipProps) {
   return (
     <div className="relative group">
       {children}
-      <div className={`absolute ${positionClasses[position]} px-2 py-1 text-xs text-white bg-gray-900 dark:bg-gray-700 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50`}>
+      <div className={`absolute ${positionClasses[position]} px-2 py-1 text-xs text-white bg-gray-900 dark:bg-gray-700 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${multiline ? 'whitespace-normal min-w-[150px]' : 'whitespace-nowrap'} z-50`}>
         {text}
         <div className={arrowClasses[position]} />
       </div>

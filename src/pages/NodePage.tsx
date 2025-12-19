@@ -546,11 +546,14 @@ export function NodePage() {
     const syncToastId = showToast(t('toast.nodeDeleted'), async () => {
       // Отмена удаления
       await saveNode(deletedNode);
-      const reload = async () => {
+      if (id === currentNode?.id) {
+        // Если удаляли текущий узел, возвращаемся на него
+        navigateToNode(id);
+      } else {
+        // Иначе просто перезагружаем текущий узел
         const reloaded = await getNode(currentNode?.id || 'root-node');
         if (reloaded) setCurrentNode(reloaded);
-      };
-      reload();
+      }
     }, {
       isLoading: true,
       persistent: true,
@@ -1006,6 +1009,7 @@ export function NodePage() {
         onDragLeave={handleDragLeave}
         onDragEnd={handleDragEnd}
         onEdit={handleEdit}
+        onDelete={handleDelete}
         onImportExport={handleImportExport}
         onMove={() => setShowMoveModal(true)}
         onMarkCompleted={handleMarkCompleted}

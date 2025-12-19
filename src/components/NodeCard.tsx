@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
 import { useTranslation } from '../i18n';
-import { computeProgress, getDeadlineColor, getProgressCounts } from '../utils';
+import { computeProgress, getDeadlineColor, getProgressCounts, formatDeadline } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { useEffects } from '../hooks/useEffects';
 import { FiCheck, FiEdit2, FiTrash2, FiArrowUp } from 'react-icons/fi';
@@ -42,7 +42,7 @@ export function NodeCard({
   useDeadlineTicker();
   const t = useTranslation();
   const progress = computeProgress(node);
-  const deadlineDisplay = node.deadline ? new Date(node.deadline).toLocaleDateString('ru-RU') : null;
+  const deadlineDisplay = formatDeadline(node.deadline);
   const { effectsEnabled } = useEffects();
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });

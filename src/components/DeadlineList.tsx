@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
-import { collectDeadlines, sortByDeadlineAsc, getDeadlineColor, buildBreadcrumbs } from '../utils';
+import { collectDeadlines, sortByDeadlineAsc, getDeadlineColor, buildBreadcrumbs, formatDeadline } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { getNode } from '../db';
 import { FiList, FiCalendar } from 'react-icons/fi';
@@ -213,7 +213,7 @@ export function DeadlineList({ node, onNavigate, onCreateTask }: DeadlineListPro
         ) : viewMode === 'list' ? (
           <div className="space-y-3">
             {deadlinesWithBreadcrumbs.map(({ node: dl, breadcrumbs }) => {
-              const dateStr = dl.deadline ? new Date(dl.deadline).toLocaleDateString('ru-RU') : '';
+              const dateStr = formatDeadline(dl.deadline);
               const deadlineColor = getDeadlineColor(dl);
               
               return (

@@ -31,7 +31,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
   
   const getInitialDeadlineDate = (): string => {
     if (node?.deadline) {
-      return new Date(node.deadline).toISOString().slice(0, 10);
+      return formatDateForInput(new Date(node.deadline));
     }
     if (initialDeadline) {
       return formatDateForInput(initialDeadline);
@@ -41,11 +41,16 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
   
   const getInitialDeadlineTime = (): string => {
     if (node?.deadline) {
-      return new Date(node.deadline).toISOString().slice(11, 16);
+      const date = new Date(node.deadline);
+      const hours = date.getHours();
+      const minutes = date.getMinutes();
+      // Если время 00:00, считаем его пустым (сентинель для "только дата")
+      if (hours === 0 && minutes === 0) {
+        return '';
+      }
+      return formatTimeForInput(date);
     }
-    if (initialDeadline) {
-      return formatTimeForInput(initialDeadline);
-    }
+    // Для новых задач не заполняем время по умолчанию (даже если есть initialDeadline)
     return '';
   };
   
@@ -63,19 +68,25 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
       setDescription(node.description || '');
       if (node.deadline) {
         const date = new Date(node.deadline);
-        setDeadlineDate(date.toISOString().slice(0, 10));
-        setDeadlineTime(date.toISOString().slice(11, 16));
+        setDeadlineDate(formatDateForInput(date));
+        const hours = date.getHours();
+        const minutes = date.getMinutes();
+        if (hours === 0 && minutes === 0) {
+          setDeadlineTime('');
+        } else {
+          setDeadlineTime(formatTimeForInput(date));
+        }
       } else {
         setDeadlineDate('');
         setDeadlineTime('');
       }
       setPriority(node.priority || false);
     } else {
-      // При создании новой задачи сбрасываем форму, но сохраняем initialDeadline
+      // При создании новой задачи сбрасываем форму, сохраняем дату из initialDeadline, но время оставляем пустым
       setTitle('');
       setDescription('');
       setDeadlineDate(initialDeadline ? formatDateForInput(initialDeadline) : '');
-      setDeadlineTime(initialDeadline ? formatTimeForInput(initialDeadline) : '');
+      setDeadlineTime('');
       setPriority(false);
     }
   }, [node, initialDeadline]);

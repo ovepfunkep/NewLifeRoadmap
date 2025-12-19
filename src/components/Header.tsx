@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Node } from '../types';
 import { useTranslation } from '../i18n';
 import { useNodeNavigation } from '../hooks/useHashRoute';
-import { computeProgress, getDeadlineColor, getProgressCounts } from '../utils';
+import { computeProgress, getDeadlineColor, getProgressCounts, formatDeadline } from '../utils';
 import { useEffects } from '../hooks/useEffects';
-import { FiEdit2, FiDownload, FiMove, FiCheck } from 'react-icons/fi';
+import { FiEdit2, FiDownload, FiMove, FiCheck, FiTrash2 } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
 
 interface HeaderProps {
@@ -16,6 +16,7 @@ interface HeaderProps {
   onDragLeave?: () => void;
   onDragEnd?: () => void;
   onEdit?: (node: Node) => void;
+  onDelete?: (id: string) => void;
   onImportExport?: () => void;
   onMove?: () => void;
   onMarkCompleted?: (id: string, completed: boolean) => void;
@@ -31,6 +32,7 @@ export function Header({
   onDragLeave,
   onDragEnd,
   onEdit,
+  onDelete,
   onImportExport,
   onMove,
   onMarkCompleted,
@@ -152,7 +154,7 @@ export function Header({
                   )}
                   {node.deadline && !node.completed && (
                     <span className="flex-shrink-0 text-xs px-2 py-1 rounded text-white" style={{ backgroundColor: getDeadlineColor(node) }}>
-                      {new Date(node.deadline).toLocaleDateString('ru-RU')}
+                      {formatDeadline(node.deadline)}
                     </span>
                   )}
                 </div>
@@ -207,6 +209,16 @@ export function Header({
                         style={{ color: 'var(--accent)' }}
                       >
                         <FiMove size={18} />
+                      </button>
+                    </Tooltip>
+                  )}
+                  {onDelete && node.id !== 'root-node' && (
+                    <Tooltip text={t('general.delete')}>
+                      <button
+                        onClick={() => onDelete(node.id)}
+                        className="p-2 rounded-lg border border-red-500 text-red-500 transition-all hover:bg-red-50 dark:hover:bg-red-900/20 hover:brightness-150"
+                      >
+                        <FiTrash2 size={18} />
                       </button>
                     </Tooltip>
                   )}

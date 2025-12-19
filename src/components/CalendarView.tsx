@@ -194,25 +194,6 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
           const dayDate = element.getAttribute('data-day-date');
           
           if (entry.isIntersecting) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                location: 'CalendarView.tsx:observer',
-                message: 'Intersection detected',
-                data: {
-                  dayDate,
-                  intersectionRatio: entry.intersectionRatio,
-                  isLoading: isLoadingRef.current
-                },
-                timestamp: Date.now(),
-                sessionId: 'debug-session',
-                runId: 'run3',
-                hypothesisId: 'C'
-              })
-            }).catch(() => {});
-            // #endregion
 
             if (timeoutId) clearTimeout(timeoutId);
             
@@ -243,26 +224,6 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
                 const currentFirstDayKey = getDateKey(days[0]);
                 
                 if (isNearTop && currentFirstDayKey !== lastLoadedFirstDayKeyRef.current && !isLoadingRef.current) {
-                  // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      location: 'CalendarView.tsx:load-back',
-                      message: 'TRIGGERING LOAD BACK',
-                      data: {
-                        dayDate,
-                        dayIndex,
-                        currentFirstDayKey,
-                        daysRange
-                      },
-                      timestamp: Date.now(),
-                      sessionId: 'debug-session',
-                      runId: 'run3',
-                      hypothesisId: 'B'
-                    })
-                  }).catch(() => {});
-                  // #endregion
 
                   isLoadingRef.current = true;
                   lastLoadedFirstDayKeyRef.current = currentFirstDayKey;
@@ -285,26 +246,6 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
                 const currentLastDayKey = getDateKey(days[days.length - 1]);
                 
                 if (isNearBottom && currentLastDayKey !== lastLoadedLastDayKeyRef.current && !isLoadingRef.current) {
-                  // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      location: 'CalendarView.tsx:load-forward',
-                      message: 'TRIGGERING LOAD FORWARD',
-                      data: {
-                        dayDate,
-                        dayIndex,
-                        currentLastDayKey,
-                        daysRange
-                      },
-                      timestamp: Date.now(),
-                      sessionId: 'debug-session',
-                      runId: 'run3',
-                      hypothesisId: 'B'
-                    })
-                  }).catch(() => {});
-                  // #endregion
 
                   isLoadingRef.current = true;
                   lastLoadedLastDayKeyRef.current = currentLastDayKey;
@@ -483,27 +424,6 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
 
       const isPrepend = currentStart < previousStart;
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'CalendarView.tsx:useLayoutEffect',
-          message: 'Effect triggered',
-          data: {
-            isPrepend,
-            previousStart,
-            currentStart,
-            referenceKey: referenceElementKeyRef.current,
-            hasSavedPosition: !!referenceElementPositionRef.current
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          runId: 'run3',
-          hypothesisId: 'D'
-        })
-      }).catch(() => {});
-      // #endregion
 
       if (isPrepend) {
         const referenceKey = referenceElementKeyRef.current;
@@ -517,28 +437,6 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
             const newElementTopRelative = elementRect.top - containerRect.top;
             const elementOffset = newElementTopRelative - savedPosition.top;
             
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                location: 'CalendarView.tsx:scroll-adjust',
-                message: 'ADJUSTING SCROLL',
-                data: {
-                  referenceKey,
-                  oldTop: savedPosition.top,
-                  newTop: newElementTopRelative,
-                  offset: elementOffset,
-                  oldScrollTop: savedPosition.scrollTop,
-                  newScrollTop: savedPosition.scrollTop + elementOffset
-                },
-                timestamp: Date.now(),
-                sessionId: 'debug-session',
-                runId: 'run3',
-                hypothesisId: 'D'
-              })
-            }).catch(() => {});
-            // #endregion
 
             scrollContainer.scrollTop = savedPosition.scrollTop + elementOffset;
             referenceElementPositionRef.current = null;
@@ -768,6 +666,95 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
                 dayRowIndex = dayGlobalIndex + 1;
               }
 
+              const dayButton = (
+                <button
+                  onClick={() => dayData && handleDayClick(dayData)}
+                  disabled={!hasTasks && !onCreateTask}
+                  data-day-date={key}
+                  className={`
+                    w-full rounded-lg border transition-all text-left
+                    ${compact 
+                      ? 'p-2 min-h-[60px]' 
+                      : 'p-3 min-h-[88px] sm:min-h-[100px]'
+                    }
+                    ${isTodayDay 
+                      ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20' 
+                      : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800'
+                    }
+                    ${hasTasks || onCreateTask
+                      ? 'hover:shadow-md hover:scale-[1.02] cursor-pointer active:scale-[0.98]' 
+                      : 'opacity-50 cursor-default'
+                    }
+                  `}
+                  style={{
+                    boxShadow: (hasTasks || onCreateTask) ? '0 1px 2px rgba(0, 0, 0, 0.05)' : 'none',
+                    minWidth: 0, // Позволяет кнопке сжиматься меньше минимального размера контента
+                    overflow: 'hidden' // Предотвращает переполнение контента
+                  }}
+                  onMouseEnter={(e) => {
+                    if (hasTasks || onCreateTask) {
+                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (hasTasks || onCreateTask) {
+                      e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+                    }
+                  }}
+                >
+                  <div className="flex flex-col gap-1 h-full">
+                    {/* Название месяца на мобильных устройствах (если первый день месяца) */}
+                    {!(compact || isLargeScreen) && isFirstDayOfMonth && (
+                      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 capitalize mb-1">
+                        {getMonthLabel(day)}
+                      </div>
+                    )}
+                    {/* Дата и день недели в верху - дата сверху */}
+                    <div className="flex flex-col">
+                      <span className={`${compact ? 'text-xs' : 'text-sm'} font-semibold ${isTodayDay ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                        {dayNum}
+                      </span>
+                      <span className={`text-xs font-medium ${isTodayDay ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                        {weekday}
+                      </span>
+                    </div>
+                    {/* Рисинки задач - вертикально, на всю ширину */}
+                    {hasTasks && (
+                      <div className="flex flex-col gap-1 mt-1 flex-1">
+                        {dayData.tasks.slice(0, compact ? 3 : 4).map((task) => {
+                          const isPriority = task.priority;
+                          const isMobile = !(compact || isLargeScreen);
+                          return (
+                            <div
+                              key={task.id}
+                              className={`w-full ${compact ? 'h-[8px]' : isMobile ? 'min-h-[24px] py-1 px-2' : 'h-[12px] sm:h-[10px]'} rounded ${isPriority ? 'ring-1 ring-offset-0' : ''} ${isMobile ? 'flex items-center' : ''}`}
+                              style={{ 
+                                backgroundColor: 'var(--accent)',
+                                ...(isPriority && {
+                                  boxShadow: `0 0 0 1px var(--accent)`
+                                })
+                              }}
+                              title={task.title}
+                            >
+                              {isMobile && (
+                                <span className="text-[10px] font-medium text-white truncate">
+                                  {task.title}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {dayData.tasks.length > (compact ? 3 : 4) && (
+                          <div className={`w-full ${compact ? 'h-[8px]' : !(compact || isLargeScreen) ? 'min-h-[24px] py-1 px-2' : 'h-[12px] sm:h-[10px]'} rounded flex items-center justify-center ${compact ? 'text-[8px]' : 'text-xs'} font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300`}>
+                            +{dayData.tasks.length - (compact ? 3 : 4)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+
               return (
                 <div 
                   key={key} 
@@ -789,92 +776,34 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
                       }}
                     />
                   )}
-                  <button
-                    onClick={() => dayData && handleDayClick(dayData)}
-                    disabled={!hasTasks && !onCreateTask}
-                    data-day-date={key}
-                    className={`
-                      w-full rounded-lg border transition-all text-left
-                      ${compact 
-                        ? 'p-2 min-h-[60px]' 
-                        : 'p-3 min-h-[88px] sm:min-h-[100px]'
-                      }
-                      ${isTodayDay 
-                        ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20' 
-                        : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800'
-                      }
-                      ${hasTasks || onCreateTask
-                        ? 'hover:shadow-md hover:scale-[1.02] cursor-pointer active:scale-[0.98]' 
-                        : 'opacity-50 cursor-default'
-                      }
-                    `}
-                    style={{
-                      boxShadow: (hasTasks || onCreateTask) ? '0 1px 2px rgba(0, 0, 0, 0.05)' : 'none',
-                      minWidth: 0, // Позволяет кнопке сжиматься меньше минимального размера контента
-                      overflow: 'hidden' // Предотвращает переполнение контента
-                    }}
-                    onMouseEnter={(e) => {
-                      if (hasTasks || onCreateTask) {
-                        e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (hasTasks || onCreateTask) {
-                        e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
-                      }
-                    }}
-                  >
-                    <div className="flex flex-col gap-1 h-full">
-                      {/* Название месяца на мобильных устройствах (если первый день месяца) */}
-                      {!(compact || isLargeScreen) && isFirstDayOfMonth && (
-                        <div className="text-xs font-medium text-gray-500 dark:text-gray-400 capitalize mb-1">
-                          {getMonthLabel(day)}
-                        </div>
-                      )}
-                      {/* Дата и день недели в верху - дата сверху */}
-                      <div className="flex flex-col">
-                        <span className={`${compact ? 'text-xs' : 'text-sm'} font-semibold ${isTodayDay ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'}`}>
-                          {dayNum}
-                        </span>
-                        <span className={`text-xs font-medium ${isTodayDay ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                          {weekday}
-                        </span>
-                      </div>
-                      {/* Рисинки задач - вертикально, на всю ширину */}
-                      {hasTasks && (
-                        <div className="flex flex-col gap-1 mt-1 flex-1">
-                          {dayData.tasks.slice(0, compact ? 3 : 4).map((task) => {
-                            const isPriority = task.priority;
-                            const isMobile = !(compact || isLargeScreen);
+                  {isLargeScreen && hasTasks ? (
+                    <Tooltip
+                      multiline
+                      text={
+                        <div className="flex flex-col gap-1.5 p-1 max-w-[250px]">
+                          {dayData.tasks.map(task => {
+                            const date = task.deadline ? new Date(task.deadline) : null;
+                            const hasTime = date && (date.getHours() !== 0 || date.getMinutes() !== 0);
                             return (
-                              <div
-                                key={task.id}
-                                className={`w-full ${compact ? 'h-[8px]' : isMobile ? 'min-h-[24px] py-1 px-2' : 'h-[12px] sm:h-[10px]'} rounded ${isPriority ? 'ring-1 ring-offset-0' : ''} ${isMobile ? 'flex items-center' : ''}`}
-                                style={{ 
-                                  backgroundColor: 'var(--accent)',
-                                  ...(isPriority && {
-                                    boxShadow: `0 0 0 1px var(--accent)`
-                                  })
-                                }}
-                                title={task.title}
-                              >
-                                {isMobile && (
-                                  <span className="text-[10px] font-medium text-white truncate">
-                                    {task.title}
+                              <div key={task.id} className="flex items-center gap-2 min-w-0">
+                                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: 'var(--accent)' }} />
+                                <span className="truncate flex-1">{task.title}</span>
+                                {hasTime && (
+                                  <span className="text-[10px] opacity-60 flex-shrink-0">
+                                    {date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                                   </span>
                                 )}
                               </div>
                             );
                           })}
-                          {dayData.tasks.length > (compact ? 3 : 4) && (
-                            <div className={`w-full ${compact ? 'h-[8px]' : !(compact || isLargeScreen) ? 'min-h-[24px] py-1 px-2' : 'h-[12px] sm:h-[10px]'} rounded flex items-center justify-center ${compact ? 'text-[8px]' : 'text-xs'} font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300`}>
-                              +{dayData.tasks.length - (compact ? 3 : 4)}
-                            </div>
-                          )}
                         </div>
-                      )}
-                    </div>
-                  </button>
+                      }
+                    >
+                      {dayButton}
+                    </Tooltip>
+                  ) : (
+                    dayButton
+                  )}
                 </div>
               );
             });

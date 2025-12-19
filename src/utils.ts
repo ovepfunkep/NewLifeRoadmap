@@ -206,6 +206,32 @@ export function remapIds(node: Node, existingIds: Set<string>): Node {
   };
 }
 
+// Форматирование дедлайна с временем
+export function formatDeadline(deadline: string | null | undefined): string {
+  if (!deadline) return '';
+  const date = new Date(deadline);
+  const dateStr = date.toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+  });
+  
+  // Проверяем, есть ли время в ISO строке (не 00:00)
+  // В нашем приложении время сохраняется как T00:00:00.000Z если не введено
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  
+  if (hours !== 0 || minutes !== 0) {
+    const timeStr = date.toLocaleTimeString('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    return `${dateStr} ${timeStr}`;
+  }
+  
+  return dateStr;
+}
+
 // Построить хлебные крошки (цепочку родителей)
 export async function buildBreadcrumbs(
   nodeId: string,
