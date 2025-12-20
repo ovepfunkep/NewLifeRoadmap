@@ -3,6 +3,7 @@ import { NodePage } from './pages/NodePage';
 import { SyncManager } from './components/SyncManager';
 import { SettingsSyncManager } from './components/SettingsSyncManager';
 import { Garland } from './components/Garland';
+import { Snowfall } from './components/Snowfall';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { ToastProvider, useToast } from './hooks/useToast';
 import { ToastList } from './components/ToastList';
@@ -22,6 +23,7 @@ function AppContent() {
     <>
       <SettingsSyncManager />
       <Garland />
+      <Snowfall />
       <NodePage />
       <SyncManager />
       <ToastList toasts={toasts} onRemove={removeToast} />
