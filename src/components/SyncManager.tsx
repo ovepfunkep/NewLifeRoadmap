@@ -33,42 +33,38 @@ export function SyncManager() {
   const loadCloudDataSilently = useCallback(async () => {
     // Предотвращаем повторную загрузку, если она уже выполняется
     if (silentLoadInProgressRef.current) {
-      log('Silent load already in progress, skipping');
-      return;
-    }
-
-    // Проверяем, не была ли уже выполнена загрузка в этой сессии
-    const sessionKey = 'syncManager_silentLoadDone';
-    if (sessionStorage.getItem(sessionKey) === 'true') {
-      log('Silent load already done in this session, skipping');
+      log('[loadCloudDataSilently] Already in progress, skipping');
       return;
     }
 
     try {
       silentLoadInProgressRef.current = true;
-      log('Loading cloud data silently (user already logged in)');
+      log('[loadCloudDataSilently] Starting silent load for already logged in user');
       
       // Проверяем наличие интернета перед попыткой загрузки
+      log(`[loadCloudDataSilently] navigator.onLine: ${navigator.onLine}`);
       if (!navigator.onLine) {
-        log('Device is offline, skipping silent load');
-        sessionStorage.setItem(sessionKey, 'true');
+        log('[loadCloudDataSilently] Device is offline, skipping');
         silentLoadInProgressRef.current = false;
         return;
       }
       
       // Сначала проверяем локальные данные
+      log('[loadCloudDataSilently] Loading local nodes...');
       const localNodes = await getAllNodes();
-      log(`Loaded ${localNodes.length} local nodes`);
+      log(`[loadCloudDataSilently] Loaded ${localNodes.length} local nodes`);
       
       // Проверяем наличие данных в облаке с обработкой ошибок сети
       let hasCloudData = false;
       try {
+        log('[loadCloudDataSilently] Checking for cloud data...');
         hasCloudData = await hasDataInFirestore();
+        log(`[loadCloudDataSilently] hasCloudData: ${hasCloudData}`);
       } catch (error: any) {
+        log(`[loadCloudDataSilently] Error checking cloud data:`, error);
         // Если ошибка связана с сетью или офлайн режимом, пропускаем загрузку
         if (error?.code === 'unavailable' || error?.message?.includes('offline') || !navigator.onLine) {
-          log('Network error or offline mode, skipping silent load:', error?.message || error);
-          sessionStorage.setItem(sessionKey, 'true');
+          log('[loadCloudDataSilently] Network error or offline mode, skipping:', error?.message || error);
           silentLoadInProgressRef.current = false;
           return;
         }
@@ -76,83 +72,72 @@ export function SyncManager() {
       }
       
       if (!hasCloudData) {
-        log('No cloud data, skipping silent load');
-        sessionStorage.setItem(sessionKey, 'true');
+        log('[loadCloudDataSilently] No cloud data found, skipping');
         silentLoadInProgressRef.current = false;
         return;
       }
       
       let cloud: any[] = [];
       try {
+        log('[loadCloudDataSilently] Loading cloud nodes...');
         cloud = await loadAllNodesFromFirestore();
+        log(`[loadCloudDataSilently] Loaded ${cloud.length} cloud nodes`);
       } catch (error: any) {
+        log(`[loadCloudDataSilently] Error loading cloud nodes:`, error);
         // Если ошибка связана с сетью или офлайн режимом, пропускаем загрузку
         if (error?.code === 'unavailable' || error?.message?.includes('offline') || !navigator.onLine) {
-          log('Network error or offline mode while loading cloud data, skipping:', error?.message || error);
-          sessionStorage.setItem(sessionKey, 'true');
+          log('[loadCloudDataSilently] Network error while loading, skipping:', error?.message || error);
           silentLoadInProgressRef.current = false;
           return;
         }
         throw error; // Пробрасываем другие ошибки
       }
       
-      log(`Loaded ${cloud.length} cloud nodes`);
-      
       if (cloud.length === 0) {
-        log('No cloud data to load');
-        sessionStorage.setItem(sessionKey, 'true');
+        log('[loadCloudDataSilently] Cloud data is empty, skipping');
         silentLoadInProgressRef.current = false;
         return;
       }
       
       // Сравниваем данные перед загрузкой
+      log('[loadCloudDataSilently] Comparing local and cloud data...');
       const hasDiff = hasDifferences(localNodes, cloud);
+      log(`[loadCloudDataSilently] Data differs: ${hasDiff}`);
       
       // Если данные совпадают, не загружаем и не перезагружаем
       if (!hasDiff) {
-        log('Local and cloud data are identical, no need to reload');
-        sessionStorage.setItem(sessionKey, 'true');
+        log('[loadCloudDataSilently] Local and cloud data are identical, no need to reload');
         silentLoadInProgressRef.current = false;
         return;
       }
       
-      // Вычисляем хеш облачных данных для предотвращения повторной загрузки тех же данных
-      const cloudDataHash = JSON.stringify(cloud.map(n => ({ id: n.id, updatedAt: n.updatedAt }))).slice(0, 100);
-      if (lastSilentLoadHashRef.current === cloudDataHash) {
-        log('Cloud data hash matches last load, skipping to prevent reload loop');
-        sessionStorage.setItem(sessionKey, 'true');
-        silentLoadInProgressRef.current = false;
-        return;
-      }
-      
-      log('Data differs, loading cloud data');
+      log('[loadCloudDataSilently] Data differs, loading cloud data to local DB...');
       
       // Тихо загружаем облачные данные
       let db: Awaited<ReturnType<typeof openDB>> | null = null;
       try {
+        log('[loadCloudDataSilently] Clearing local nodes...');
         await clearAllNodes();
+        
+        log('[loadCloudDataSilently] Opening DB...');
         db = await openDB('LifeRoadmapDB', 2);
         const tx = db.transaction('nodes', 'readwrite');
         
+        log(`[loadCloudDataSilently] Saving ${cloud.length} nodes to local DB...`);
         for (const node of cloud) {
           await tx.store.put(node);
         }
         
         await tx.done;
-        log(`Silently loaded ${cloud.length} nodes from cloud to local DB`);
-        
-        // Сохраняем хеш загруженных данных
-        lastSilentLoadHashRef.current = cloudDataHash;
-        
-        // Помечаем, что загрузка выполнена в этой сессии
-        sessionStorage.setItem(sessionKey, 'true');
+        log(`[loadCloudDataSilently] Successfully loaded ${cloud.length} nodes from cloud to local DB`);
         
         // Перезагружаем страницу для применения изменений
+        log('[loadCloudDataSilently] Reloading page...');
         (window as any).__isProgrammaticReload = true;
         window.location.reload();
       } catch (error) {
-        log('Error silently loading cloud data:', error);
-        console.error('Error silently loading cloud data:', error);
+        log('[loadCloudDataSilently] Error loading cloud data:', error);
+        console.error('[loadCloudDataSilently] Error loading cloud data:', error);
         // При ошибке сбрасываем флаг, чтобы можно было повторить попытку
         silentLoadInProgressRef.current = false;
       } finally {
@@ -165,30 +150,24 @@ export function SyncManager() {
         }
       }
     } catch (error: any) {
-      log('Error in silent cloud load:', error);
-      console.error('Error in silent cloud load:', error);
-      
-      // Если ошибка связана с сетью или офлайн режимом, помечаем как выполненную, чтобы не повторять попытки
-      if (error?.code === 'unavailable' || error?.message?.includes('offline') || !navigator.onLine) {
-        log('Network error detected, marking as done to prevent retry loops');
-        const sessionKey = 'syncManager_silentLoadDone';
-        sessionStorage.setItem(sessionKey, 'true');
-      }
-      
+      log('[loadCloudDataSilently] Error in silent cloud load:', error);
+      console.error('[loadCloudDataSilently] Error in silent cloud load:', error);
       silentLoadInProgressRef.current = false;
     }
   }, []);
 
   const handleFirstSync = useCallback(async (isNewLogin: boolean) => {
     try {
+      log(`[handleFirstSync] Starting sync, isNewLogin: ${isNewLogin}`);
+      
       // Если пользователь уже был залогинен (не новый логин), просто загружаем данные из облака
       if (!isNewLogin) {
-        log('User already logged in, loading cloud data silently');
+        log('[handleFirstSync] User already logged in, loading cloud data silently');
         await loadCloudDataSilently();
         return;
       }
       
-      log('Starting first sync check (new login)');
+      log('[handleFirstSync] New login detected, checking for conflicts');
       
       // Показываем тост о проверке синхронизации только при новом логине
       const checkToastId = showToast(t('toast.syncChecking'), undefined, {
@@ -198,48 +177,64 @@ export function SyncManager() {
       checkToastIdRef.current = checkToastId;
       
       // Делаем снимок локальных данных СРАЗУ, до любых изменений
+      log('[handleFirstSync] Loading local nodes snapshot...');
       const localSnapshot = await getAllNodes();
-      log(`Loaded ${localSnapshot.length} local nodes snapshot`);
+      log(`[handleFirstSync] Loaded ${localSnapshot.length} local nodes`);
       
       // Проверяем наличие данных в облаке
+      log('[handleFirstSync] Checking for cloud data...');
       const hasCloudData = await hasDataInFirestore();
+      log(`[handleFirstSync] hasCloudData: ${hasCloudData}`);
       
       if (hasCloudData) {
-        log('Cloud data exists, loading...');
+        log('[handleFirstSync] Cloud data exists, loading...');
         const cloud = await loadAllNodesFromFirestore();
-        log(`Loaded ${cloud.length} cloud nodes`);
+        log(`[handleFirstSync] Loaded ${cloud.length} cloud nodes`);
         
         // Сравниваем снимок локальных данных с облачными данными
+        log('[handleFirstSync] Comparing local and cloud data...');
         const diff = compareNodes(localSnapshot, cloud);
+        log(`[handleFirstSync] Diff: localOnly=${diff.localOnly.length}, cloudOnly=${diff.cloudOnly.length}, different=${diff.different.length}`);
         
-        // Если в облаке данных больше и локальных изменений нет, тихо загружаем облачные данные
-        if (diff.cloudOnly.length > 0 && diff.localOnly.length === 0 && diff.different.length === 0) {
-          log('Cloud has more data and no local changes, silently loading cloud data');
+        // Показываем конфликт ТОЛЬКО если локальных данных больше чем облачных
+        // И это новый логин
+        const hasLocalMore = diff.localOnly.length > 0 || diff.different.length > 0;
+        const hasCloudMore = diff.cloudOnly.length > 0;
+        
+        log(`[handleFirstSync] hasLocalMore: ${hasLocalMore}, hasCloudMore: ${hasCloudMore}`);
+        
+        // Если в облаке данных больше или равное количество - просто загружаем облачные данные
+        if (hasCloudMore && !hasLocalMore) {
+          log('[handleFirstSync] Cloud has more data and no local changes, loading cloud data');
           // Закрываем тост проверки
           if (checkToastIdRef.current) {
             removeToast(checkToastIdRef.current);
             checkToastIdRef.current = null;
           }
           
-          // Тихо загружаем облачные данные
+          // Загружаем облачные данные
           let db: Awaited<ReturnType<typeof openDB>> | null = null;
           try {
+            log('[handleFirstSync] Clearing local nodes...');
             await clearAllNodes();
+            
+            log('[handleFirstSync] Opening DB...');
             db = await openDB('LifeRoadmapDB', 2);
             const tx = db.transaction('nodes', 'readwrite');
             
+            log(`[handleFirstSync] Saving ${cloud.length} nodes to local DB...`);
             for (const node of cloud) {
               await tx.store.put(node);
             }
             
             await tx.done;
-            log(`Silently loaded ${cloud.length} nodes from cloud to local DB`);
+            log(`[handleFirstSync] Successfully loaded ${cloud.length} nodes from cloud to local DB`);
             // Перезагружаем страницу для применения изменений
             (window as any).__isProgrammaticReload = true;
             window.location.reload();
           } catch (error) {
-            log('Error silently loading cloud data:', error);
-            console.error('Error silently loading cloud data:', error);
+            log('[handleFirstSync] Error loading cloud data:', error);
+            console.error('[handleFirstSync] Error loading cloud data:', error);
           } finally {
             if (db) {
               try {
@@ -253,94 +248,28 @@ export function SyncManager() {
           return;
         }
         
-        if (hasDifferences(localSnapshot, cloud)) {
-          // Если это первая загрузка, даем время на синхронизацию локальных изменений
-          // Не показываем конфликт сразу после загрузки страницы
-          if (isInitialLoadRef.current) {
-            log('Initial load detected, waiting before conflict check');
-            // Ждем 3 секунды перед проверкой конфликтов на первой загрузке
-            setTimeout(async () => {
-              // Повторно проверяем локальные данные после задержки
-              const currentLocal = await getAllNodes();
-              const currentCloud = await loadAllNodesFromFirestore();
-              const currentDiff = compareNodes(currentLocal, currentCloud);
-              
-              // Проверяем, можно ли тихо загрузить облачные данные
-              if (currentDiff.cloudOnly.length > 0 && currentDiff.localOnly.length === 0 && currentDiff.different.length === 0) {
-                log('After delay: cloud has more data and no local changes, silently loading');
-                // Тихо загружаем облачные данные
-                let db: Awaited<ReturnType<typeof openDB>> | null = null;
-                try {
-                  await clearAllNodes();
-                  db = await openDB('LifeRoadmapDB', 2);
-                  const tx = db.transaction('nodes', 'readwrite');
-                  
-                  for (const node of currentCloud) {
-                    await tx.store.put(node);
-                  }
-                  
-                  await tx.done;
-                  log(`Silently loaded ${currentCloud.length} nodes from cloud to local DB`);
-                  (window as any).__isProgrammaticReload = true;
-                  window.location.reload();
-                } catch (error) {
-                  log('Error silently loading cloud data:', error);
-                  console.error('Error silently loading cloud data:', error);
-                } finally {
-                  if (db) {
-                    try {
-                      await db.close();
-                    } catch (closeError) {
-                      console.error('Error closing DB:', closeError);
-                    }
-                  }
-                }
-                if (checkToastIdRef.current) {
-                  removeToast(checkToastIdRef.current);
-                  checkToastIdRef.current = null;
-                }
-              } else if (hasDifferences(currentLocal, currentCloud)) {
-                log('Differences still exist after delay, showing conflict dialog');
-                setLocalNodes(currentLocal);
-                setCloudNodes(currentCloud);
-                setShowConflictDialog(true);
-                // Закрываем тост проверки при показе диалога конфликта
-                if (checkToastIdRef.current) {
-                  removeToast(checkToastIdRef.current);
-                  checkToastIdRef.current = null;
-                }
-              } else {
-                log('Differences resolved during delay, no conflict');
-                // Закрываем тост проверки, если конфликтов нет
-                if (checkToastIdRef.current) {
-                  removeToast(checkToastIdRef.current);
-                  checkToastIdRef.current = null;
-                }
-              }
-              isInitialLoadRef.current = false;
-            }, 3000);
-          } else {
-            log('Differences detected, showing conflict dialog');
-            setLocalNodes(localSnapshot);
-            setCloudNodes(cloud);
-            setShowConflictDialog(true);
-            // Закрываем тост проверки при показе диалога конфликта
-            if (checkToastIdRef.current) {
-              removeToast(checkToastIdRef.current);
-              checkToastIdRef.current = null;
-            }
+        // Показываем конфликт только если локальных данных больше
+        if (hasLocalMore) {
+          log('[handleFirstSync] Local has more data, showing conflict dialog');
+          setLocalNodes(localSnapshot);
+          setCloudNodes(cloud);
+          setShowConflictDialog(true);
+          // Закрываем тост проверки при показе диалога конфликта
+          if (checkToastIdRef.current) {
+            removeToast(checkToastIdRef.current);
+            checkToastIdRef.current = null;
           }
         } else {
-          log('No differences, data is in sync');
+          log('[handleFirstSync] No differences or cloud has more data, data is in sync');
           // Закрываем тост проверки, если конфликтов нет
           if (checkToastIdRef.current) {
             removeToast(checkToastIdRef.current);
             checkToastIdRef.current = null;
           }
-          isInitialLoadRef.current = false;
         }
+        isInitialLoadRef.current = false;
       } else {
-        log('No cloud data, skipping conflict check');
+        log('[handleFirstSync] No cloud data, skipping conflict check');
         // Закрываем тост проверки, если данных в облаке нет
         if (checkToastIdRef.current) {
           removeToast(checkToastIdRef.current);
@@ -349,8 +278,8 @@ export function SyncManager() {
         isInitialLoadRef.current = false;
       }
     } catch (error) {
-      log('Error in first sync:', error);
-      console.error('Sync error:', error);
+      log('[handleFirstSync] Error in first sync:', error);
+      console.error('[handleFirstSync] Sync error:', error);
       // Закрываем тост проверки при ошибке
       if (checkToastIdRef.current) {
         removeToast(checkToastIdRef.current);
@@ -361,16 +290,25 @@ export function SyncManager() {
   }, [showToast, removeToast, loadCloudDataSilently]);
 
   useEffect(() => {
-    log('Initializing sync manager');
+    log('[useEffect] Initializing sync manager');
+    log(`[useEffect] isFirstAuthCheckRef.current: ${isFirstAuthCheckRef.current}`);
+    log(`[useEffect] previousUserRef.current: ${previousUserRef.current ? 'exists' : 'null'}`);
+    log(`[useEffect] __isProgrammaticReload: ${(window as any).__isProgrammaticReload}`);
     
     // Очищаем флаг сессии при монтировании компонента (новая сессия браузера)
     // Но не очищаем при программной перезагрузке страницы
     if (!(window as any).__isProgrammaticReload) {
-      sessionStorage.removeItem('syncManager_silentLoadDone');
+      log('[useEffect] Not a programmatic reload, clearing session flags');
       lastSilentLoadHashRef.current = null;
+    } else {
+      log('[useEffect] Programmatic reload detected, keeping session flags');
     }
     
     const unsubscribe = onAuthChange(async (user) => {
+      log(`[onAuthChange] Auth state changed, user: ${user ? `exists (${user.uid})` : 'null'}`);
+      log(`[onAuthChange] isFirstAuthCheckRef.current: ${isFirstAuthCheckRef.current}`);
+      log(`[onAuthChange] previousUserRef.current: ${previousUserRef.current ? 'exists' : 'null'}`);
+      
       if (user) {
         // Определяем, это новый логин или пользователь уже был залогинен
         // Если это первый вызов и пользователь уже залогинен - это не новый логин
@@ -379,13 +317,13 @@ export function SyncManager() {
           ? false // При первой проверке пользователь уже был залогинен при загрузке страницы
           : previousUserRef.current === null; // Если предыдущего пользователя не было - это новый логин
         
-        log(`User signed in, isNewLogin: ${isNewLogin}`);
+        log(`[onAuthChange] User signed in, isNewLogin: ${isNewLogin}`);
         previousUserRef.current = user;
         isFirstAuthCheckRef.current = false;
         
         await handleFirstSync(isNewLogin);
       } else {
-        log('User signed out or not logged in');
+        log('[onAuthChange] User signed out or not logged in');
         // При первом вызове, если пользователь не залогинен, устанавливаем previousUserRef в null
         if (isFirstAuthCheckRef.current) {
           previousUserRef.current = null;
@@ -395,14 +333,13 @@ export function SyncManager() {
         }
         // Сбрасываем флаги при выходе
         silentLoadInProgressRef.current = false;
-        sessionStorage.removeItem('syncManager_silentLoadDone');
         lastSilentLoadHashRef.current = null;
         setShowConflictDialog(false);
       }
     });
 
     return () => {
-      log('Cleaning up sync manager');
+      log('[useEffect] Cleaning up sync manager');
       unsubscribe();
     };
   }, [handleFirstSync]);
