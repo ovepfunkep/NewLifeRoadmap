@@ -106,7 +106,6 @@ export function SyncManager() {
       }
       
       // Сравниваем данные перед загрузкой
-      const diff = compareNodes(localNodes, cloud);
       const hasDiff = hasDifferences(localNodes, cloud);
       
       // Если данные совпадают, не загружаем и не перезагружаем
