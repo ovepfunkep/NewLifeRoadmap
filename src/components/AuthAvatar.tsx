@@ -102,15 +102,13 @@ export function AuthAvatar() {
               </div>
             )}
             {isHovered && (
-              <Tooltip text={t('tooltip.signOut')}>
-                <button
-                  onClick={handleSignOut}
-                  className="absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity z-10"
-                  style={{ transform: 'translateY(-10px)' }}
-                >
-                  <FiLogOut className="w-3 h-3 text-white" />
-                </button>
-              </Tooltip>
+              <button
+                onClick={handleSignOut}
+                className="absolute inset-0 bg-black/60 flex items-center justify-center transition-all z-10"
+                aria-label={t('tooltip.signOut')}
+              >
+                <FiLogOut className="w-6 h-6 text-white" />
+              </button>
             )}
           </div>
         </Tooltip>
