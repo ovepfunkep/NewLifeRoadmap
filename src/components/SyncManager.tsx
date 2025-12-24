@@ -17,6 +17,15 @@ function log(message: string, ...args: any[]) {
   }
 }
 
+// Событие для уведомления об обновлении данных
+const DATA_UPDATED_EVENT = 'syncManager:dataUpdated';
+
+// Функция для отправки события об обновлении данных
+function notifyDataUpdated() {
+  log('Notifying components about data update');
+  window.dispatchEvent(new CustomEvent(DATA_UPDATED_EVENT));
+}
+
 export function SyncManager() {
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [localNodes, setLocalNodes] = useState<any[]>([]);
@@ -131,10 +140,10 @@ export function SyncManager() {
         await tx.done;
         log(`[loadCloudDataSilently] Successfully loaded ${cloud.length} nodes from cloud to local DB`);
         
-        // Перезагружаем страницу для применения изменений
-        log('[loadCloudDataSilently] Reloading page...');
-        (window as any).__isProgrammaticReload = true;
-        window.location.reload();
+        // Уведомляем компоненты об обновлении данных вместо перезагрузки страницы
+        log('[loadCloudDataSilently] Notifying components about data update...');
+        notifyDataUpdated();
+        silentLoadInProgressRef.current = false;
       } catch (error) {
         log('[loadCloudDataSilently] Error loading cloud data:', error);
         console.error('[loadCloudDataSilently] Error loading cloud data:', error);
@@ -229,9 +238,9 @@ export function SyncManager() {
             
             await tx.done;
             log(`[handleFirstSync] Successfully loaded ${cloud.length} nodes from cloud to local DB`);
-            // Перезагружаем страницу для применения изменений
-            (window as any).__isProgrammaticReload = true;
-            window.location.reload();
+            // Уведомляем компоненты об обновлении данных вместо перезагрузки страницы
+            log('[handleFirstSync] Notifying components about data update...');
+            notifyDataUpdated();
           } catch (error) {
             log('[handleFirstSync] Error loading cloud data:', error);
             console.error('[handleFirstSync] Error loading cloud data:', error);
@@ -390,8 +399,8 @@ export function SyncManager() {
       log(`Loaded ${cloudNodes.length} nodes from cloud to local DB`);
       setShowConflictDialog(false);
       showToast('Облачные данные загружены');
-      // Перезагружаем страницу для применения изменений
-      window.location.reload();
+      // Уведомляем компоненты об обновлении данных вместо перезагрузки страницы
+      notifyDataUpdated();
     } catch (error) {
       log('Error loading cloud data:', error);
       console.error('Error loading cloud data:', error);

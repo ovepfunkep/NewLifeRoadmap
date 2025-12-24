@@ -258,97 +258,93 @@ export function NodePage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentNode, showEditor, showImportExport, showMoveModal, navigateToNode, breadcrumbs, getVisibleSteps, handleCreateChild]);
 
-  // Загрузка узла
-  useEffect(() => {
-    let cancelled = false;
-    
-    const loadNode = async () => {
-      setLoading(true);
-      try {
-        await initDB();
+  // Функция загрузки узла (вынесена для переиспользования)
+  const loadNode = useCallback(async (targetNodeId?: string) => {
+    setLoading(true);
+    try {
+      await initDB();
+      
+      const targetId = targetNodeId || nodeId || 'root-node';
+      let node = await getNode(targetId);
+      
+      // Если узел не найден и это не root-node, пытаемся загрузить root-node
+      if (!node && targetId !== 'root-node') {
+        node = await getNode('root-node');
         
-        const targetId = nodeId || 'root-node';
-        let node = await getNode(targetId);
-        
-        if (cancelled) return;
-        
-        // Если узел не найден и это не root-node, пытаемся загрузить root-node
-        if (!node && targetId !== 'root-node') {
-          node = await getNode('root-node');
-          if (cancelled) return;
-          
-          if (node) {
-            navigateToNode('root-node');
-            setLoading(false);
-            return;
-          }
-        }
-        
-        // Если root-node не найден, создаём его
-        if (!node && targetId === 'root-node') {
-          // Пытаемся получить root через getRoot, который создаст его если нужно
-          try {
-            node = await getRoot();
-          } catch (error) {
-            console.error('Error getting root:', error);
-            if (cancelled) return;
-            
-            // Если и это не помогло, создаём корневой узел вручную
-            const rootNode: Node = {
-              id: 'root-node',
-              parentId: null,
-              title: 'Ваши Life Roadmaps',
-              completed: false,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              children: [],
-            };
-            await saveNode(rootNode);
-            node = rootNode;
-          }
-        }
-        
-        if (cancelled) return;
-        
-        if (!node) {
-          console.error('Failed to load or create root node');
-          showToast('Ошибка загрузки задачи');
+        if (node) {
+          navigateToNode('root-node');
           setLoading(false);
           return;
         }
-        
-        setCurrentNode(node);
-        
+      }
+      
+      // Если root-node не найден, создаём его
+      if (!node && targetId === 'root-node') {
+        // Пытаемся получить root через getRoot, который создаст его если нужно
         try {
-          const crumbs = await buildBreadcrumbs(targetId, getNode);
+          node = await getRoot();
+        } catch (error) {
+          console.error('Error getting root:', error);
           
-          if (cancelled) return;
-          
-          setBreadcrumbs(crumbs);
-        } catch (breadcrumbError) {
-          console.error('Error building breadcrumbs:', breadcrumbError);
-          // Устанавливаем пустые breadcrumbs, чтобы не блокировать загрузку
-          setBreadcrumbs([]);
-        }
-      } catch (error) {
-        console.error('Error loading node:', error);
-        if (!cancelled) {
-          showToast('Ошибка загрузки задачи');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
+          // Если и это не помогло, создаём корневой узел вручную
+          const rootNode: Node = {
+            id: 'root-node',
+            parentId: null,
+            title: 'Ваши Life Roadmaps',
+            completed: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            children: [],
+          };
+          await saveNode(rootNode);
+          node = rootNode;
         }
       }
-    };
-    
+      
+      if (!node) {
+        console.error('Failed to load or create root node');
+        showToast('Ошибка загрузки задачи');
+        setLoading(false);
+        return;
+      }
+      
+      setCurrentNode(node);
+      
+      try {
+        const crumbs = await buildBreadcrumbs(targetId, getNode);
+        setBreadcrumbs(crumbs);
+      } catch (breadcrumbError) {
+        console.error('Error building breadcrumbs:', breadcrumbError);
+        // Устанавливаем пустые breadcrumbs, чтобы не блокировать загрузку
+        setBreadcrumbs([]);
+      }
+    } catch (error) {
+      console.error('Error loading node:', error);
+      showToast('Ошибка загрузки задачи');
+    } finally {
+      setLoading(false);
+    }
+  }, [nodeId, navigateToNode, showToast]);
+
+  // Загрузка узла при изменении nodeId
+  useEffect(() => {
     loadNode();
-    
-    return () => {
-      cancelled = true;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId]);
+
+  // Слушатель события обновления данных из облака
+  useEffect(() => {
+    const handleDataUpdated = () => {
+      console.log('[NodePage] Data updated event received, reloading current node...');
+      loadNode();
+    };
+
+    window.addEventListener('syncManager:dataUpdated', handleDataUpdated);
+
+    return () => {
+      window.removeEventListener('syncManager:dataUpdated', handleDataUpdated);
+    };
+  }, [loadNode]);
 
   const handleMarkCompleted = async (id: string, completed: boolean) => {
     if (!currentNode) return;
