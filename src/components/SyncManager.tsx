@@ -26,18 +26,69 @@ export function SyncManager() {
   const checkToastIdRef = useRef<string | null>(null); // Ref для ID тоста проверки
   const previousUserRef = useRef<User | null>(null); // Отслеживание предыдущего состояния пользователя
   const isFirstAuthCheckRef = useRef<boolean>(true); // Флаг первого вызова onAuthChange
+  const silentLoadInProgressRef = useRef<boolean>(false); // Флаг, что тихая загрузка уже выполняется
+  const lastSilentLoadHashRef = useRef<string | null>(null); // Хеш последних загруженных данных для предотвращения повторной загрузки
 
   // Автоматическая загрузка данных из облака без проверки конфликтов
   const loadCloudDataSilently = useCallback(async () => {
+    // Предотвращаем повторную загрузку, если она уже выполняется
+    if (silentLoadInProgressRef.current) {
+      log('Silent load already in progress, skipping');
+      return;
+    }
+
+    // Проверяем, не была ли уже выполнена загрузка в этой сессии
+    const sessionKey = 'syncManager_silentLoadDone';
+    if (sessionStorage.getItem(sessionKey) === 'true') {
+      log('Silent load already done in this session, skipping');
+      return;
+    }
+
     try {
+      silentLoadInProgressRef.current = true;
       log('Loading cloud data silently (user already logged in)');
+      
+      // Сначала проверяем локальные данные
+      const localNodes = await getAllNodes();
+      log(`Loaded ${localNodes.length} local nodes`);
+      
+      // Проверяем наличие данных в облаке
+      const hasCloudData = await hasDataInFirestore();
+      if (!hasCloudData) {
+        log('No cloud data, skipping silent load');
+        sessionStorage.setItem(sessionKey, 'true');
+        return;
+      }
+      
       const cloud = await loadAllNodesFromFirestore();
       log(`Loaded ${cloud.length} cloud nodes`);
       
       if (cloud.length === 0) {
         log('No cloud data to load');
+        sessionStorage.setItem(sessionKey, 'true');
         return;
       }
+      
+      // Сравниваем данные перед загрузкой
+      const diff = compareNodes(localNodes, cloud);
+      const hasDiff = hasDifferences(localNodes, cloud);
+      
+      // Если данные совпадают, не загружаем и не перезагружаем
+      if (!hasDiff) {
+        log('Local and cloud data are identical, no need to reload');
+        sessionStorage.setItem(sessionKey, 'true');
+        return;
+      }
+      
+      // Вычисляем хеш облачных данных для предотвращения повторной загрузки тех же данных
+      const cloudDataHash = JSON.stringify(cloud.map(n => ({ id: n.id, updatedAt: n.updatedAt }))).slice(0, 100);
+      if (lastSilentLoadHashRef.current === cloudDataHash) {
+        log('Cloud data hash matches last load, skipping to prevent reload loop');
+        sessionStorage.setItem(sessionKey, 'true');
+        return;
+      }
+      
+      log('Data differs, loading cloud data');
       
       // Тихо загружаем облачные данные
       let db: Awaited<ReturnType<typeof openDB>> | null = null;
@@ -52,12 +103,21 @@ export function SyncManager() {
         
         await tx.done;
         log(`Silently loaded ${cloud.length} nodes from cloud to local DB`);
+        
+        // Сохраняем хеш загруженных данных
+        lastSilentLoadHashRef.current = cloudDataHash;
+        
+        // Помечаем, что загрузка выполнена в этой сессии
+        sessionStorage.setItem(sessionKey, 'true');
+        
         // Перезагружаем страницу для применения изменений
         (window as any).__isProgrammaticReload = true;
         window.location.reload();
       } catch (error) {
         log('Error silently loading cloud data:', error);
         console.error('Error silently loading cloud data:', error);
+        // При ошибке сбрасываем флаг, чтобы можно было повторить попытку
+        silentLoadInProgressRef.current = false;
       } finally {
         if (db) {
           try {
@@ -70,6 +130,7 @@ export function SyncManager() {
     } catch (error) {
       log('Error in silent cloud load:', error);
       console.error('Error in silent cloud load:', error);
+      silentLoadInProgressRef.current = false;
     }
   }, []);
 
@@ -257,6 +318,13 @@ export function SyncManager() {
   useEffect(() => {
     log('Initializing sync manager');
     
+    // Очищаем флаг сессии при монтировании компонента (новая сессия браузера)
+    // Но не очищаем при программной перезагрузке страницы
+    if (!(window as any).__isProgrammaticReload) {
+      sessionStorage.removeItem('syncManager_silentLoadDone');
+      lastSilentLoadHashRef.current = null;
+    }
+    
     const unsubscribe = onAuthChange(async (user) => {
       if (user) {
         // Определяем, это новый логин или пользователь уже был залогинен
@@ -280,6 +348,10 @@ export function SyncManager() {
         } else {
           previousUserRef.current = null;
         }
+        // Сбрасываем флаги при выходе
+        silentLoadInProgressRef.current = false;
+        sessionStorage.removeItem('syncManager_silentLoadDone');
+        lastSilentLoadHashRef.current = null;
         setShowConflictDialog(false);
       }
     });
