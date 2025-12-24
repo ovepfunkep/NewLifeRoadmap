@@ -7,6 +7,7 @@ import { hasDifferences, compareNodes } from '../utils/syncCompare';
 import { useToast } from '../hooks/useToast';
 import { t } from '../i18n';
 import { openDB } from 'idb';
+import { User } from 'firebase/auth';
 
 const isDev = import.meta.env.DEV;
 
@@ -23,12 +24,67 @@ export function SyncManager() {
   const { showToast, removeToast } = useToast();
   const isInitialLoadRef = useRef<boolean>(true); // Флаг первой загрузки
   const checkToastIdRef = useRef<string | null>(null); // Ref для ID тоста проверки
+  const previousUserRef = useRef<User | null>(null); // Отслеживание предыдущего состояния пользователя
+  const isFirstAuthCheckRef = useRef<boolean>(true); // Флаг первого вызова onAuthChange
 
-  const handleFirstSync = useCallback(async () => {
+  // Автоматическая загрузка данных из облака без проверки конфликтов
+  const loadCloudDataSilently = useCallback(async () => {
     try {
-      log('Starting first sync check');
+      log('Loading cloud data silently (user already logged in)');
+      const cloud = await loadAllNodesFromFirestore();
+      log(`Loaded ${cloud.length} cloud nodes`);
       
-      // Показываем тост о проверке синхронизации
+      if (cloud.length === 0) {
+        log('No cloud data to load');
+        return;
+      }
+      
+      // Тихо загружаем облачные данные
+      let db: Awaited<ReturnType<typeof openDB>> | null = null;
+      try {
+        await clearAllNodes();
+        db = await openDB('LifeRoadmapDB', 2);
+        const tx = db.transaction('nodes', 'readwrite');
+        
+        for (const node of cloud) {
+          await tx.store.put(node);
+        }
+        
+        await tx.done;
+        log(`Silently loaded ${cloud.length} nodes from cloud to local DB`);
+        // Перезагружаем страницу для применения изменений
+        (window as any).__isProgrammaticReload = true;
+        window.location.reload();
+      } catch (error) {
+        log('Error silently loading cloud data:', error);
+        console.error('Error silently loading cloud data:', error);
+      } finally {
+        if (db) {
+          try {
+            await db.close();
+          } catch (closeError) {
+            console.error('Error closing DB:', closeError);
+          }
+        }
+      }
+    } catch (error) {
+      log('Error in silent cloud load:', error);
+      console.error('Error in silent cloud load:', error);
+    }
+  }, []);
+
+  const handleFirstSync = useCallback(async (isNewLogin: boolean) => {
+    try {
+      // Если пользователь уже был залогинен (не новый логин), просто загружаем данные из облака
+      if (!isNewLogin) {
+        log('User already logged in, loading cloud data silently');
+        await loadCloudDataSilently();
+        return;
+      }
+      
+      log('Starting first sync check (new login)');
+      
+      // Показываем тост о проверке синхронизации только при новом логине
       const checkToastId = showToast(t('toast.syncChecking'), undefined, {
         isLoading: true,
         persistent: true
@@ -196,17 +252,34 @@ export function SyncManager() {
       }
       isInitialLoadRef.current = false;
     }
-  }, [showToast, removeToast]);
+  }, [showToast, removeToast, loadCloudDataSilently]);
 
   useEffect(() => {
     log('Initializing sync manager');
     
     const unsubscribe = onAuthChange(async (user) => {
       if (user) {
-        log('User signed in, checking sync status');
-        await handleFirstSync();
+        // Определяем, это новый логин или пользователь уже был залогинен
+        // Если это первый вызов и пользователь уже залогинен - это не новый логин
+        // Если предыдущего пользователя не было (null) - это новый логин
+        const isNewLogin = isFirstAuthCheckRef.current 
+          ? false // При первой проверке пользователь уже был залогинен при загрузке страницы
+          : previousUserRef.current === null; // Если предыдущего пользователя не было - это новый логин
+        
+        log(`User signed in, isNewLogin: ${isNewLogin}`);
+        previousUserRef.current = user;
+        isFirstAuthCheckRef.current = false;
+        
+        await handleFirstSync(isNewLogin);
       } else {
-        log('User signed out');
+        log('User signed out or not logged in');
+        // При первом вызове, если пользователь не залогинен, устанавливаем previousUserRef в null
+        if (isFirstAuthCheckRef.current) {
+          previousUserRef.current = null;
+          isFirstAuthCheckRef.current = false;
+        } else {
+          previousUserRef.current = null;
+        }
         setShowConflictDialog(false);
       }
     });
