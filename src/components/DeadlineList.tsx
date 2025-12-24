@@ -95,10 +95,35 @@ export function DeadlineList({ node, onNavigate, onCreateTask }: DeadlineListPro
   const [deadlinesWithBreadcrumbs, setDeadlinesWithBreadcrumbs] = useState<Array<{ node: Node; breadcrumbs: Node[] }>>([]);
   const [selectedDay, setSelectedDay] = useState<{ date: Date; tasks: Node[] } | null>(null);
   const [groupedDeadlines, setGroupedDeadlines] = useState<Node[]>([]);
+  const [allDeadlines, setAllDeadlines] = useState<Node[]>([]); // Все задачи с дедлайнами для календаря
 
   useEffect(() => {
     const grouped = groupDeadlines(node);
     setGroupedDeadlines(grouped);
+    
+    // Для календаря собираем ВСЕ задачи с дедлайнами (незавершенные)
+    const allTasksWithDeadlines: Node[] = [];
+    
+    // Добавляем сам узел, если у него есть дедлайн
+    if (node.deadline && !node.completed) {
+      allTasksWithDeadlines.push(node);
+    }
+    
+    // Собираем все дедлайны из поддерева
+    const subtreeDeadlines = collectDeadlines(node).filter(dl => !dl.completed && dl.deadline);
+    allTasksWithDeadlines.push(...subtreeDeadlines);
+    
+    // Убираем дубликаты по ID
+    const seenIds = new Set<string>();
+    const uniqueDeadlines = allTasksWithDeadlines.filter(task => {
+      if (seenIds.has(task.id)) {
+        return false;
+      }
+      seenIds.add(task.id);
+      return true;
+    });
+    
+    setAllDeadlines(uniqueDeadlines);
   }, [node]);
 
   useEffect(() => {
@@ -273,7 +298,7 @@ export function DeadlineList({ node, onNavigate, onCreateTask }: DeadlineListPro
           >
             <CalendarView
               node={node}
-              deadlines={groupedDeadlines}
+              deadlines={allDeadlines}
               onNavigate={onNavigate}
               onDayClick={handleDayClick}
               onCreateTask={onCreateTask}

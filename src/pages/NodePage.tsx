@@ -959,9 +959,18 @@ export function NodePage() {
       subtitle: t('toast.syncingCloud')
     });
     
-    // Синхронизируем все узлы с облаком асинхронно
+    // Синхронизируем все узлы с облаком асинхронно (только если пользователь залогинен)
     (async () => {
       try {
+        const { getCurrentUser } = await import('../firebase/auth');
+        const user = getCurrentUser();
+        
+        if (!user) {
+          // Пользователь не залогинен, закрываем тост без синхронизации
+          removeToast(syncToastId);
+          return;
+        }
+        
         const { getAllNodes } = await import('../db');
         const { syncAllNodesToFirestore } = await import('../firebase/sync');
         const allNodes = await getAllNodes();

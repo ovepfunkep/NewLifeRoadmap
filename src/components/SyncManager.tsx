@@ -355,7 +355,18 @@ export function SyncManager() {
 
   const handleChooseLocal = async () => {
     try {
-      log('User chose local data, syncing to cloud');
+      log('[handleChooseLocal] User chose local data, syncing to cloud');
+      
+      // Проверяем авторизацию перед синхронизацией
+      const { getCurrentUser } = await import('../firebase/auth');
+      const user = getCurrentUser();
+      if (!user) {
+        log('[handleChooseLocal] User not authenticated, cannot sync');
+        setShowConflictDialog(false);
+        showToast('Необходимо войти в аккаунт для синхронизации');
+        return;
+      }
+      
       setShowConflictDialog(false);
       showToast('Синхронизация с облаком...');
       
@@ -364,16 +375,16 @@ export function SyncManager() {
         try {
           await syncAllNodesToFirestore(localNodes);
           showToast('Локальные данные сохранены в облако');
-          log('Local data synced to cloud');
+          log('[handleChooseLocal] Local data synced to cloud');
         } catch (error) {
-          log('Error syncing local data:', error);
-          console.error('Error syncing local data:', error);
+          log('[handleChooseLocal] Error syncing local data:', error);
+          console.error('[handleChooseLocal] Error syncing local data:', error);
           showToast('Ошибка синхронизации');
         }
       })();
     } catch (error) {
-      log('Error in handleChooseLocal:', error);
-      console.error('Error in handleChooseLocal:', error);
+      log('[handleChooseLocal] Error in handleChooseLocal:', error);
+      console.error('[handleChooseLocal] Error in handleChooseLocal:', error);
       showToast('Ошибка синхронизации');
     }
   };
