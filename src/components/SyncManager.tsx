@@ -48,24 +48,60 @@ export function SyncManager() {
       silentLoadInProgressRef.current = true;
       log('Loading cloud data silently (user already logged in)');
       
+      // Проверяем наличие интернета перед попыткой загрузки
+      if (!navigator.onLine) {
+        log('Device is offline, skipping silent load');
+        sessionStorage.setItem(sessionKey, 'true');
+        silentLoadInProgressRef.current = false;
+        return;
+      }
+      
       // Сначала проверяем локальные данные
       const localNodes = await getAllNodes();
       log(`Loaded ${localNodes.length} local nodes`);
       
-      // Проверяем наличие данных в облаке
-      const hasCloudData = await hasDataInFirestore();
+      // Проверяем наличие данных в облаке с обработкой ошибок сети
+      let hasCloudData = false;
+      try {
+        hasCloudData = await hasDataInFirestore();
+      } catch (error: any) {
+        // Если ошибка связана с сетью или офлайн режимом, пропускаем загрузку
+        if (error?.code === 'unavailable' || error?.message?.includes('offline') || !navigator.onLine) {
+          log('Network error or offline mode, skipping silent load:', error?.message || error);
+          sessionStorage.setItem(sessionKey, 'true');
+          silentLoadInProgressRef.current = false;
+          return;
+        }
+        throw error; // Пробрасываем другие ошибки
+      }
+      
       if (!hasCloudData) {
         log('No cloud data, skipping silent load');
         sessionStorage.setItem(sessionKey, 'true');
+        silentLoadInProgressRef.current = false;
         return;
       }
       
-      const cloud = await loadAllNodesFromFirestore();
+      let cloud: any[] = [];
+      try {
+        cloud = await loadAllNodesFromFirestore();
+      } catch (error: any) {
+        // Если ошибка связана с сетью или офлайн режимом, пропускаем загрузку
+        if (error?.code === 'unavailable' || error?.message?.includes('offline') || !navigator.onLine) {
+          log('Network error or offline mode while loading cloud data, skipping:', error?.message || error);
+          sessionStorage.setItem(sessionKey, 'true');
+          silentLoadInProgressRef.current = false;
+          return;
+        }
+        throw error; // Пробрасываем другие ошибки
+      }
+      
       log(`Loaded ${cloud.length} cloud nodes`);
       
       if (cloud.length === 0) {
         log('No cloud data to load');
         sessionStorage.setItem(sessionKey, 'true');
+        silentLoadInProgressRef.current = false;
         return;
       }
       
@@ -77,6 +113,7 @@ export function SyncManager() {
       if (!hasDiff) {
         log('Local and cloud data are identical, no need to reload');
         sessionStorage.setItem(sessionKey, 'true');
+        silentLoadInProgressRef.current = false;
         return;
       }
       
@@ -85,6 +122,7 @@ export function SyncManager() {
       if (lastSilentLoadHashRef.current === cloudDataHash) {
         log('Cloud data hash matches last load, skipping to prevent reload loop');
         sessionStorage.setItem(sessionKey, 'true');
+        silentLoadInProgressRef.current = false;
         return;
       }
       
@@ -127,9 +165,17 @@ export function SyncManager() {
           }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       log('Error in silent cloud load:', error);
       console.error('Error in silent cloud load:', error);
+      
+      // Если ошибка связана с сетью или офлайн режимом, помечаем как выполненную, чтобы не повторять попытки
+      if (error?.code === 'unavailable' || error?.message?.includes('offline') || !navigator.onLine) {
+        log('Network error detected, marking as done to prevent retry loops');
+        const sessionKey = 'syncManager_silentLoadDone';
+        sessionStorage.setItem(sessionKey, 'true');
+      }
+      
       silentLoadInProgressRef.current = false;
     }
   }, []);
