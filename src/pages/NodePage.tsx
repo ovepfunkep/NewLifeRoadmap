@@ -15,6 +15,7 @@ import { MoveModal } from '../components/MoveModal';
 import { SettingsWidget } from '../components/SettingsWidget';
 import { Footer } from '../components/Footer';
 import { ConfettiEffect } from '../components/ConfettiEffect';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 type SortType = 'none' | 'name' | 'deadline';
 
@@ -32,6 +33,7 @@ export function NodePage() {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [draggedNode, setDraggedNode] = useState<Node | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
+  const [nodeToDeleteId, setNodeToDeleteId] = useState<string | null>(null);
   const { showToast, updateToast, removeToast } = useToast();
   const { effectsEnabled } = useEffects();
 
@@ -217,11 +219,39 @@ export function NodePage() {
         return;
       }
 
-      // R - редактировать текущую мапу (используем code для независимости от раскладки)
-      if (e.code === 'KeyR' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && currentNode) {
+      // E - редактировать текущую мапу
+      if (e.code === 'KeyE' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && currentNode) {
         e.preventDefault();
         setEditingNode(currentNode);
         setShowEditor(true);
+        return;
+      }
+
+      // M - переместить
+      if (e.code === 'KeyM' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && currentNode && currentNode.id !== 'root-node') {
+        e.preventDefault();
+        setShowMoveModal(true);
+        return;
+      }
+
+      // I - импорт
+      if (e.code === 'KeyI' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        setShowImportExport(true);
+        return;
+      }
+
+      // D - удалить
+      if (e.code === 'KeyD' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && currentNode && currentNode.id !== 'root-node') {
+        e.preventDefault();
+        handleDelete(currentNode.id);
+        return;
+      }
+
+      // Enter - выполнить
+      if (e.key === 'Enter' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && currentNode && currentNode.id !== 'root-node') {
+        e.preventDefault();
+        handleMarkCompleted(currentNode.id, !currentNode.completed);
         return;
       }
 
@@ -529,7 +559,12 @@ export function NodePage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
+    setNodeToDeleteId(id);
+  };
+
+  const executeDelete = async (id: string) => {
+    setNodeToDeleteId(null);
     const nodeToDelete = currentNode?.children.find(c => c.id === id) || currentNode;
     if (!nodeToDelete) return;
     
@@ -1087,6 +1122,16 @@ export function NodePage() {
           sourceNodeId={currentNode.id}
           onMove={handleMoveNode}
           onClose={() => setShowMoveModal(false)}
+        />
+      )}
+      
+      {nodeToDeleteId && (
+        <ConfirmDialog
+          title={t('general.delete')}
+          message={t('node.deleteConfirm')}
+          onConfirm={() => executeDelete(nodeToDeleteId)}
+          onCancel={() => setNodeToDeleteId(null)}
+          isDangerous={true}
         />
       )}
       

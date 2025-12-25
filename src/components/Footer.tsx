@@ -47,14 +47,21 @@ export function Footer() {
             </Tooltip>
           </div>
           {!isMobile && (
-            <div className="flex items-center gap-4">
-              <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+            <div className="flex items-center gap-6">
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
                 <div>{t('keyboard.esc')}</div>
                 <div>{t('keyboard.addStep')}</div>
                 <div>{t('keyboard.edit')}</div>
               </div>
-              <div className="w-px h-3 bg-gray-300 dark:bg-gray-600 self-center"></div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 self-center"></div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
+                <div>{t('keyboard.move')}</div>
+                <div>{t('keyboard.import')}</div>
+                <div>{t('keyboard.delete')}</div>
+              </div>
+              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 self-center"></div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
+                <div>{t('keyboard.complete')}</div>
                 <div>{t('keyboard.crtlNumber')}</div>
                 <div>{t('keyboard.number')}</div>
               </div>
