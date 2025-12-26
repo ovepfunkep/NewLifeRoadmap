@@ -51,49 +51,53 @@ export function SettingsSyncManager() {
           (cloudSettings.effectsEnabled !== undefined && cloudSettings.effectsEnabled !== effectsEnabled);
         
         if (hasChanges) {
-          log('Settings differ from local, applying and reloading');
-          loadedUserIdRef.current = user.uid; // Помечаем, что настройки загружены для этого пользователя
+          log('Settings differ from local, applying');
+          loadedUserIdRef.current = user.uid;
           
-          // Применяем настройки из облака
-          if (cloudSettings.theme && cloudSettings.theme !== theme) {
-            log('Applying theme from cloud:', cloudSettings.theme);
-            setTheme(cloudSettings.theme);
+          // Устанавливаем флаг, чтобы не отправлять эти же настройки обратно в облако
+          (window as any).__isApplyingCloudSettings = true;
+          
+          try {
+            // Применяем настройки из облака БЕЗ перезагрузки страницы
+            if (cloudSettings.theme && cloudSettings.theme !== theme) {
+              log('Applying theme from cloud:', cloudSettings.theme);
+              setTheme(cloudSettings.theme);
+            }
+            
+            if (cloudSettings.accent && cloudSettings.accent !== accent) {
+              log('Applying accent from cloud:', cloudSettings.accent);
+              setAccent(cloudSettings.accent);
+            }
+            
+            if (cloudSettings.language && cloudSettings.language !== language) {
+              log('Applying language from cloud:', cloudSettings.language);
+              setLanguage(cloudSettings.language);
+            }
+            
+            if (cloudSettings.effectsEnabled !== undefined && cloudSettings.effectsEnabled !== effectsEnabled) {
+              log('Applying effectsEnabled from cloud:', cloudSettings.effectsEnabled);
+              setEffectsEnabled(cloudSettings.effectsEnabled);
+            }
+          } finally {
+            // Сбрасываем флаг после применения всех настроек
+            setTimeout(() => {
+              (window as any).__isApplyingCloudSettings = false;
+            }, 100);
           }
           
-          if (cloudSettings.accent && cloudSettings.accent !== accent) {
-            log('Applying accent from cloud:', cloudSettings.accent);
-            setAccent(cloudSettings.accent);
-          }
-          
-          if (cloudSettings.language && cloudSettings.language !== language) {
-            log('Applying language from cloud:', cloudSettings.language);
-            setLanguage(cloudSettings.language);
-          }
-          
-          if (cloudSettings.effectsEnabled !== undefined && cloudSettings.effectsEnabled !== effectsEnabled) {
-            log('Applying effectsEnabled from cloud:', cloudSettings.effectsEnabled);
-            setEffectsEnabled(cloudSettings.effectsEnabled);
-          }
-          
-          // Перезагружаем страницу после применения настроек
-          // Помечаем, что перезагрузка программная, чтобы не показывать предупреждение
-          (window as any).__isProgrammaticReload = true;
-          setTimeout(() => {
-            log('Reloading page after applying cloud settings');
-            window.location.reload();
-          }, 100); // Небольшая задержка, чтобы настройки успели сохраниться в localStorage
+          log('Settings applied from cloud successfully');
         } else {
           log('Settings match local, no reload needed');
-          loadedUserIdRef.current = user.uid; // Помечаем как загруженные, чтобы не пытаться снова
+          loadedUserIdRef.current = user.uid;
         }
       } else {
         log('No cloud settings found, using local settings');
-        loadedUserIdRef.current = user.uid; // Помечаем как загруженные, чтобы не пытаться снова
+        loadedUserIdRef.current = user.uid;
       }
     } catch (error) {
       log('Error loading settings from cloud:', error);
       console.error('Error loading settings from cloud:', error);
-      loadedUserIdRef.current = user.uid; // Помечаем как загруженные даже при ошибке, чтобы не зациклиться
+      loadedUserIdRef.current = user.uid;
     }
   };
 

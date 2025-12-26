@@ -5,6 +5,7 @@ import { SettingsSyncManager } from './components/SettingsSyncManager';
 import { Garland } from './components/Garland';
 import { Snowfall } from './components/Snowfall';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 import { ToastProvider, useToast } from './hooks/useToast';
 import { ToastList } from './components/ToastList';
 import { useAccent } from './hooks/useAccent';
@@ -34,9 +35,11 @@ function AppContent() {
 function App() {
   return (
     <LanguageProvider>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
+      <SettingsProvider>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </SettingsProvider>
     </LanguageProvider>
   );
 }

@@ -2,6 +2,8 @@ import { collection, doc, getDoc, setDoc, getDocs, query, writeBatch } from 'fir
 import { getFirebaseDB } from './config';
 import { getCurrentUser } from './auth';
 import { Node } from '../types';
+import { getActiveSyncKey } from '../utils/securityManager';
+import { encryptData, decryptData } from '../utils/crypto';
 
 const isDev = import.meta.env.DEV;
 
@@ -44,18 +46,36 @@ export async function syncNodeToFirestore(node: Node): Promise<void> {
     return;
   }
 
+  const syncKey = getActiveSyncKey();
   const db = getFirebaseDB();
+
+  // Если пользователь залогинен, мы ОБЯЗАТЕЛЬНО должны иметь ключ для шифрования.
+  // Если ключа нет, значит система еще не инициализирована, и синхронизировать нельзя,
+  // чтобы не отправить открытые данные.
+  if (!syncKey) {
+    log('Sync key not found for authenticated user, skipping sync to prevent plaintext leak');
+    return;
+  }
 
   try {
     log(`Syncing node to Firestore: ${node.id} (${node.title})`);
     const nodeRef = doc(db, getUserNodesPath(user.uid), node.id);
     // Сохраняем узел без детей (дети хранятся отдельно)
     const { children, ...nodeData } = node;
-    // Очищаем от undefined значений перед сохранением
-    const cleanedData = cleanForFirestore({
-      ...nodeData,
+    
+    log(`Encrypting node ${node.id}`);
+    const encrypted = await encryptData(nodeData, syncKey);
+    const dataToSave = {
+      id: node.id,
+      parentId: node.parentId,
+      encryptedData: encrypted,
+      isEncrypted: true,
+      updatedAt: node.updatedAt,
       syncedAt: new Date().toISOString(),
-    });
+    };
+
+    // Очищаем от undefined значений перед сохранением
+    const cleanedData = cleanForFirestore(dataToSave);
     await setDoc(nodeRef, cleanedData);
     log(`Node synced successfully: ${node.id}`);
   } catch (error) {
@@ -75,7 +95,13 @@ export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
     return;
   }
 
+  const syncKey = getActiveSyncKey();
   const db = getFirebaseDB();
+
+  if (!syncKey) {
+    log('Sync key not found for bulk sync, skipping to prevent plaintext leak');
+    return;
+  }
 
   try {
     log(`Starting bulk sync: ${allNodes.length} nodes`);
@@ -138,11 +164,19 @@ export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
         for (const node of batchToSave) {
           const { children, ...nodeData } = node;
           const nodeRef = doc(nodesRef, node.id);
-          // Очищаем от undefined значений перед сохранением
-          const cleanedData = cleanForFirestore({
-            ...nodeData,
+          
+          const encrypted = await encryptData(nodeData, syncKey);
+          const dataToSave = {
+            id: node.id,
+            parentId: node.parentId,
+            encryptedData: encrypted,
+            isEncrypted: true,
+            updatedAt: node.updatedAt,
             syncedAt: new Date().toISOString(),
-          });
+          };
+
+          // Очищаем от undefined значений перед сохранением
+          const cleanedData = cleanForFirestore(dataToSave);
           batch.set(nodeRef, cleanedData);
         }
         
@@ -168,6 +202,7 @@ export async function loadNodeFromFirestore(nodeId: string): Promise<Node | null
     return null;
   }
 
+  const syncKey = getActiveSyncKey();
   const db = getFirebaseDB();
 
   try {
@@ -178,7 +213,19 @@ export async function loadNodeFromFirestore(nodeId: string): Promise<Node | null
       return null;
     }
 
-    const data = nodeSnap.data();
+    let data = nodeSnap.data();
+    
+    // Дешифровка если нужно
+    if (data.isEncrypted && data.encryptedData && syncKey) {
+      try {
+        const decrypted = await decryptData(data.encryptedData, syncKey);
+        data = { ...data, ...decrypted };
+      } catch (e) {
+        console.error(`Failed to decrypt node ${nodeId}`, e);
+        // Возвращаем как есть (или можно бросить ошибку)
+      }
+    }
+
     // Восстанавливаем структуру Node (дети загружаются отдельно)
     return {
       ...data,
@@ -200,6 +247,7 @@ export async function loadAllNodesFromFirestore(): Promise<Node[]> {
     return [];
   }
 
+  const syncKey = getActiveSyncKey();
   const db = getFirebaseDB();
   if (!db) {
     log('Firebase DB not initialized');
@@ -211,14 +259,33 @@ export async function loadAllNodesFromFirestore(): Promise<Node[]> {
     const nodesRef = collection(db, getUserNodesPath(user.uid));
     const querySnapshot = await getDocs(nodesRef);
     
-    const nodes: Node[] = [];
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      nodes.push({
+    let decryptionFailedCount = 0;
+    
+    // Оптимизация: дешифруем всё параллельно через Promise.all
+    const nodePromises = querySnapshot.docs.map(async (doc) => {
+      let data = doc.data();
+      
+      if (data.isEncrypted && data.encryptedData && syncKey) {
+        try {
+          const decrypted = await decryptData(data.encryptedData, syncKey);
+          data = { ...data, ...decrypted };
+        } catch (e) {
+          decryptionFailedCount++;
+          // Не логируем каждую ошибку, чтобы не забивать консоль
+        }
+      }
+
+      return {
         ...data,
-        children: [], // Дети будут восстановлены отдельно
-      } as unknown as Node);
+        children: [], 
+      } as unknown as Node;
     });
+
+    const nodes = await Promise.all(nodePromises);
+
+    if (decryptionFailedCount > 0) {
+      console.warn(`[Sync] Failed to decrypt ${decryptionFailedCount} nodes. This is normal if you changed your security key recently.`);
+    }
 
     log(`Loaded ${nodes.length} nodes from Firestore`);
 

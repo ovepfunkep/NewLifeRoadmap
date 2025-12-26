@@ -116,6 +116,9 @@ export const i18n: Record<Language, Record<string, any>> = {
       removePriority: 'Remove priority',
       priority: 'Priority task',
     },
+    footer: {
+      refreshMemory: 'Refresh memory',
+    },
   },
   ru: {
     general: {
@@ -227,6 +230,9 @@ export const i18n: Record<Language, Record<string, any>> = {
       github: 'Проект на GitHub',
       removePriority: 'Убрать приоритет',
       priority: 'Приоритетная задача',
+    },
+    footer: {
+      refreshMemory: 'Освежим память',
     },
   },
 };

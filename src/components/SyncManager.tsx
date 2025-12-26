@@ -8,6 +8,8 @@ import { useToast } from '../hooks/useToast';
 import { t } from '../i18n';
 import { openDB } from 'idb';
 import { User } from 'firebase/auth';
+import { SecurityChoiceModal } from './SecurityChoiceModal';
+import { initSecurity, setupSecurity, EncryptionMode } from '../utils/securityManager';
 
 const isDev = import.meta.env.DEV;
 
@@ -110,19 +112,22 @@ export function SyncManager() {
       
       // Сравниваем данные перед загрузкой
       log('[loadCloudDataSilently] Comparing local and cloud data...');
-      const hasDiff = hasDifferences(localNodes, cloud);
-      log(`[loadCloudDataSilently] Data differs: ${hasDiff}`);
       
-      // Если данные совпадают, не загружаем и не перезагружаем
-      if (!hasDiff) {
-        log('[loadCloudDataSilently] Local and cloud data are identical, no need to reload');
+      // Исключаем зашифрованные данные из сравнения, если дешифровка не удалась
+      const filteredCloud = cloud.filter(node => !node.isEncrypted || (node.isEncrypted && node.title));
+      const hasDiff = hasDifferences(localNodes, filteredCloud);
+      log(`[loadCloudDataSilently] Data differs: ${hasDiff} (filtered cloud: ${filteredCloud.length}/${cloud.length})`);
+      
+      // Если данные совпадают или все новые данные битые, не загружаем и не перезагружаем
+      if (!hasDiff || filteredCloud.length === 0) {
+        log('[loadCloudDataSilently] No valid differences found, skipping reload');
         silentLoadInProgressRef.current = false;
         return;
       }
       
       log('[loadCloudDataSilently] Data differs, loading cloud data to local DB...');
       
-      // Тихо загружаем облачные данные
+      // Тихо загружаем облачные данные (только валидные)
       let db: Awaited<ReturnType<typeof openDB>> | null = null;
       try {
         log('[loadCloudDataSilently] Clearing local nodes...');
@@ -132,8 +137,8 @@ export function SyncManager() {
         db = await openDB('LifeRoadmapDB', 2);
         const tx = db.transaction('nodes', 'readwrite');
         
-        log(`[loadCloudDataSilently] Saving ${cloud.length} nodes to local DB...`);
-        for (const node of cloud) {
+        log(`[loadCloudDataSilently] Saving ${filteredCloud.length} nodes to local DB...`);
+        for (const node of filteredCloud) {
           await tx.store.put(node);
         }
         
@@ -319,6 +324,26 @@ export function SyncManager() {
       log(`[onAuthChange] previousUserRef.current: ${previousUserRef.current ? 'exists' : 'null'}`);
       
       if (user) {
+        // Сохраняем пользователя сразу
+        previousUserRef.current = user;
+
+        // Инициализируем систему безопасности (проверяем кэш/конфиг)
+        log('[onAuthChange] Initializing security for user', user.uid);
+        try {
+          const { initialized } = await initSecurity(user.uid);
+          // Если по какой-то причине не инициализировано (например, закрыли вкладку после логина, но до выбора)
+          // то можно было бы показать модал, но сейчас мы перенесли выбор в AuthAvatar.
+          // Если initialized === false, значит выбор еще не сделан.
+          if (!initialized) {
+            log('[onAuthChange] Security not initialized, waiting for choice');
+            isFirstAuthCheckRef.current = false;
+            return;
+          }
+        } catch (err) {
+          console.error('[onAuthChange] Security init failed', err);
+          return;
+        }
+
         // Определяем, это новый логин или пользователь уже был залогинен
         // Если это первый вызов и пользователь уже залогинен - это не новый логин
         // Если предыдущего пользователя не было (null) - это новый логин
@@ -327,7 +352,6 @@ export function SyncManager() {
           : previousUserRef.current === null; // Если предыдущего пользователя не было - это новый логин
         
         log(`[onAuthChange] User signed in, isNewLogin: ${isNewLogin}`);
-        previousUserRef.current = user;
         isFirstAuthCheckRef.current = false;
         
         await handleFirstSync(isNewLogin);
@@ -347,9 +371,22 @@ export function SyncManager() {
       }
     });
 
+    // Слушатель инициализации безопасности (вызывается после выбора в AuthAvatar)
+    const handleSecurityInit = async (e: any) => {
+      const { userId } = e.detail;
+      log('[security:initialized] event received for user', userId);
+      // Если это тот же пользователь, запускаем синхронизацию
+      if (previousUserRef.current && previousUserRef.current.uid === userId) {
+        await handleFirstSync(true); // Считаем это новым логином
+      }
+    };
+
+    window.addEventListener('security:initialized', handleSecurityInit as EventListener);
+
     return () => {
       log('[useEffect] Cleaning up sync manager');
       unsubscribe();
+      window.removeEventListener('security:initialized', handleSecurityInit as EventListener);
     };
   }, [handleFirstSync]);
 
@@ -433,18 +470,17 @@ export function SyncManager() {
     setShowConflictDialog(false);
   };
 
-  if (!showConflictDialog) {
-    return null;
-  }
-
   return (
-    <SyncConflictDialog
-      localNodes={localNodes}
-      cloudNodes={cloudNodes}
-      onChooseLocal={handleChooseLocal}
-      onChooseCloud={handleChooseCloud}
-      onCancel={handleCancel}
-    />
+    <>
+      {showConflictDialog && (
+        <SyncConflictDialog
+          localNodes={localNodes}
+          cloudNodes={cloudNodes}
+          onChooseLocal={handleChooseLocal}
+          onChooseCloud={handleChooseCloud}
+          onCancel={handleCancel}
+        />
+      )}
+    </>
   );
 }
-

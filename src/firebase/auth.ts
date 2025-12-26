@@ -17,19 +17,28 @@ try {
   console.warn('Firebase not initialized:', error);
 }
 
-// Провайдер для Google Sign-In
-const googleProvider = new GoogleAuthProvider();
-
 /**
  * Вход через Google
  */
-export async function signInWithGoogle(): Promise<User> {
+export async function signInWithGoogle(withDrive: boolean = false): Promise<User> {
   if (!auth) {
     const fb = initFirebase();
     auth = fb.auth;
   }
   
-  const result = await signInWithPopup(auth!, googleProvider);
+  const provider = new GoogleAuthProvider();
+  if (withDrive) {
+    provider.addScope('https://www.googleapis.com/auth/drive.appdata');
+  }
+  
+  const result = await signInWithPopup(auth!, provider);
+  
+  // Сохраняем access token для работы с Google API (если нужно)
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  if (credential?.accessToken) {
+    localStorage.setItem('google_access_token', credential.accessToken);
+  }
+  
   return result.user;
 }
 
@@ -42,6 +51,7 @@ export async function signOutUser(): Promise<void> {
     auth = fb.auth;
   }
   
+  localStorage.removeItem('google_access_token');
   await signOut(auth!);
 }
 

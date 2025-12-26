@@ -1,5 +1,6 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Node, ImportStrategy } from './types';
+import { generateTutorial } from './utils/tutorialData';
 
 const isDev = import.meta.env.DEV;
 
@@ -64,9 +65,81 @@ export async function initDB(): Promise<void> {
     };
     await dbInstance.put(STORE_NAME, rootNode);
     log('Root node created');
+    await injectTutorialIfEmpty();
   } else {
     log('Root node already exists');
+    await injectTutorialIfEmpty();
   }
+}
+
+async function injectTutorialIfEmpty(): Promise<void> {
+  if (!dbInstance) return;
+
+  const allNodes = await dbInstance.getAll(STORE_NAME);
+  const root = allNodes.find(n => n.id === ROOT_ID);
+
+  // Only inject on "first visit": DB has only root (or root with no children).
+  const isEmpty = allNodes.length <= 1 || (root && root.children.length === 0 && allNodes.length <= 2);
+  if (!isEmpty || !root) return;
+
+  log('Injecting tutorial (first visit)...');
+
+  const ru = generateTutorial('ru');
+  const en = generateTutorial('en');
+  const tutorialRoots = [...ru, ...en];
+
+  const saveSubtree = async (node: Node) => {
+    await dbInstance!.put(STORE_NAME, node);
+    for (const child of node.children) await saveSubtree(child);
+  };
+  for (const node of tutorialRoots) await saveSubtree(node);
+
+  const updatedRoot: Node = {
+    ...root,
+    children: [...root.children, ...tutorialRoots],
+    updatedAt: new Date().toISOString(),
+  };
+  await dbInstance.put(STORE_NAME, updatedRoot);
+  log('Tutorial injected');
+}
+
+// Recreate tutorial in root (for footer button). No protection: creates a new copy each time.
+export async function recreateTutorial(): Promise<void> {
+  if (!dbInstance) await initDB();
+
+  const root = await getRoot();
+  const currentLang = (typeof window !== 'undefined' && localStorage.getItem('language')) || 'en';
+  const isRu = currentLang === 'ru';
+
+  const ru = generateTutorial('ru');
+  const en = generateTutorial('en');
+
+  const now = new Date().toISOString();
+  const wrapper: Node = {
+    id: `${Date.now()}-refresh-memory`,
+    parentId: ROOT_ID,
+    title: isRu ? 'Освежим память?' : 'Refresh memory?',
+    description: isRu
+      ? 'Повторим основы? Выбери язык и пройди туториал заново.'
+      : 'Refresh the basics? Pick a language and replay the tutorial.',
+    completed: false,
+    createdAt: now,
+    updatedAt: now,
+    children: [...ru, ...en],
+  };
+
+  const saveSubtree = async (node: Node) => {
+    await dbInstance!.put(STORE_NAME, node);
+    for (const child of node.children) await saveSubtree(child);
+  };
+  await saveSubtree(wrapper);
+
+  const updatedRoot: Node = {
+    ...root,
+    children: [...root.children, wrapper],
+    updatedAt: new Date().toISOString(),
+  };
+  await dbInstance!.put(STORE_NAME, updatedRoot);
 }
 
 // Получить корневой узел

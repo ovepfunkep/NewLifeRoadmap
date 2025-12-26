@@ -14,21 +14,31 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   });
 
   const setLanguage = useCallback((lang: Language) => {
-    setLanguageState(lang);
-    setI18nLanguage(lang);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('language', lang);
+    setLanguageState(prev => {
+      if (prev === lang) return prev;
       
-      // Синхронизируем с облаком в фоне
-      (async () => {
-        try {
-          const { saveUserSettings } = await import('../firebase/settingsSync');
-          await saveUserSettings({ language: lang });
-        } catch (error) {
-          // Игнорируем ошибки синхронизации настроек
-        }
-      })();
-    }
+      setI18nLanguage(lang);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('language', lang);
+        
+        // Синхронизируем с облаком только если пользователь авторизован
+        const syncSettings = async () => {
+          // Не сохраняем, если это обновление пришло из самого облака
+          if ((window as any).__isApplyingCloudSettings) return;
+
+          try {
+            const { getCurrentUser } = await import('../firebase/auth');
+            if (getCurrentUser()) {
+              const { saveUserSettings } = await import('../firebase/settingsSync');
+              await saveUserSettings({ language: lang });
+            }
+          } catch (error) {}
+        };
+        
+        syncSettings();
+      }
+      return lang;
+    });
   }, []);
 
   return (

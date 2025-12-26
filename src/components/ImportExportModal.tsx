@@ -49,7 +49,16 @@ export function ImportExportModal({ currentNode, onImport, onClose }: ImportExpo
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${currentNode.title.replace(/[^a-z0-9]/gi, '_')}.json`;
+    
+    // Форматируем дату и время: YYYY-MM-DD_HH-mm
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.getHours().toString().padStart(2, '0') + '-' + 
+                    now.getMinutes().toString().padStart(2, '0');
+    
+    const safeTitle = currentNode.title.replace(/[^a-zа-я0-9]/gi, '_');
+    a.download = `${safeTitle}_${dateStr}_${timeStr}.json`;
+    
     a.click();
     URL.revokeObjectURL(url);
   };

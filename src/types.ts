@@ -6,6 +6,7 @@ export interface Node {
   description?: string;
   deadline?: string | null; // ISO
   completed: boolean;
+  completedAt?: string | null; // ISO время завершения
   priority?: boolean; // Приоритетная задача
   order?: number; // Порядок отображения
   createdAt: string; // ISO

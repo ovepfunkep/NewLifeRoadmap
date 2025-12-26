@@ -6,6 +6,7 @@ import { buildBreadcrumbs, getTotalChildCount } from '../utils';
 import { useNodeNavigation } from '../hooks/useHashRoute';
 import { useToast } from '../hooks/useToast';
 import { useEffects } from '../hooks/useEffects';
+import { useLanguage } from '../contexts/LanguageContext';
 import { Header } from '../components/Header';
 import { StepsList } from '../components/StepsList';
 import { DeadlineList } from '../components/DeadlineList';
@@ -36,26 +37,45 @@ export function NodePage() {
   const [nodeToDeleteId, setNodeToDeleteId] = useState<string | null>(null);
   const { showToast, updateToast, removeToast } = useToast();
   const { effectsEnabled } = useEffects();
+  const { setLanguage } = useLanguage();
 
   // Сохраняем последнюю позицию touch для проверки в handleDragEnd
   const lastTouchPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const scrollIntervalRef = useRef<number | null>(null);
 
-  // Глобальный обработчик touchmove для определения карточки под пальцем при перетаскивании
+  // Глобальный обработчик touchmove и dragover для определения карточки под пальцем и авто-скролла
   useEffect(() => {
     if (!draggedNode) {
+      if (scrollIntervalRef.current) {
+        window.clearInterval(scrollIntervalRef.current);
+        scrollIntervalRef.current = null;
+      }
       lastTouchPositionRef.current = null;
       return;
     }
 
     let lastHoveredNodeId: string | null = null;
 
-    const handleGlobalTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      const touch = e.touches[0];
-      const x = touch.clientX;
-      const y = touch.clientY;
+    // Запускаем постоянный интервал проверки необходимости скролла
+    scrollIntervalRef.current = window.setInterval(() => {
+      if (!lastTouchPositionRef.current) return;
       
-      // Сохраняем позицию для проверки в handleDragEnd
+      const { y } = lastTouchPositionRef.current;
+      const threshold = 100;
+      const maxSpeed = 15;
+      const h = window.innerHeight;
+
+      if (y < threshold) {
+        const intensity = (threshold - y) / threshold;
+        window.scrollBy(0, -maxSpeed * intensity);
+      } else if (y > h - threshold) {
+        const intensity = (y - (h - threshold)) / threshold;
+        window.scrollBy(0, maxSpeed * intensity);
+      }
+    }, 16);
+
+    const handleDragMove = (x: number, y: number) => {
+      // Сохраняем позицию для проверки в handleDragEnd и авто-скролла
       lastTouchPositionRef.current = { x, y };
       
       // Находим все карточки и крошки
@@ -85,7 +105,6 @@ export function NodePage() {
         
         if (!hoveredNodeId) {
           if (lastHoveredNodeId) {
-            console.log('[NodePage] Global touchmove: leaving card', lastHoveredNodeId);
             setDragOverNodeId(null);
             lastHoveredNodeId = null;
           }
@@ -95,7 +114,6 @@ export function NodePage() {
         // Запрещаем перетаскивание в текущий узел
         if (nodeId && hoveredNodeId === nodeId) {
           if (lastHoveredNodeId) {
-            console.log('[NodePage] Global touchmove: blocked - current node');
             setDragOverNodeId(null);
             lastHoveredNodeId = null;
           }
@@ -104,33 +122,56 @@ export function NodePage() {
         
         // Если это новая карточка или крошка, обновляем состояние
         if (hoveredNodeId !== lastHoveredNodeId) {
-          const rect = foundCard.getBoundingClientRect();
-          const isBreadcrumb = foundCard.tagName === 'BUTTON' && foundCard.closest('nav');
-          console.log('[NodePage] Global touchmove: entering', isBreadcrumb ? 'breadcrumb' : 'card', hoveredNodeId, {
-            touch: { x, y },
-            rect: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom },
-            isInside: x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
-          });
           lastHoveredNodeId = hoveredNodeId;
           setDragOverNodeId(hoveredNodeId);
         }
       } else {
         // Палец не над карточкой - сбрасываем состояние
         if (lastHoveredNodeId) {
-          console.log('[NodePage] Global touchmove: leaving card', lastHoveredNodeId);
           setDragOverNodeId(null);
           lastHoveredNodeId = null;
         }
       }
     };
 
-    window.addEventListener('touchmove', handleGlobalTouchMove, { passive: true });
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      handleDragMove(e.clientX, e.clientY);
+    };
+
+    const handleDragOver = (e: DragEvent) => {
+      handleDragMove(e.clientX, e.clientY);
+    };
+
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('dragover', handleDragOver);
 
     return () => {
-      window.removeEventListener('touchmove', handleGlobalTouchMove);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('dragover', handleDragOver);
+      if (scrollIntervalRef.current) {
+        window.clearInterval(scrollIntervalRef.current);
+        scrollIntervalRef.current = null;
+      }
       lastTouchPositionRef.current = null;
     };
   }, [draggedNode, nodeId]);
+
+  // Auto-switch language when entering tutorial language branch (matches your tutorial roots)
+  useEffect(() => {
+    if (!currentNode) return;
+    if (currentNode.title === 'Кликни на меня, если понимаешь этот язык!') {
+      setLanguage('ru');
+    } else if (currentNode.title === 'Click me if you understand this language!') {
+      setLanguage('en');
+    }
+  }, [currentNode, setLanguage]);
 
   const [confettiTrigger, setConfettiTrigger] = useState(0); // Изменено на number для поддержки нескольких запусков
   const [confettiChildCount, setConfettiChildCount] = useState(0);
@@ -402,6 +443,7 @@ export function NodePage() {
     const updated: Node = {
       ...nodeToUpdate,
       completed,
+      completedAt: completed ? new Date().toISOString() : null,
       updatedAt: new Date().toISOString(),
     };
     

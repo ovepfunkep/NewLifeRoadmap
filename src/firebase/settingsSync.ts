@@ -17,33 +17,38 @@ export interface UserSettings {
   effectsEnabled?: boolean;
 }
 
+// Debounce для сохранения настроек
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+const SAVE_DELAY = 2000; // 2 секунды задержка
+
 /**
- * Сохранить настройки пользователя в Firestore
- * Использует merge: true, чтобы не перезаписывать другие поля
+ * Сохранить настройки пользователя в Firestore с дебаунсом
  */
 export async function saveUserSettings(settings: UserSettings): Promise<void> {
   const user = getCurrentUser();
-  if (!user) {
-    log('User not authenticated, skipping settings save');
-    return;
+  if (!user) return;
+
+  // Очищаем предыдущий таймер
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
   }
 
-  const db = getFirebaseDB();
-
-  try {
-    log('Saving user settings:', settings);
-    // Используем collection и doc правильно для четного количества сегментов
-    const settingsRef = doc(db, 'users', user.uid, 'settings', 'data');
-    await setDoc(settingsRef, {
-      ...settings,
-      updatedAt: new Date().toISOString(),
-    }, { merge: true }); // Используем merge, чтобы не перезаписывать другие поля
-    log('User settings saved successfully');
-  } catch (error) {
-    log('Error saving user settings:', error);
-    console.error('Error saving user settings to Firestore:', error);
-    throw error;
-  }
+  // Устанавливаем новый таймер
+  saveTimeout = setTimeout(async () => {
+    const db = getFirebaseDB();
+    try {
+      log('Saving user settings (debounced):', settings);
+      const settingsRef = doc(db, 'users', user.uid, 'settings', 'data');
+      await setDoc(settingsRef, {
+        ...settings,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      log('User settings saved successfully');
+    } catch (error) {
+      log('Error saving user settings:', error);
+    }
+    saveTimeout = null;
+  }, SAVE_DELAY);
 }
 
 /**

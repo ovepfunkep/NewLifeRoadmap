@@ -3,6 +3,8 @@ import { FiUser, FiLogOut } from 'react-icons/fi';
 import { signInWithGoogle, signOutUser, getCurrentUser, onAuthChange } from '../firebase/auth';
 import { Tooltip } from './Tooltip';
 import { t } from '../i18n';
+import { SecurityChoiceModal } from './SecurityChoiceModal';
+import { setupSecurity } from '../utils/securityManager';
 
 const isDev = import.meta.env.DEV;
 
@@ -15,6 +17,7 @@ function log(message: string, ...args: any[]) {
 export function AuthAvatar() {
   const [user, setUser] = useState<{ email: string; uid: string; photoURL?: string | null } | null>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
 
   useEffect(() => {
     log('Initializing auth state');
@@ -52,14 +55,23 @@ export function AuthAvatar() {
     };
   }, []);
 
-  const handleSignIn = async () => {
+  const handleSignIn = () => {
+    setShowSecurityModal(true);
+  };
+
+  const handleSecurityChoice = async (mode: 'gdrive' | 'firestore') => {
     try {
-      log('Sign in initiated');
-      await signInWithGoogle();
-      log('Sign in successful');
+      log('Security choice made:', mode);
+      setShowSecurityModal(false);
+      
+      const firebaseUser = await signInWithGoogle(mode === 'gdrive');
+      log('Sign in successful, setting up security for', firebaseUser.uid);
+      
+      await setupSecurity(mode, firebaseUser.uid);
+      log('Security setup complete');
     } catch (error) {
-      log('Sign in error:', error);
-      console.error('Sign in error:', error);
+      log('Sign in/Security error:', error);
+      console.error('Sign in/Security error:', error);
     }
   };
 
@@ -117,15 +129,21 @@ export function AuthAvatar() {
   }
 
   return (
-    <Tooltip text={t('tooltip.signIn')} position="right">
-      <button
-        onClick={handleSignIn}
-        className="w-12 h-12 rounded-full flex items-center justify-center border-2 border-gray-300 dark:border-gray-600 hover:border-accent transition-all bg-gray-100 dark:bg-gray-800"
-        style={{ color: 'var(--accent)' }}
-      >
-        <FiUser className="w-6 h-6" />
-      </button>
-    </Tooltip>
+    <>
+      <Tooltip text={t('tooltip.signIn')} position="right">
+        <button
+          onClick={handleSignIn}
+          className="w-12 h-12 rounded-full flex items-center justify-center border-2 border-gray-300 dark:border-gray-600 hover:border-accent transition-all bg-gray-100 dark:bg-gray-800"
+          style={{ color: 'var(--accent)' }}
+        >
+          <FiUser className="w-6 h-6" />
+        </button>
+      </Tooltip>
+
+      {showSecurityModal && (
+        <SecurityChoiceModal onChoice={handleSecurityChoice} />
+      )}
+    </>
   );
 }
 

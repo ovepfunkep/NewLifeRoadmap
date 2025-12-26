@@ -20,6 +20,16 @@ async function syncNodeToFirestore(node: Node): Promise<void> {
   return syncFn(node);
 }
 
+// Проверка готовности системы безопасности
+async function isSecurityReady(): Promise<boolean> {
+  try {
+    const { getActiveSyncKey } = await import('./utils/securityManager');
+    return getActiveSyncKey() !== null;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Синхронизировать узел с Firestore (с debounce)
  */
@@ -27,6 +37,13 @@ async function syncNodeDebounced(node: Node): Promise<void> {
   // Проверяем авторизацию перед синхронизацией
   if (!(await isUserAuthenticated())) {
     return; // Пользователь не залогинен, пропускаем синхронизацию
+  }
+
+  // Если пользователь залогинен, но ключ еще не готов - ждем или пропускаем
+  // Это предотвращает отправку незашифрованных данных при первом входе
+  if (!(await isSecurityReady())) {
+    console.warn('[Sync] Security not ready, skipping debounced sync');
+    return;
   }
 
   // Очищаем предыдущий таймер
