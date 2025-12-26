@@ -8,8 +8,7 @@ import { useToast } from '../hooks/useToast';
 import { t } from '../i18n';
 import { openDB } from 'idb';
 import { User } from 'firebase/auth';
-import { SecurityChoiceModal } from './SecurityChoiceModal';
-import { initSecurity, setupSecurity, EncryptionMode } from '../utils/securityManager';
+import { initSecurity } from '../utils/securityManager';
 
 const isDev = import.meta.env.DEV;
 

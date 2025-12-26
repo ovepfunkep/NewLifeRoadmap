@@ -1,4 +1,3 @@
-import React from 'react';
 import { FiShield, FiHardDrive, FiLock } from 'react-icons/fi';
 
 interface SecurityChoiceModalProps {

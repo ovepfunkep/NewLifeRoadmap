@@ -1,6 +1,5 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { initFirebase } from './config';
-import { getCurrentUser } from './auth';
 
 /**
  * Работа с ключами безопасности в Firestore
