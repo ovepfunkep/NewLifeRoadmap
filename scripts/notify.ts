@@ -166,6 +166,7 @@ async function run() {
     const chatId = userConfig.telegramChatId;
     const mode = userConfig.mode; // 'gdrive' or 'firestore'
     const syncKey = userConfig.syncKey; // May be null if using GDrive mode
+    const userTimezone = userConfig.timezone || 'UTC'; // NEW: Get user timezone
     const sentReminders = node.sentReminders || [];
 
     for (const intervalSeconds of node.reminders) {
@@ -204,7 +205,8 @@ async function run() {
         const deadlineStr = deadline.toLocaleString('ru-RU', { 
           day: '2-digit', month: '2-digit', year: 'numeric', 
           hour: '2-digit', minute: '2-digit',
-          hour12: false
+          hour12: false,
+          timeZone: userTimezone // NEW: Use user timezone
         });
         
         const text = `⏰ <b>Напоминание о дедлайне!</b>\n\n📌 <b>${title}</b>\n📅 Срок: ${deadlineStr}`;

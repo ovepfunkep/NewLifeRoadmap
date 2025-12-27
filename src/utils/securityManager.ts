@@ -90,7 +90,12 @@ export async function setupSecurity(mode: EncryptionMode, userId: string): Promi
   }
 
   // 4. Обновляем конфиг в Firestore
-  await saveUserSecurityConfig(userId, { mode, initialized: true });
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  await saveUserSecurityConfig(userId, { 
+    mode, 
+    initialized: true,
+    timezone 
+  });
   
   currentSyncKey = finalKey;
   currentMode = mode;

@@ -330,6 +330,14 @@ export function SyncManager() {
         log('[onAuthChange] Initializing security for user', user.uid);
         try {
           const { initialized } = await initSecurity(user.uid);
+          
+          // Обновляем часовой пояс пользователя при каждом входе, если безопасность инициализирована
+          if (initialized) {
+            const { saveUserSecurityConfig } = await import('../firebase/security');
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            await saveUserSecurityConfig(user.uid, { timezone });
+          }
+
           // Если по какой-то причине не инициализировано (например, закрыли вкладку после логина, но до выбора)
           // то можно было бы показать модал, но сейчас мы перенесли выбор в AuthAvatar.
           // Если initialized === false, значит выбор еще не сделан.
