@@ -2,7 +2,7 @@ name: Telegram Notifications
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Run every 15 minutes
+    - cron: '* * * * *' # Every minute (GitHub may throttle to 5m)
   workflow_dispatch: # Allow manual run
 
 jobs:

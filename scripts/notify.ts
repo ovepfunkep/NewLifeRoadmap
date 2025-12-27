@@ -66,9 +66,10 @@ async function sendTelegramMessage(chatId: string, text: string) {
   }
 }
 
-async function getTelegramUpdates() {
+async function getTelegramUpdates(offset?: number) {
   if (!BOT_TOKEN) return [];
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates`;
+  let url = `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates`;
+  if (offset) url += `?offset=${offset}`;
   try {
     const response = await fetch(url);
     if (!response.ok) return [];
@@ -108,8 +109,17 @@ async function run() {
   console.log('--- Starting Notification Job ---');
 
   // 1. Process /start commands from Telegram to link Chat IDs
-  const updates = await getTelegramUpdates();
+  // We store last processed update_id in a special document to avoid duplicates
+  const botStateRef = db.doc('system/bot_state');
+  const botStateSnap = await botStateRef.get();
+  const lastUpdateId = botStateSnap.exists ? botStateSnap.data()?.lastUpdateId : 0;
+
+  const updates = await getTelegramUpdates(lastUpdateId ? lastUpdateId + 1 : undefined);
+  let maxUpdateId = lastUpdateId;
+
   for (const update of updates) {
+    if (update.update_id > maxUpdateId) maxUpdateId = update.update_id;
+
     const message = update.message;
     if (message?.text?.startsWith('/start ')) {
       const uid = message.text.split(' ')[1];
@@ -125,6 +135,10 @@ async function run() {
         await sendTelegramMessage(chatId, '✅ <b>Telegram успешно привязан!</b>\nТеперь вы будете получать уведомления о дедлайнах.');
       }
     }
+  }
+
+  if (maxUpdateId > lastUpdateId) {
+    await botStateRef.set({ lastUpdateId: maxUpdateId }, { merge: true });
   }
 
   // 2. Scan for upcoming deadlines
