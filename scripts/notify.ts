@@ -173,8 +173,9 @@ async function run() {
       const reminderTime = new Date(deadline.getTime() - intervalSeconds * 1000);
       const reminderId = `${intervalSeconds}_${node.deadline}`;
 
-      // Check if it's time to remind and not already sent
-      if (now >= reminderTime && !sentReminders.includes(reminderId)) {
+      // Отправляем, если до времени напоминания осталось 10 минут или оно уже прошло
+      const sendWindowMs = 10 * 60 * 1000; // 10 минут упреждения
+      if (now.getTime() >= (reminderTime.getTime() - sendWindowMs) && !sentReminders.includes(reminderId)) {
         console.log(`Sending reminder for node ${doc.id} to user ${userId}`);
 
         let title = 'Задача без названия';
