@@ -1,5 +1,11 @@
 import { generateEncryptionKey } from './crypto';
-import { getSyncKeyFromFirestore, saveSyncKeyToFirestore, getUserSecurityConfig, saveUserSecurityConfig } from '../firebase/security';
+import { 
+  getSyncKeyFromFirestore, 
+  saveSyncKeyToFirestore, 
+  deleteSyncKeyFromFirestore,
+  getUserSecurityConfig, 
+  saveUserSecurityConfig 
+} from '../firebase/security';
 import { getSyncKeyFromGoogleDrive, saveSyncKeyToGoogleDrive } from './googleDrive';
 
 export type EncryptionMode = 'gdrive' | 'firestore' | 'none';
@@ -73,6 +79,12 @@ export async function setupSecurity(mode: EncryptionMode, userId: string): Promi
   // 3. Сохраняем ключ в выбранное пользователем место
   if (mode === 'gdrive') {
     await saveSyncKeyToGoogleDrive(finalKey);
+    // Удаляем из Firestore, если он там был (переход на усиленную защиту)
+    try {
+      await deleteSyncKeyFromFirestore(userId);
+    } catch (e) {
+      // Игнорируем, если поля не было
+    }
   } else if (mode === 'firestore') {
     await saveSyncKeyToFirestore(userId, finalKey);
   }

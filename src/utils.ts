@@ -211,8 +211,8 @@ export function formatDeadline(deadline: string | null | undefined): string {
   if (!deadline) return '';
   const date = new Date(deadline);
   const dateStr = date.toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'numeric',
+    day: '2-digit',
+    month: '2-digit',
     year: 'numeric',
   });
   
@@ -225,6 +225,7 @@ export function formatDeadline(deadline: string | null | undefined): string {
     const timeStr = date.toLocaleTimeString('ru-RU', {
       hour: '2-digit',
       minute: '2-digit',
+      hour12: false,
     });
     return `${dateStr} ${timeStr}`;
   }

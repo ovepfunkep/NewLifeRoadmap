@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { initFirebase } from './config';
 
 /**
@@ -26,6 +26,14 @@ export async function saveSyncKeyToFirestore(userId: string, syncKey: string): P
     syncKey,
     updatedAt: new Date().toISOString()
   }, { merge: true });
+}
+
+export async function deleteSyncKeyFromFirestore(userId: string): Promise<void> {
+  const { db } = initFirebase();
+  const docRef = doc(db, 'users', userId, SECURITY_COLLECTION, CONFIG_DOC);
+  await updateDoc(docRef, {
+    syncKey: deleteField()
+  });
 }
 
 export async function getUserSecurityConfig(userId: string): Promise<any | null> {

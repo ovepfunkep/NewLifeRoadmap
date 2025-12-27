@@ -11,6 +11,8 @@ export interface Node {
   order?: number; // Порядок отображения
   createdAt: string; // ISO
   updatedAt?: string; // ISO
+  reminders?: number[]; // Интервалы напоминаний в секундах до дедлайна
+  sentReminders?: string[]; // Список ID уже отправленных уведомлений (интервал + время)
   children: Node[]; // рекурсивная структура
 }
 

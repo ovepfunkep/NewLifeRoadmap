@@ -790,7 +790,7 @@ export function CalendarView({ node: _node, deadlines, onNavigate: _onNavigate, 
                                 <span className="truncate flex-1">{task.title}</span>
                                 {hasTime && (
                                   <span className="text-[10px] opacity-60 flex-shrink-0">
-                                    {date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                                    {date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', hour12: false })}
                                   </span>
                                 )}
                               </div>

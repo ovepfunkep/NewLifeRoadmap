@@ -34,7 +34,7 @@ export function SecurityChoiceModal({ onChoice }: SecurityChoiceModalProps) {
                 <div className="font-bold text-sm dark:text-white flex items-center gap-2">
                   Усиленная защита
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Ключ на вашем Google Drive</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Ключ на вашем Google Drive. Уведомления в Telegram без названия задач.</p>
               </div>
             </button>
 
@@ -48,7 +48,7 @@ export function SecurityChoiceModal({ onChoice }: SecurityChoiceModalProps) {
               </div>
               <div className="flex-1">
                 <div className="font-bold text-sm dark:text-white">Стандартная защита</div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Ключ на облачном хранилище сайта</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Ключ на облачном хранилище сайта. Уведомления в Telegram с названием шага.</p>
               </div>
             </button>
           </div>

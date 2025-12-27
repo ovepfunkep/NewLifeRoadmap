@@ -63,14 +63,18 @@ export async function syncNodeToFirestore(node: Node): Promise<void> {
     // Сохраняем узел без детей (дети хранятся отдельно)
     const { children, ...nodeData } = node;
     
-    log(`Encrypting node ${node.id}`);
-    const encrypted = await encryptData(nodeData, syncKey);
+    log(`Encrypting title and description for node ${node.id}`);
+    const encryptedTitle = await encryptData(node.title, syncKey);
+    let encryptedDescription = node.description;
+    if (node.description) {
+      encryptedDescription = await encryptData(node.description, syncKey);
+    }
+    
     const dataToSave = {
-      id: node.id,
-      parentId: node.parentId,
-      encryptedData: encrypted,
-      isEncrypted: true,
-      updatedAt: node.updatedAt,
+      ...nodeData,
+      title: encryptedTitle,
+      description: encryptedDescription,
+      isFieldsEncrypted: true, // Новый флаг для шифрования полей
       syncedAt: new Date().toISOString(),
     };
 
@@ -165,13 +169,17 @@ export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
           const { children, ...nodeData } = node;
           const nodeRef = doc(nodesRef, node.id);
           
-          const encrypted = await encryptData(nodeData, syncKey);
+          const encryptedTitle = await encryptData(node.title, syncKey);
+          let encryptedDescription = node.description;
+          if (node.description) {
+            encryptedDescription = await encryptData(node.description, syncKey);
+          }
+
           const dataToSave = {
-            id: node.id,
-            parentId: node.parentId,
-            encryptedData: encrypted,
-            isEncrypted: true,
-            updatedAt: node.updatedAt,
+            ...nodeData,
+            title: encryptedTitle,
+            description: encryptedDescription,
+            isFieldsEncrypted: true,
             syncedAt: new Date().toISOString(),
           };
 
@@ -215,14 +223,31 @@ export async function loadNodeFromFirestore(nodeId: string): Promise<Node | null
 
     let data = nodeSnap.data();
     
-    // Дешифровка если нужно
+    // Поддержка всех форматов: старого (полное), промежуточного (только заголовок) и нового (поля)
     if (data.isEncrypted && data.encryptedData && syncKey) {
       try {
         const decrypted = await decryptData(data.encryptedData, syncKey);
         data = { ...data, ...decrypted };
       } catch (e) {
         console.error(`Failed to decrypt node ${nodeId}`, e);
-        // Возвращаем как есть (или можно бросить ошибку)
+      }
+    } else if (data.isTitleEncrypted && syncKey) {
+      try {
+        const decryptedTitle = await decryptData(data.title, syncKey);
+        data.title = decryptedTitle;
+      } catch (e) {
+        console.error(`Failed to decrypt title for node ${nodeId}`, e);
+      }
+    } else if (data.isFieldsEncrypted && syncKey) {
+      try {
+        const decryptedTitle = await decryptData(data.title, syncKey);
+        data.title = decryptedTitle;
+        if (data.description) {
+          const decryptedDesc = await decryptData(data.description, syncKey);
+          data.description = decryptedDesc;
+        }
+      } catch (e) {
+        console.error(`Failed to decrypt fields for node ${nodeId}`, e);
       }
     }
 
@@ -271,7 +296,24 @@ export async function loadAllNodesFromFirestore(): Promise<Node[]> {
           data = { ...data, ...decrypted };
         } catch (e) {
           decryptionFailedCount++;
-          // Не логируем каждую ошибку, чтобы не забивать консоль
+        }
+      } else if (data.isTitleEncrypted && syncKey) {
+        try {
+          const decryptedTitle = await decryptData(data.title, syncKey);
+          data.title = decryptedTitle;
+        } catch (e) {
+          decryptionFailedCount++;
+        }
+      } else if (data.isFieldsEncrypted && syncKey) {
+        try {
+          const decryptedTitle = await decryptData(data.title, syncKey);
+          data.title = decryptedTitle;
+          if (data.description) {
+            const decryptedDesc = await decryptData(data.description, syncKey);
+            data.description = decryptedDesc;
+          }
+        } catch (e) {
+          decryptionFailedCount++;
         }
       }
 

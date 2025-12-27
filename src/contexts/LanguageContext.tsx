@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { getLanguage, setLanguage as setI18nLanguage, Language } from '../i18n';
 
 interface LanguageContextType {
@@ -12,6 +12,13 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>(() => {
     return getLanguage();
   });
+
+  // Синхронизация атрибута lang у тега html для корректного отображения системных форматов (дата/время)
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = language === 'ru' ? 'ru-RU' : 'en-US';
+    }
+  }, [language]);
 
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(prev => {

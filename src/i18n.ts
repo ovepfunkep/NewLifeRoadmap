@@ -119,6 +119,21 @@ export const i18n: Record<Language, Record<string, any>> = {
     footer: {
       refreshMemory: 'Refresh memory',
     },
+    telegram: {
+      title: 'Telegram Notifications',
+      linking: 'Link Telegram',
+      linked: 'Telegram Linked',
+      remindMe: 'Remind me',
+      beforeDeadline: 'before deadline',
+      hours: 'hours',
+      days: 'days',
+      addReminder: 'Add reminder',
+      noTelegram: 'Link Telegram in settings to receive notifications',
+      enhancedSecurityNote: 'Note: Title decryption is only available in "Standard Protection" mode.',
+      errorTooLate: 'Reminder must be at least 1 hour before deadline',
+      errorPast: 'This reminder time has already passed',
+      errorDuplicate: 'This reminder already exists',
+    },
   },
   ru: {
     general: {
@@ -233,6 +248,21 @@ export const i18n: Record<Language, Record<string, any>> = {
     },
     footer: {
       refreshMemory: 'Освежим память',
+    },
+    telegram: {
+      title: 'Уведомления в Telegram',
+      linking: 'Привязать Telegram',
+      linked: 'Telegram привязан',
+      remindMe: 'Напомнить за',
+      beforeDeadline: 'до дедлайна',
+      hours: 'часа(ов)',
+      days: 'дня(ей)',
+      addReminder: 'Добавить напоминание',
+      noTelegram: 'Привяжите Telegram в настройках для получения уведомлений',
+      enhancedSecurityNote: 'В режиме "Усиленная защита" названия задач в уведомлениях не отображаются.',
+      errorTooLate: 'Напоминание должно быть минимум за 1 час до дедлайна',
+      errorPast: 'Время этого напоминания уже прошло',
+      errorDuplicate: 'Такое напоминание уже есть',
     },
   },
 };

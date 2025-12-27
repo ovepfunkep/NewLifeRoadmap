@@ -3,8 +3,10 @@ import { useTheme } from '../hooks/useTheme';
 import { useAccent } from '../hooks/useAccent';
 import { useEffects } from '../hooks/useEffects';
 import { useLanguage } from '../contexts/LanguageContext';
-import { FiSun, FiMoon } from 'react-icons/fi';
+import { FiSun, FiMoon, FiSend } from 'react-icons/fi';
 import { SparklesIcon } from './SparklesIcon';
+import { TELEGRAM_BOT_USERNAME } from '../utils/constants';
+import { getCurrentUser } from '../firebase/auth';
 
 type Language = 'ru' | 'en';
 
@@ -153,12 +155,29 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
   );
 
   // Мемоизируем buttonPositions, чтобы они обновлялись при изменении настроек
-  const buttonPositions = useMemo(() => [
-    { angle: 270, icon: theme === 'light' ? FiSun : FiMoon, action: handleThemeClick, label: language === 'en' ? 'Theme' : 'Тема' },
-    { angle: 150, icon: ColorIcon, action: () => setShowPalette(!showPalette), label: language === 'en' ? 'Color' : 'Цвет' },
-    { angle: 30, icon: LanguageIcon, action: handleLanguageClick, label: language === 'en' ? 'Language' : 'Язык' },
-    { angle: 210, icon: EffectsIcon, action: handleEffectsClick, label: language === 'en' ? 'Effects' : 'Эффекты' },
-  ], [theme, accent, language, effectsEnabled, handleLanguageClick, handleEffectsClick]);
+  const buttonPositions = useMemo(() => {
+    const user = getCurrentUser();
+    const positions = [
+      { angle: 270, icon: theme === 'light' ? FiSun : FiMoon, action: handleThemeClick, label: language === 'en' ? 'Theme' : 'Тема' },
+      { angle: 150, icon: ColorIcon, action: () => setShowPalette(!showPalette), label: language === 'en' ? 'Color' : 'Цвет' },
+      { angle: 30, icon: LanguageIcon, action: handleLanguageClick, label: language === 'en' ? 'Language' : 'Язык' },
+      { angle: 210, icon: EffectsIcon, action: handleEffectsClick, label: language === 'en' ? 'Effects' : 'Эффекты' },
+    ];
+
+    if (user) {
+      // Бот username не может содержать пробелы, на всякий случай чистим
+      const cleanBotName = TELEGRAM_BOT_USERNAME.replace(/\s/g, '');
+      const tgUrl = `https://t.me/${cleanBotName}?start=${user.uid}`;
+      positions.push({
+        angle: 90,
+        icon: FiSend,
+        action: () => window.open(tgUrl, '_blank'),
+        label: language === 'en' ? 'Link Telegram' : 'Привязать Telegram'
+      });
+    }
+
+    return positions;
+  }, [theme, accent, language, effectsEnabled, handleLanguageClick, handleEffectsClick, showPalette]);
 
   return (
     <div 
