@@ -1,5 +1,5 @@
-import { FiGithub, FiRefreshCw } from 'react-icons/fi';
-import { FaTelegram } from 'react-icons/fa';
+import { FiGithub } from 'react-icons/fi';
+import { FaTelegram, FaGraduationCap } from 'react-icons/fa';
 import { Tooltip } from './Tooltip';
 import { AuthAvatar } from './AuthAvatar';
 import { t } from '../i18n';
@@ -42,7 +42,7 @@ export function Footer() {
                 className="p-2 rounded-lg transition-all hover:bg-accent/10 hover:brightness-150"
                 style={{ color: 'var(--accent)' }}
               >
-                <FiRefreshCw size={20} />
+                <FaGraduationCap size={20} />
               </button>
             </Tooltip>
             <Tooltip text={t('tooltip.telegram')}>
