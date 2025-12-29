@@ -121,6 +121,7 @@ export function NodeCard({
       const from = offsetPxRef.current;
       const dist = target - from;
       if (Math.abs(dist) < 0.5) {
+        offsetPxRef.current = target;
         setOffsetPx(target);
         onDone();
         return;
@@ -197,16 +198,10 @@ export function NodeCard({
         flushSync(() => {
           if (itemsSwiped !== 0) {
             const nextBase = mod(baseActionIndexRef.current - itemsSwiped, actions.length);
-            if (DRUM_DEBUG) {
-              console.log('[Drum] commit', {
-                from: baseActionIndexRef.current,
-                to: nextBase,
-              });
-            }
             setBaseActionIndex(nextBase);
+            baseActionIndexRef.current = nextBase;
           }
-          // Важно: offset=0 делаем только когда мы уже стоим ровно на границе,
-          // тогда визуально ничего не "прыгает".
+          offsetPxRef.current = 0;
           setOffsetPx(0);
         });
       });
