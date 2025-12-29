@@ -1,15 +1,12 @@
 import { FiGithub } from 'react-icons/fi';
-import { FaTelegram, FaGraduationCap } from 'react-icons/fa';
+import { FaTelegram } from 'react-icons/fa';
 import { Tooltip } from './Tooltip';
 import { AuthAvatar } from './AuthAvatar';
 import { t } from '../i18n';
 import { useEffect, useState } from 'react';
-import { recreateTutorial } from '../db';
-import { useToast } from '../hooks/useToast';
 
 export function Footer() {
   const [isMobile, setIsMobile] = useState(false);
-  const { showToast } = useToast();
 
   useEffect(() => {
     const checkMobile = () => {
@@ -20,40 +17,21 @@ export function Footer() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const handleRefreshMemory = async () => {
-    try {
-      await recreateTutorial();
-      showToast('Окей. Туториал добавлен в корень.');
-      window.dispatchEvent(new CustomEvent('syncManager:dataUpdated'));
-    } catch (e) {
-      showToast('Не получилось создать туториал. Попробуй ещё раз.');
-    }
-  };
-
   return (
     <footer className="border-t border-gray-200 dark:border-gray-700 mt-auto bg-transparent">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <AuthAvatar />
-            <Tooltip text={t('footer.refreshMemory')}>
-              <button
-                onClick={handleRefreshMemory}
-                className="p-2 rounded-lg transition-all hover:bg-accent/10 hover:brightness-150"
-                style={{ color: 'var(--accent)' }}
-              >
-                <FaGraduationCap size={20} />
-              </button>
-            </Tooltip>
             <Tooltip text={t('tooltip.telegram')}>
               <a
                 href="https://t.me/IncludeIntelligence"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-2 rounded-lg transition-all hover:bg-accent/10 hover:brightness-150"
+                className="p-3 sm:p-2 rounded-lg transition-all hover:bg-accent/10 hover:brightness-150"
                 style={{ color: 'var(--accent)' }}
               >
-                <FaTelegram size={20} />
+                <FaTelegram size={22} className="sm:w-5 sm:h-5" />
               </a>
             </Tooltip>
             <Tooltip text={t('tooltip.github')}>
@@ -61,10 +39,10 @@ export function Footer() {
                 href="https://github.com/ovepfunkep/NewLifeRoadmap"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-2 rounded-lg transition-all hover:bg-accent/10 hover:brightness-150"
+                className="p-3 sm:p-2 rounded-lg transition-all hover:bg-accent/10 hover:brightness-150"
                 style={{ color: 'var(--accent)' }}
               >
-                <FiGithub size={20} />
+                <FiGithub size={22} className="sm:w-5 sm:h-5" />
               </a>
             </Tooltip>
           </div>

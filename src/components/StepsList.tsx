@@ -16,6 +16,7 @@ interface StepsListProps {
   onEdit: (node: Node) => void;
   onDelete: (id: string) => void;
   onTogglePriority: (id: string, priority: boolean) => void;
+  onMove?: (node: Node) => void;
   onDragStart?: (node: Node) => void;
   onDragEnd?: () => void;
   onDragOver?: (nodeId: string) => void;
@@ -37,6 +38,7 @@ export function StepsList({
   onEdit, 
   onDelete,
   onTogglePriority,
+  onMove,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -220,6 +222,7 @@ export function StepsList({
               onEdit={onEdit}
               onDelete={onDelete}
               onTogglePriority={onTogglePriority}
+              onMove={onMove}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
               onDragOver={onDragOver}

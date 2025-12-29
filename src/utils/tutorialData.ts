@@ -36,7 +36,7 @@ function makeBaseNode(partial: TutorialNodeInput, now: string): Node {
   };
 }
 
-export function generateTutorial(lang: 'ru' | 'en'): Node[] {
+export function generateTutorial(lang: 'ru' | 'en', isMobile: boolean = false): Node[] {
   const now = new Date().toISOString();
 
   if (lang === 'ru') {
@@ -76,27 +76,35 @@ export function generateTutorial(lang: 'ru' | 'en'): Node[] {
                       children: [
                         makeBaseNode({
                           title: 'Создай подзадачу',
-                          description: 'Нажми плюсик сверху или клавишу T. Любое великое дело начинается с маленького шага. Даже «купить хлеб».',
+                          description: isMobile 
+                            ? 'Нажми плюсик сверху. Любое великое дело начинается с маленького шага. Даже «купить хлеб».'
+                            : 'Нажми плюсик сверху или клавишу T. Любое великое дело начинается с маленького шага. Даже «купить хлеб».',
                         }, now),
                         makeBaseNode({
                           title: 'Закрепи приоритет',
-                          description: 'Нажми на стрелочку/иконку приоритета у задачи. Теперь она будет сверху. Как и должна.',
+                          description: isMobile
+                            ? 'Свайпай кнопку действия в карточке, пока не увидишь стрелочку вверх, и нажми её. Теперь задача будет сверху.'
+                            : 'Нажми на стрелочку/иконку приоритета у задачи. Теперь она будет сверху. Как и должна.',
                         }, now),
                         makeBaseNode({
                           title: 'Отредактируй задачу',
-                          description: 'Карандашик или клавиша E. Сделай название нормальным. Или хотя бы честным.',
+                          description: isMobile
+                            ? 'Свайпай кнопку действия в карточке до иконки карандаша. Сделай название нормальным. Или хотя бы честным.'
+                            : 'Карандашик или клавиша E. Сделай название нормальным. Или хотя бы честным.',
                         }, now),
                         makeBaseNode({
                           title: 'Добавь дедлайн',
-                          description: 'В редакторе добавь дату и (если надо) время. Потом посмотри вправо: там список/календарь дедлайнов.',
+                          description: 'В редакторе добавь дату и (если надо) время. Потом посмотри вправо (или вверх на мобилке): там список/календарь дедлайнов.',
                         }, now),
                         makeBaseNode({
                           title: 'Проверь календарь дедлайнов',
-                          description: 'Переключи вид справа на календарный. Там должны быть ВСЕ задачи с дедлайнами.',
+                          description: 'Переключи вид на календарный. Там должны быть ВСЕ задачи с дедлайнами.',
                         }, now),
                         makeBaseNode({
                           title: 'Окей. Теперь — следующая глава',
-                          description: 'Нажми Esc, чтобы вернуться назад — и не забудь отметить этот шаг выполненным. Да, я проверю. Ну почти.',
+                          description: isMobile
+                            ? 'Нажми кнопку «Назад» в заголовке — и не забудь отметить этот шаг выполненным. Да, я проверю. Ну почти.'
+                            : 'Нажми Esc, чтобы вернуться назад — и не забудь отметить этот шаг выполненным. Да, я проверю. Ну почти.',
                         }, now),
                       ],
                     },
@@ -104,9 +112,14 @@ export function generateTutorial(lang: 'ru' | 'en'): Node[] {
                   ),
                   makeBaseNode(
                     {
-                      title: '4) Навигация для быстрых',
-                      description: 'Ладно, клики — это мило. Но мы же не в каменном веке.',
-                      children: [
+                      title: '4) Навигация',
+                      description: isMobile ? 'На телефоне всё просто — тапай и скролль.' : 'Ладно, клики — это мило. Но мы же не в каменном веке.',
+                      children: isMobile ? [
+                        makeBaseNode({
+                          title: 'Хлебные крошки',
+                          description: 'Нажимай на путь сверху, чтобы быстро вернуться на любой уровень назад.',
+                        }, now),
+                      ] : [
                         makeBaseNode({
                           title: 'Цифры 1–9',
                           description: 'Нажми цифру 1–9, чтобы перейти к соответствующей карточке в списке.',
@@ -132,7 +145,9 @@ export function generateTutorial(lang: 'ru' | 'en'): Node[] {
                       children: [
                         makeBaseNode({
                           title: 'Перенос (M)',
-                          description: 'Нажми M → выбери куда переместить текущую мапу/папку. Удобно, когда структура огромная.',
+                          description: isMobile
+                            ? 'Свайпай кнопку действия до иконки папки. Выбери куда переместить текущую мапу/папку.'
+                            : 'Нажми M → выбери куда переместить текущую мапу/папку. Удобно, когда структура огромная.',
                         }, now),
                         makeBaseNode({
                           title: 'Drag & Drop',
@@ -140,17 +155,21 @@ export function generateTutorial(lang: 'ru' | 'en'): Node[] {
                         }, now),
                         makeBaseNode({
                           title: 'Импорт/Экспорт (I)',
-                          description: 'Нажми I. Сохрани бэкап. Или импортируй. Иногда жизнь любит сюрпризы — пусть хотя бы данные будут под контролем.',
+                          description: isMobile
+                            ? 'Используй меню в заголовке для импорта и экспорта. Сохрани бэкап. Иногда жизнь любит сюрпризы.'
+                            : 'Нажми I. Сохрани бэкап. Или импортируй. Иногда жизнь любит сюрпризы — пусть хотя бы данные будут под контролем.',
                         }, now),
                         makeBaseNode({
                           title: 'Удаление (D)',
-                          description:
-                            'Нажми D — появится красивое подтверждение. ' +
-                            'Уничтожать ветки задач без предупреждения — это не наш стиль.',
+                          description: isMobile
+                            ? 'Свайпай кнопку до корзины. Уничтожать ветки задач без предупреждения — это не наш стиль.'
+                            : 'Нажми D — появится красивое подтверждение. Уничтожать ветки задач без предупреждения — это не наш стиль.',
                         }, now),
                         makeBaseNode({
-                          title: 'Выполнить (Enter)',
-                          description: 'Enter → выполнить текущую мапу/задачу. Простой кайф.',
+                          title: 'Выполнить',
+                          description: isMobile
+                            ? 'Кнопка с галочкой в карточке — твой главный инструмент успеха.'
+                            : 'Enter или кнопка с галочкой → выполнить текущую мапу/задачу. Простой кайф.',
                         }, now),
                       ],
                     },
@@ -162,63 +181,6 @@ export function generateTutorial(lang: 'ru' | 'en'): Node[] {
                       description:
                         'Ты молодец. Теперь создай папку «Архив» и перетащи туда этот туториал. ' +
                         'А дальше — уже твоя карта жизни. Я не плачу. Это просто снег в глаза.',
-                    },
-                    now
-                  ),
-                  makeBaseNode(
-                    {
-                      title: 'Бонус: 3 готовых шаблона (чтобы не изобретать велосипед)',
-                      description:
-                        'Хочешь быстро увидеть “как правильно”? Вот три сценария, которые обычно заходят людям.\n' +
-                        'Можешь просто скопировать структуру и потом удалить этот блок (без жалости).',
-                      children: [
-                        makeBaseNode(
-                          {
-                            title: 'Шаблон 1 — Проект (запуск / ремонт / обучение)',
-                            description:
-                              'Как пользоваться: создай папку проекта → внутри этапы → внутри шаги. ' +
-                              'Ставь дедлайны этапам, приоритет — тем, что “горит”.',
-                            children: [
-                              makeBaseNode({ title: 'Цель проекта (1 строка)', description: 'Что считаем успехом? Пиши коротко. Потом спасибо скажешь.' }, now),
-                              makeBaseNode({ title: 'Этап 1: Подготовка', description: 'Сюда: исследования, список ресурсов, бюджет, список рисков.' }, now),
-                              makeBaseNode({ title: 'Этап 2: Реализация', description: 'Конкретные задачи. Лучше маленькие, чем “сделать всё”.' }, now),
-                              makeBaseNode({ title: 'Этап 3: Проверка', description: 'Чек-лист, тест, финальная правка. Да, это важно.' }, now),
-                              makeBaseNode({ title: 'Этап 4: Релиз', description: 'Публикация / сдача / отправка. И празднуем (с конфетти).' }, now),
-                            ],
-                          },
-                          now
-                        ),
-                        makeBaseNode(
-                          {
-                            title: 'Шаблон 2 — Папка знаний (важные тексты и ссылки)',
-                            description:
-                              'Это твой “сейф”. Делай папку и храни внутри заметки в описаниях задач. ' +
-                              'Структура должна быть простой, чтобы находить за 10 секунд.',
-                            children: [
-                            makeBaseNode({ title: 'Личные заметки (безопасно)', description: 'Всё, что важно помнить, но не обязательно держать в голове. Твои данные шифруются.' }, now),
-                              makeBaseNode({ title: 'Шаблоны текстов', description: 'Письма, сообщения, ответы, резюме. Всё, что ты устал(а) писать заново.' }, now),
-                              makeBaseNode({ title: 'Личные правила', description: 'Твои принципы/границы/решения. Когда мозг устал — это спасает.' }, now),
-                              makeBaseNode({ title: 'Ссылки/ресурсы', description: 'Курсы, статьи, каналы. И коротко: зачем эта ссылка вообще нужна.' }, now),
-                            ],
-                          },
-                          now
-                        ),
-                        makeBaseNode(
-                          {
-                            title: 'Шаблон 3 — Привычки и здоровье (без токсичного оптимизма)',
-                            description:
-                              'Тут удобно вести трек “микро-шагов”. Дедлайны — как напоминания, приоритет — как фокус.\n' +
-                              'Главное правило: меньше геройства, больше повторяемости.',
-                            children: [
-                              makeBaseNode({ title: 'Сон', description: 'Режим, вечерний ритуал, “что мешает” — фиксируй честно.' }, now),
-                              makeBaseNode({ title: 'Движение', description: '10–20 минут — уже победа. Делай шаги максимально простыми.' }, now),
-                              makeBaseNode({ title: 'Питание', description: 'Не диета. Просто система: вода, базовые продукты, план на неделю.' }, now),
-                              makeBaseNode({ title: 'Психика', description: 'Отдых, прогулка, дневник. Что реально помогает именно тебе.' }, now),
-                            ],
-                          },
-                          now
-                        ),
-                      ],
                     },
                     now
                   ),
@@ -272,19 +234,25 @@ export function generateTutorial(lang: 'ru' | 'en'): Node[] {
                     children: [
                       makeBaseNode({
                         title: 'Create a subtask',
-                        description: 'Click the plus button or press T. Every big plan starts with a small step. Even “buy bread”.',
+                        description: isMobile
+                          ? 'Click the plus button at the top. Every big plan starts with a small step.'
+                          : 'Click the plus button or press T. Every big plan starts with a small step. Even “buy bread”.',
                       }, now),
                       makeBaseNode({
                         title: 'Pin priority',
-                        description: 'Toggle priority on the task. It stays on top. As it should.',
+                        description: isMobile
+                          ? 'Swipe the action button in the card until you see the up arrow and tap it. It will stay on top.'
+                          : 'Toggle priority on the task. It stays on top. As it should.',
                       }, now),
                       makeBaseNode({
                         title: 'Edit a task',
-                        description: 'Pencil icon or press E. Make the title sharp. Or at least honest.',
+                        description: isMobile
+                          ? 'Swipe the action button to the pencil icon. Make the title sharp. Or at least honest.'
+                          : 'Pencil icon or press E. Make the title sharp. Or at least honest.',
                       }, now),
                       makeBaseNode({
                         title: 'Add a deadline',
-                        description: 'In the editor, set date (and time if needed). Then look right: deadlines list/calendar.',
+                        description: 'In the editor, set date (and time if needed). Then look right (or top on mobile): deadlines list/calendar.',
                       }, now),
                       makeBaseNode({
                         title: 'Check the deadline calendar',
@@ -292,7 +260,9 @@ export function generateTutorial(lang: 'ru' | 'en'): Node[] {
                       }, now),
                       makeBaseNode({
                         title: 'Alright. Next chapter',
-                        description: 'Press Esc to go back — and don’t forget to mark this step as completed. Yes, I’m watching. Kinda.',
+                        description: isMobile
+                          ? 'Click the "Back" button in the header — and don’t forget to mark this step as completed.'
+                          : 'Press Esc to go back — and don’t forget to mark this step as completed. Yes, I’m watching. Kinda.',
                       }, now),
                     ],
                   },
@@ -300,9 +270,14 @@ export function generateTutorial(lang: 'ru' | 'en'): Node[] {
                 ),
                 makeBaseNode(
                   {
-                    title: '4) Navigation for fast hands',
-                    description: 'Clicks are cute. Hotkeys are power.',
-                    children: [
+                    title: '4) Navigation',
+                    description: isMobile ? 'On mobile it is simple — just tap and scroll.' : 'Clicks are cute. Hotkeys are power.',
+                    children: isMobile ? [
+                      makeBaseNode({
+                        title: 'Breadcrumbs',
+                        description: 'Tap the path at the top to quickly jump back to any level.',
+                      }, now),
+                    ] : [
                       makeBaseNode({
                         title: 'Numbers 1–9',
                         description: 'Press 1–9 to jump to the corresponding card in the list.',
@@ -328,7 +303,9 @@ export function generateTutorial(lang: 'ru' | 'en'): Node[] {
                     children: [
                       makeBaseNode({
                         title: 'Move (M)',
-                        description: 'Press M → pick a target. Great for big structures.',
+                        description: isMobile
+                          ? 'Swipe the action button to the folder icon. Pick a target for the current node/folder.'
+                          : 'Press M → pick a target. Great for big structures.',
                       }, now),
                       makeBaseNode({
                         title: 'Drag & Drop',
@@ -336,15 +313,21 @@ export function generateTutorial(lang: 'ru' | 'en'): Node[] {
                       }, now),
                       makeBaseNode({
                         title: 'Import/Export (I)',
-                        description: 'Press I. Make backups. Future-you will thank you.',
+                        description: isMobile
+                          ? 'Use the header menu for import and export. Make backups. Future-you will thank you.'
+                          : 'Press I. Make backups. Or import. Sometimes life loves surprises — at least your data will be safe.',
                       }, now),
                       makeBaseNode({
                         title: 'Delete (D)',
-                        description: 'Press D → you’ll get a nice confirmation. We don’t do silent disasters here.',
+                        description: isMobile
+                          ? 'Swipe the button to the trash icon. We don’t do silent disasters here.'
+                          : 'Press D → you’ll get a nice confirmation. We don’t do silent disasters here.',
                       }, now),
                       makeBaseNode({
-                        title: 'Complete (Enter)',
-                        description: 'Enter → complete current node. Clean, simple, satisfying.',
+                        title: 'Complete',
+                        description: isMobile
+                          ? 'The checkmark button in the card is your main tool for success.'
+                          : 'Enter or the checkmark button → complete current node. Clean, simple, satisfying.',
                       }, now),
                     ],
                   },
@@ -356,63 +339,6 @@ export function generateTutorial(lang: 'ru' | 'en'): Node[] {
                     description:
                       'Create an “Archive” folder and move this tutorial there. ' +
                       'Then build your real life map. I’m not emotional. It’s just snow in my eyes.',
-                  },
-                  now
-                ),
-                makeBaseNode(
-                  {
-                    title: 'Bonus: 3 ready-to-use templates (so you don’t reinvent the wheel)',
-                    description:
-                      'Want to see a “best practice” structure? Here are three popular scenarios.\n' +
-                      'Copy the structure, then delete this block when you’re done (no mercy needed).',
-                    children: [
-                      makeBaseNode(
-                        {
-                          title: 'Template 1 — A Project (launch / renovation / learning)',
-                          description:
-                            'How to use: create a project folder → stages → tasks. ' +
-                            'Add deadlines to stages, set priority on what’s actually urgent.',
-                          children: [
-                            makeBaseNode({ title: 'Project goal (1 sentence)', description: 'Define what “done” means. Future-you will thank you.' }, now),
-                            makeBaseNode({ title: 'Stage 1: Preparation', description: 'Research, resources, budget, risks.' }, now),
-                            makeBaseNode({ title: 'Stage 2: Execution', description: 'Concrete tasks. Smaller is better than “do everything”.' }, now),
-                            makeBaseNode({ title: 'Stage 3: Review', description: 'Checklist, tests, final edits. Yes, it matters.' }, now),
-                            makeBaseNode({ title: 'Stage 4: Release', description: 'Ship it / submit it / send it. Then celebrate (confetti-approved).' }, now),
-                          ],
-                        },
-                        now
-                      ),
-                      makeBaseNode(
-                        {
-                          title: 'Template 2 — Knowledge Vault (important text & links)',
-                          description:
-                            'This is your “safe”. Create a folder and store notes inside task descriptions. ' +
-                            'Keep it simple so you can find anything in 10 seconds.',
-                          children: [
-                            makeBaseNode({ title: 'Personal notes (safely)', description: 'Important stuff to remember. Your data is encrypted for your eyes only.' }, now),
-                            makeBaseNode({ title: 'Text templates', description: 'Emails, messages, responses, CV snippets. Stop rewriting the same thing.' }, now),
-                            makeBaseNode({ title: 'Personal rules', description: 'Your principles/boundaries/decisions. Great when your brain is tired.' }, now),
-                            makeBaseNode({ title: 'Resources', description: 'Courses, articles, channels. Add a short “why this matters” note.' }, now),
-                          ],
-                        },
-                        now
-                      ),
-                      makeBaseNode(
-                        {
-                          title: 'Template 3 — Habits & Health (no toxic positivity)',
-                          description:
-                            'Great for micro-steps. Deadlines as reminders, priority as focus.\n' +
-                            'Rule: less hero mode, more consistency.',
-                          children: [
-                            makeBaseNode({ title: 'Sleep', description: 'Routine, wind-down, what breaks it. Be honest.' }, now),
-                            makeBaseNode({ title: 'Movement', description: '10–20 minutes counts. Make the steps ridiculously doable.' }, now),
-                            makeBaseNode({ title: 'Nutrition', description: 'Not a diet—just a system: water, basics, weekly plan.' }, now),
-                            makeBaseNode({ title: 'Mind', description: 'Rest, walking, journaling. What actually helps *you*.' }, now),
-                          ],
-                        },
-                        now
-                      ),
-                    ],
                   },
                   now
                 ),

@@ -8,6 +8,7 @@ export interface Toast {
   persistent?: boolean; // Не закрываемый тост
   isLoading?: boolean; // Показывать иконку загрузки
   isSuccess?: boolean; // Показывать галочку успеха
+  type?: 'success' | 'warning' | 'error' | 'default'; // Категория тоста
   createdAt: number;
 }
 
@@ -25,7 +26,7 @@ function notifyListeners() {
 
 interface ToastContextType {
   toasts: Toast[];
-  showToast: (message: string, undo?: () => void, options?: { subtitle?: string; persistent?: boolean; isLoading?: boolean }) => string;
+  showToast: (message: string, undo?: () => void, options?: { subtitle?: string; persistent?: boolean; isLoading?: boolean; type?: 'success' | 'warning' | 'error' | 'default' }) => string;
   updateToast: (id: string, updates: Partial<Toast>) => void;
   removeToast: (id: string) => void;
 }
@@ -76,7 +77,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const showToast = useCallback((message: string, undo?: () => void, options?: { subtitle?: string; persistent?: boolean; isLoading?: boolean }) => {
+  const showToast = useCallback((message: string, undo?: () => void, options?: { subtitle?: string; persistent?: boolean; isLoading?: boolean; type?: 'success' | 'warning' | 'error' | 'default' }) => {
     const id = `toast-${toastIdCounter++}`;
     const toast: Toast = { 
       id, 
@@ -85,6 +86,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       subtitle: options?.subtitle,
       persistent: options?.persistent,
       isLoading: options?.isLoading ?? false,
+      type: options?.type || 'default',
       createdAt: Date.now() 
     };
     

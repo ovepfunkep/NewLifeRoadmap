@@ -84,8 +84,9 @@ async function injectTutorialIfEmpty(): Promise<void> {
 
   log('Injecting tutorial (first visit)...');
 
-  const ru = generateTutorial('ru');
-  const en = generateTutorial('en');
+  const isMobile = typeof window !== 'undefined' && (window.innerWidth < 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+  const ru = generateTutorial('ru', isMobile);
+  const en = generateTutorial('en', isMobile);
   const tutorialRoots = [...ru, ...en];
 
   const saveSubtree = async (node: Node) => {
@@ -108,11 +109,18 @@ export async function recreateTutorial(): Promise<void> {
   if (!dbInstance) await initDB();
 
   const root = await getRoot();
+  
+  // Проверка на дубликаты: если узел с таким типом уже есть в корне, не создаем новый
+  if (root.children.some(c => c.id.endsWith('-refresh-memory'))) {
+    throw new Error('DUPLICATE_TUTORIAL');
+  }
+
   const currentLang = (typeof window !== 'undefined' && localStorage.getItem('language')) || 'en';
   const isRu = currentLang === 'ru';
+  const isMobile = typeof window !== 'undefined' && (window.innerWidth < 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
 
-  const ru = generateTutorial('ru');
-  const en = generateTutorial('en');
+  const ru = generateTutorial('ru', isMobile);
+  const en = generateTutorial('en', isMobile);
 
   const now = new Date().toISOString();
   const wrapper: Node = {

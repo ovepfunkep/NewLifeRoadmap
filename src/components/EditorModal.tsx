@@ -5,6 +5,10 @@ import { generateId } from '../utils';
 import { FiAlertCircle } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
 import { useLanguage } from '../contexts/LanguageContext';
+import { TelegramLinkModal } from './TelegramLinkModal';
+import { AuthRequiredModal } from './AuthRequiredModal';
+import { getCurrentUser } from '../firebase/auth';
+import { getUserSecurityConfig } from '../firebase/security';
 
 interface EditorModalProps {
   node: Node | null; // null = создание нового
@@ -16,6 +20,8 @@ interface EditorModalProps {
 
 export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }: EditorModalProps) {
   const { language } = useLanguage();
+  const [showTgLinkModal, setShowTgLinkModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   
   // Форматируем initialDeadline в строку для input type="date"
   const formatDateForInput = (date: Date): string => {
@@ -146,7 +152,19 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
     setReminders(prev => prev.map((rem, i) => i === index ? { ...rem, [field]: value } : rem));
   };
 
-  const handleAddReminder = () => {
+  const handleAddReminder = async () => {
+    const user = getCurrentUser();
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    const config = await getUserSecurityConfig(user.uid);
+    if (!config?.telegramChatId) {
+      setShowTgLinkModal(true);
+      return;
+    }
+
     // Находим интервал, которого еще нет в списке (по умолчанию 1 час)
     let newValue = 1;
     let newUnit: 'hours' | 'days' = 'hours';
@@ -420,6 +438,19 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
             </button>
           </div>
         </form>
+        
+        {showTgLinkModal && (
+          <TelegramLinkModal onClose={() => setShowTgLinkModal(false)} />
+        )}
+        {showAuthModal && (
+          <AuthRequiredModal 
+            onClose={() => setShowAuthModal(false)} 
+            onSuccess={() => {
+              setShowAuthModal(false);
+              handleAddReminder();
+            }}
+          />
+        )}
       </div>
     </div>
   );

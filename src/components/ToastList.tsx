@@ -38,6 +38,23 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   const showIcon = toast.isLoading !== undefined || toast.isSuccess !== undefined;
   const showProgressBar = !isPersistent && !toast.isLoading; // Показываем прогресс для всех не persistent тостов
 
+  const typeStyles = {
+    success: 'border-accent bg-accent/5 dark:bg-accent/10 shadow-accent/10',
+    warning: 'border-yellow-500/50 bg-yellow-50 dark:bg-yellow-900/10 shadow-yellow-500/10',
+    error: 'border-red-500/50 bg-red-50 dark:bg-red-900/10 shadow-red-500/10',
+    default: 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+  };
+
+  const typeColors = {
+    success: 'var(--accent)',
+    warning: '#eab308',
+    error: '#ef4444',
+    default: 'var(--accent)'
+  };
+
+  const currentType = toast.type || 'default';
+  const color = typeColors[currentType];
+
   useEffect(() => {
     // Если тост успешно завершен, показываем его 2.5 секунды и закрываем
     if (toast.isSuccess && !toast.isLoading) {
@@ -83,8 +100,10 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
 
   return (
     <div 
-      className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 min-w-[300px] flex flex-col overflow-hidden ${
-        !isPersistent && !toast.isLoading ? 'cursor-pointer hover:shadow-xl transition-shadow' : ''
+      className={`relative rounded-2xl shadow-lg border min-w-[300px] flex flex-col overflow-hidden transition-all duration-200 ${
+        typeStyles[currentType]
+      } ${
+        !isPersistent && !toast.isLoading ? 'cursor-pointer hover:shadow-xl' : ''
       }`}
       onClick={() => {
         // Закрываем тост при клике, если он не persistent и не в процессе загрузки
@@ -96,7 +115,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
       {/* Контент тоста */}
       <div className="flex items-center justify-between gap-3 p-4 relative z-10">
         <div className="flex-1">
-          <span className="text-sm text-gray-900 dark:text-gray-100 block">
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 block">
             {toast.message}
           </span>
           {toast.isLoading && (
@@ -119,13 +138,13 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
                 <FiLoader 
                   size={20} 
                   className="animate-spin" 
-                  style={{ color: 'var(--accent)' }}
+                  style={{ color }}
                 />
               )}
               {toast.isSuccess && !toast.isLoading && (
                 <FiCheck 
                   size={20} 
-                  style={{ color: 'var(--accent)' }}
+                  style={{ color }}
                   className="transition-opacity"
                 />
               )}
@@ -138,10 +157,9 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
                 toast.undo?.();
                 onRemove(toast.id);
               }}
-              className="text-sm font-medium px-3 py-1.5 rounded-xl transition-colors"
+              className="text-sm font-medium px-3 py-1.5 rounded-xl transition-colors text-white"
               style={{ 
-                backgroundColor: 'var(--accent)',
-                color: 'white'
+                backgroundColor: color
               }}
             >
               {t('toast.undo')}
@@ -157,7 +175,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
             className="h-full transition-all duration-75 ease-linear"
             style={{
               width: `${progress}%`,
-              backgroundColor: 'var(--accent)',
+              backgroundColor: color,
             }}
           />
         </div>

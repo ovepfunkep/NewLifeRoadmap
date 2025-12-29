@@ -3,10 +3,11 @@ import { useTheme } from '../hooks/useTheme';
 import { useAccent } from '../hooks/useAccent';
 import { useEffects } from '../hooks/useEffects';
 import { useLanguage } from '../contexts/LanguageContext';
-import { FiSun, FiMoon, FiSend } from 'react-icons/fi';
+import { FiSun, FiMoon } from 'react-icons/fi';
+import { FaGraduationCap } from 'react-icons/fa';
 import { SparklesIcon } from './SparklesIcon';
-import { TELEGRAM_BOT_USERNAME } from '../utils/constants';
-import { getCurrentUser } from '../firebase/auth';
+import { recreateTutorial } from '../db';
+import { useToast } from '../hooks/useToast';
 
 type Language = 'ru' | 'en';
 
@@ -21,15 +22,44 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
   const { language, setLanguage } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<number | null>(null);
-  const radius = 60; // Радиус спиннера в пикселях
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Закрытие при клике вне компонента
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsExpanded(false);
+        setShowPalette(false);
+      }
+    };
+
+    if (isExpanded) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isExpanded]);
+
+  const radius = 70; // Радиус 70px
   const gearSize = 32; // Размер шестеренки
   const paletteWidth = 280; // Ширина палитры цветов
 
   // Проверяем, находится ли курсор в пределах радиуса (с учетом палитры)
   useEffect(() => {
-    if (!isExpanded || !containerRef.current) return;
+    if (!isExpanded || !containerRef.current || isMobile) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!containerRef.current) return;
@@ -52,7 +82,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
       }
       
       // Если курсор выходит за пределы расширенного радиуса + отступ, планируем сворачивание
-      if (distance > effectiveRadius + 30) {
+      if (distance > effectiveRadius + 50) { // Увеличиваем отступ
         timeoutRef.current = window.setTimeout(() => {
           // Дополнительная проверка перед сворачиванием
           if (containerRef.current) {
@@ -65,7 +95,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
             const finalDistance = Math.sqrt(
               Math.pow(mouseX - finalCenterX, 2) + Math.pow(mouseY - finalCenterY, 2)
             );
-            if (finalDistance > finalEffectiveRadius + 30) {
+            if (finalDistance > finalEffectiveRadius + 50) {
               setIsExpanded(false);
               setShowPalette(false);
             }
@@ -82,7 +112,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [isExpanded, radius, showPalette, paletteWidth]);
+  }, [isExpanded, radius, showPalette, paletteWidth, isMobile]);
 
   const handleThemeClick = () => {
     setTheme(theme === 'light' ? 'dark' : 'light');
@@ -92,22 +122,6 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
     const newLang = language === 'ru' ? 'en' : 'ru';
     setLanguage(newLang);
     onLanguageChange?.(newLang);
-    
-    // Сохраняем все настройки перед перезагрузкой
-    try {
-      const { saveAllUserSettings } = await import('../firebase/settingsSync');
-      await saveAllUserSettings({
-        theme,
-        accent,
-        language: newLang,
-        effectsEnabled,
-      });
-    } catch (error) {
-      console.error('Error saving settings before reload:', error);
-    }
-    
-    // Перезагружаем страницу для применения изменений
-    window.location.reload();
   };
 
   const ColorIcon = () => (
@@ -120,22 +134,21 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
   const handleEffectsClick = async () => {
     const newEffectsEnabled = !effectsEnabled;
     setEffectsEnabled(newEffectsEnabled);
-    
-    // Сохраняем все настройки перед перезагрузкой
+  };
+
+  const handleRefreshMemory = async () => {
     try {
-      const { saveAllUserSettings } = await import('../firebase/settingsSync');
-      await saveAllUserSettings({
-        theme,
-        accent,
-        language,
-        effectsEnabled: newEffectsEnabled,
-      });
-    } catch (error) {
-      console.error('Error saving settings before reload:', error);
+      await recreateTutorial();
+      showToast(language === 'ru' ? 'Окей. Туториал добавлен в корень.' : 'Okay. Tutorial added to root.', undefined, { type: 'success' });
+      window.dispatchEvent(new CustomEvent('syncManager:dataUpdated'));
+      setIsExpanded(false);
+    } catch (e: any) {
+      if (e.message === 'DUPLICATE_TUTORIAL') {
+        showToast(language === 'ru' ? 'Туториал уже есть в списке.' : 'Tutorial is already in the list.', undefined, { type: 'warning' });
+      } else {
+        showToast(language === 'ru' ? 'Не получилось создать туториал. Попробуй ещё раз.' : 'Failed to recreate tutorial. Try again.', undefined, { type: 'error' });
+      }
     }
-    
-    // Перезагружаем страницу для применения изменений
-    window.location.reload();
   };
 
   const LanguageIcon = () => (
@@ -156,27 +169,15 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
 
   // Мемоизируем buttonPositions, чтобы они обновлялись при изменении настроек
   const buttonPositions = useMemo(() => {
-    const user = getCurrentUser();
-    const positions = [
-      { angle: 270, icon: theme === 'light' ? FiSun : FiMoon, action: handleThemeClick, label: language === 'en' ? 'Theme' : 'Тема' },
-      { angle: 150, icon: ColorIcon, action: () => setShowPalette(!showPalette), label: language === 'en' ? 'Color' : 'Цвет' },
-      { angle: 30, icon: LanguageIcon, action: handleLanguageClick, label: language === 'en' ? 'Language' : 'Язык' },
-      { angle: 210, icon: EffectsIcon, action: handleEffectsClick, label: language === 'en' ? 'Effects' : 'Эффекты' },
+    // Распределяем 5 кнопок на 360 градусов
+    const angles = [270, 342, 54, 126, 198]; // 360 / 5 = 72 градуса шаг
+    return [
+      { angle: angles[0], icon: theme === 'light' ? FiSun : FiMoon, action: handleThemeClick, label: language === 'en' ? 'Theme' : 'Тема' },
+      { angle: angles[1], icon: LanguageIcon, action: handleLanguageClick, label: language === 'en' ? 'Language' : 'Язык' },
+      { angle: angles[2], icon: ColorIcon, action: () => setShowPalette(!showPalette), label: language === 'en' ? 'Color' : 'Цвет' },
+      { angle: angles[3], icon: EffectsIcon, action: handleEffectsClick, label: language === 'en' ? 'Effects' : 'Эффекты' },
+      { angle: angles[4], icon: FaGraduationCap, action: handleRefreshMemory, label: language === 'en' ? 'Tutorial' : 'Туториал' },
     ];
-
-    if (user) {
-      // Бот username не может содержать пробелы, на всякий случай чистим
-      const cleanBotName = TELEGRAM_BOT_USERNAME.replace(/\s/g, '');
-      const tgUrl = `https://t.me/${cleanBotName}?start=${user.uid}`;
-      positions.push({
-        angle: 90,
-        icon: FiSend,
-        action: () => window.open(tgUrl, '_blank'),
-        label: language === 'en' ? 'Link Telegram' : 'Привязать Telegram'
-      });
-    }
-
-    return positions;
   }, [theme, accent, language, effectsEnabled, handleLanguageClick, handleEffectsClick, showPalette]);
 
   return (
@@ -184,8 +185,8 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
       ref={containerRef}
       className="fixed flex items-center justify-center"
       style={{ 
-        width: `${radius * 2}px`,
-        height: `${radius * 2}px`,
+        width: isMobile ? '48px' : `${radius * 2}px`,
+        height: isMobile ? '48px' : `${radius * 2}px`,
         right: '1.5rem',
         bottom: '1.5rem',
         zIndex: 50,
@@ -206,12 +207,13 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
           zIndex: 20,
         }}
         onMouseEnter={() => {
-          if (!isExpanded) {
+          if (!isExpanded && !isMobile) {
             setIsExpanded(true);
-            if (timeoutRef.current !== null) {
-              clearTimeout(timeoutRef.current);
-              timeoutRef.current = null;
-            }
+          }
+        }}
+        onClick={() => {
+          if (isMobile) {
+            setIsExpanded(!isExpanded);
           }
         }}
       >
@@ -249,7 +251,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
           left: '50%',
           top: '50%',
           transform: isExpanded 
-            ? 'translate(-50%, -50%) scale(1) rotate(360deg)' 
+            ? `translate(-50%, -50%) scale(1) ${isMobile ? '' : 'rotate(360deg)'}` 
             : 'translate(-50%, -50%) scale(0) rotate(0deg)',
           opacity: isExpanded ? 1 : 0,
           pointerEvents: isExpanded ? 'auto' : 'none',
@@ -260,67 +262,83 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
             timeoutRef.current = null;
           }
         }}
+        onClick={() => {
+          if (isMobile) {
+            setIsExpanded(false);
+            setShowPalette(false);
+          }
+        }}
       >
-        {/* Центральная точка */}
-        <div 
-          className="absolute rounded-full bg-gray-400 dark:bg-gray-600 transition-all duration-[333ms]"
-          style={{
-            width: isExpanded ? '12px' : '8px',
-            height: isExpanded ? '12px' : '8px',
-            left: '50%',
-            top: '50%',
-            opacity: isExpanded ? 1 : 0,
-            transform: 'translate(-50%, -50%)',
-          }}
-        />
+        {/* Центральная точка (только на десктопе) */}
+        {!isMobile && (
+          <div 
+            className="absolute rounded-full bg-gray-400 dark:bg-gray-600 transition-all duration-[333ms]"
+            style={{
+              width: isExpanded ? '12px' : '8px',
+              height: isExpanded ? '12px' : '8px',
+              left: '50%',
+              top: '50%',
+              opacity: isExpanded ? 1 : 0,
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+        )}
         
-        {/* Линии спиннера */}
-        <svg 
-          className="absolute pointer-events-none" 
-          style={{ 
-            color: 'var(--accent)',
-            width: '100%',
-            height: '100%',
-            left: '50%',
-            top: '50%',
-            transform: 'translate(-50%, -50%)',
-          }}
-          viewBox={`0 0 ${radius * 2} ${radius * 2}`}
-        >
-          {buttonPositions.map((pos, idx) => {
-            const rad = (pos.angle * Math.PI) / 180;
-            const centerX = radius;
-            const centerY = radius;
-            const lineLength = radius - 20;
-            const x1 = centerX;
-            const y1 = centerY;
-            const x2 = centerX + (lineLength - 20) * Math.cos(rad);
-            const y2 = centerY + (lineLength - 20) * Math.sin(rad);
-            
-            return (
-              <line
-                key={idx}
-                x1={x1}
-                y1={y1}
-                x2={x2}
-                y2={y2}
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                className="transition-opacity duration-[333ms]"
-                style={{ opacity: isExpanded ? 0.6 : 0 }}
-              />
-            );
-          })}
-        </svg>
+        {/* Линии спиннера (только на десктопе) */}
+        {!isMobile && (
+          <svg 
+            className="absolute pointer-events-none" 
+            style={{ 
+              color: 'var(--accent)',
+              width: '100%',
+              height: '100%',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+            }}
+            viewBox={`0 0 ${radius * 2} ${radius * 2}`}
+          >
+            {buttonPositions.map((pos, idx) => {
+              const rad = (pos.angle * Math.PI) / 180;
+              const centerX = radius;
+              const centerY = radius;
+              const lineLength = radius - 20;
+              const x1 = centerX;
+              const y1 = centerY;
+              const x2 = centerX + (lineLength - 20) * Math.cos(rad);
+              const y2 = centerY + (lineLength - 20) * Math.sin(rad);
+              
+              return (
+                <line
+                  key={idx}
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  className="transition-opacity duration-[333ms]"
+                  style={{ opacity: isExpanded ? 0.6 : 0 }}
+                />
+              );
+            })}
+          </svg>
+        )}
 
         {/* Кнопки на концах */}
         {buttonPositions.map((pos, idx) => {
           const rad = (pos.angle * Math.PI) / 180;
           const buttonRadius = radius - 20;
           const Icon = pos.icon;
-          const isEffectsButton = idx === 3; // Четвертая кнопка - эффекты
-          const isActive = isEffectsButton && effectsEnabled;
+          const isEffectsBtn = idx === 3;
+          const isActive = isEffectsBtn && effectsEnabled;
+
+          const transform = isExpanded 
+            ? isMobile
+              ? `translate(-50%, calc(-50% - ${(idx + 1) * 48}px)) scale(1)`
+              : `translate(calc(-50% + ${buttonRadius * Math.cos(rad)}px), calc(-50% + ${buttonRadius * Math.sin(rad)}px)) scale(1)`
+            : 'translate(-50%, -50%) scale(0)';
 
           return (
             <button
@@ -329,7 +347,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
                 e.stopPropagation();
                 pos.action();
               }}
-              className={`absolute w-8 h-8 rounded-lg border-2 transition-all duration-[333ms] flex items-center justify-center group z-10 shadow-sm ${
+              className={`absolute w-10 h-10 rounded-lg border-2 transition-all duration-[333ms] flex items-center justify-center group z-10 shadow-lg ${
                 isActive
                   ? 'border-transparent bg-white dark:bg-gray-800'
                   : 'border-current hover:bg-accent/10 hover:brightness-150 bg-white dark:bg-gray-800'
@@ -339,18 +357,18 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
                 top: '50%',
                 color: 'var(--accent)',
                 backgroundColor: isActive ? 'var(--accent)' : 'transparent',
-                transform: isExpanded 
-                  ? `translate(calc(-50% + ${buttonRadius * Math.cos(rad)}px), calc(-50% + ${buttonRadius * Math.sin(rad)}px)) scale(1)` 
-                  : 'translate(-50%, -50%) scale(0)',
+                transform,
                 opacity: isExpanded ? 1 : 0,
                 transition: 'transform 333ms ease-in-out, opacity 333ms ease-in-out, background-color 0.5s ease',
               }}
             >
-              <Icon size={18} />
-              {/* Tooltip */}
-              <span className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs text-gray-600 dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none bg-white dark:bg-gray-800 px-2 py-1 rounded shadow-lg border border-gray-200 dark:border-gray-700">
-                {pos.label}
-              </span>
+              <Icon size={20} />
+              {/* Tooltip (только на десктопе) */}
+              {!isMobile && (
+                <span className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs text-gray-600 dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none bg-white dark:bg-gray-800 px-2 py-1 rounded shadow-lg border border-gray-200 dark:border-gray-700">
+                  {pos.label}
+                </span>
+              )}
             </button>
           );
         })}
@@ -364,26 +382,27 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
             onClick={() => setShowPalette(false)}
           />
           <div 
-            className="absolute z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
+            className="absolute z-50 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700"
             onClick={(e) => e.stopPropagation()}
             onMouseEnter={() => {
-              if (timeoutRef.current !== null) {
+              if (timeoutRef.current !== null && !isMobile) {
                 clearTimeout(timeoutRef.current);
                 timeoutRef.current = null;
               }
             }}
             style={{
-              right: 'calc(100% + 0.5rem)',
-              top: '50%',
-              transform: 'translateY(-50%)',
+              right: isMobile ? 'calc(100% + 1rem)' : 'calc(100% + 0.5rem)',
+              bottom: isMobile ? '0' : 'auto',
+              top: isMobile ? 'auto' : '50%',
+              transform: isMobile ? 'none' : 'translateY(-50%)',
               padding: '12px',
               display: 'inline-block',
             }}
           >
             <div 
-              className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap"
+              className={`grid ${isMobile ? 'grid-cols-4' : 'grid-cols-2'} gap-2 sm:flex sm:flex-wrap`}
               style={{ 
-                gap: '7px',
+                gap: '8px',
                 width: 'max-content',
               }}
             >
@@ -393,6 +412,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
                   onClick={() => {
                     setAccent(color);
                     setShowPalette(false);
+                    if (isMobile) setIsExpanded(false);
                   }}
                   className={`rounded border-2 transition-all hover:brightness-150 flex-shrink-0 ${
                     accent === color
@@ -401,10 +421,10 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
                   }`}
                   style={{ 
                     backgroundColor: color,
-                    width: '32px',
-                    height: '32px',
-                    minWidth: '32px',
-                    minHeight: '32px',
+                    width: '36px',
+                    height: '36px',
+                    minWidth: '36px',
+                    minHeight: '36px',
                   }}
                   aria-label={`Выбрать цвет ${color}`}
                 />

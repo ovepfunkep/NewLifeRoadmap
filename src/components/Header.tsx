@@ -4,7 +4,7 @@ import { useTranslation } from '../i18n';
 import { useNodeNavigation } from '../hooks/useHashRoute';
 import { computeProgress, getDeadlineColor, getProgressCounts, formatDeadline } from '../utils';
 import { useEffects } from '../hooks/useEffects';
-import { FiEdit2, FiDownload, FiMove, FiCheck, FiTrash2 } from 'react-icons/fi';
+import { FiEdit2, FiDownload, FiMove, FiCheck, FiTrash2, FiArrowUp } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
 
 interface HeaderProps {
@@ -20,6 +20,7 @@ interface HeaderProps {
   onImportExport?: () => void;
   onMove?: () => void;
   onMarkCompleted?: (id: string, completed: boolean) => void;
+  onTogglePriority?: (id: string, priority: boolean) => void;
   currentNodeId?: string;
 }
 
@@ -36,6 +37,7 @@ export function Header({
   onImportExport,
   onMove,
   onMarkCompleted,
+  onTogglePriority,
   currentNodeId
 }: HeaderProps) {
   const [, navigateToNode] = useNodeNavigation();
@@ -143,29 +145,29 @@ export function Header({
                   <div className="flex items-start gap-3 relative">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <div className="flex items-center gap-3 flex-wrap">
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                    {node.title}
-                  </h1>
-                  {node.priority && (
-                    <span className="flex-shrink-0 px-2 py-1 text-xs font-medium rounded border-2" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-                      {t('node.priority')}
-                    </span>
-                  )}
-                  {node.deadline && !node.completed && (
-                    <span className="flex-shrink-0 text-xs px-2 py-1 rounded text-white" style={{ backgroundColor: getDeadlineColor(node) }}>
-                      {formatDeadline(node.deadline)}
-                    </span>
-                  )}
-                </div>
+                        <div className="flex flex-col gap-1">
+                          {node.deadline && !node.completed && (
+                            <div>
+                              <span 
+                                className="text-[10px] px-2 py-0.5 rounded font-medium border uppercase tracking-wider text-white" 
+                                style={{ backgroundColor: getDeadlineColor(node), borderColor: getDeadlineColor(node) }}
+                              >
+                                {formatDeadline(node.deadline)}
+                              </span>
+                            </div>
+                          )}
+                          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                            {node.title}
+                          </h1>
+                        </div>
                 
                 {/* Кнопки действий - aligned right */}
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                   {onMarkCompleted && node.id !== 'root-node' && (
                     <Tooltip text={node.completed ? t('node.markIncomplete') : t('node.markCompleted')}>
                       <button
                         onClick={() => onMarkCompleted(node.id, !node.completed)}
-                        className={`p-2 rounded-lg transition-all border hover:brightness-150 ${
+                        className={`p-3 sm:p-2 rounded-lg transition-all border hover:brightness-150 ${
                           node.completed
                             ? 'border-transparent'
                             : 'border-current hover:bg-accent/10'
@@ -175,7 +177,25 @@ export function Header({
                           backgroundColor: node.completed ? 'var(--accent)' : 'transparent'
                         }}
                       >
-                        <FiCheck size={18} style={{ color: node.completed ? 'white' : 'var(--accent)' }} />
+                        <FiCheck size={20} className="sm:w-4 sm:h-4" style={{ color: node.completed ? 'white' : 'var(--accent)' }} />
+                      </button>
+                    </Tooltip>
+                  )}
+                  {onTogglePriority && node.id !== 'root-node' && (
+                    <Tooltip text={node.priority ? t('tooltip.removePriority') : t('tooltip.priority')}>
+                      <button
+                        onClick={() => onTogglePriority(node.id, !node.priority)}
+                        className={`p-3 sm:p-2 rounded-lg transition-all border hover:brightness-150 ${
+                          node.priority
+                            ? 'border-transparent'
+                            : 'border-current hover:bg-accent/10'
+                        }`}
+                        style={{ 
+                          color: 'var(--accent)',
+                          backgroundColor: node.priority ? 'var(--accent)' : 'transparent'
+                        }}
+                      >
+                        <FiArrowUp size={20} className="sm:w-4 sm:h-4" style={{ color: node.priority ? 'white' : 'var(--accent)' }} />
                       </button>
                     </Tooltip>
                   )}
@@ -183,10 +203,10 @@ export function Header({
                     <Tooltip text={t('general.edit')}>
                       <button
                         onClick={() => onEdit(node)}
-                        className="p-2 rounded-lg border border-current transition-all hover:brightness-150"
+                        className="p-3 sm:p-2 rounded-lg border border-current transition-all hover:bg-accent/10 hover:brightness-150"
                         style={{ color: 'var(--accent)' }}
                       >
-                        <FiEdit2 size={18} />
+                        <FiEdit2 size={20} className="sm:w-4 sm:h-4" />
                       </button>
                     </Tooltip>
                   )}
@@ -194,10 +214,10 @@ export function Header({
                     <Tooltip text={`${t('importExport.import')} / ${t('importExport.export')}`}>
                       <button
                         onClick={onImportExport}
-                        className="p-2 rounded-lg border border-current transition-all hover:brightness-150"
+                        className="p-3 sm:p-2 rounded-lg border border-current transition-all hover:bg-accent/10 hover:brightness-150"
                         style={{ color: 'var(--accent)' }}
                       >
-                        <FiDownload size={18} />
+                        <FiDownload size={20} className="sm:w-4 sm:h-4" />
                       </button>
                     </Tooltip>
                   )}
@@ -205,10 +225,10 @@ export function Header({
                     <Tooltip text={t('node.move')}>
                       <button
                         onClick={onMove}
-                        className="p-2 rounded-lg border border-current transition-all hover:brightness-150"
+                        className="p-3 sm:p-2 rounded-lg border border-current transition-all hover:bg-accent/10 hover:brightness-150"
                         style={{ color: 'var(--accent)' }}
                       >
-                        <FiMove size={18} />
+                        <FiMove size={20} className="sm:w-4 sm:h-4" />
                       </button>
                     </Tooltip>
                   )}
@@ -216,9 +236,9 @@ export function Header({
                     <Tooltip text={t('general.delete')}>
                       <button
                         onClick={() => onDelete(node.id)}
-                        className="p-2 rounded-lg border border-red-500 text-red-500 transition-all hover:bg-red-50 dark:hover:bg-red-900/20 hover:brightness-150"
+                        className="p-3 sm:p-2 rounded-lg border border-red-500 text-red-500 transition-all hover:bg-red-50 dark:hover:bg-red-900/20 hover:brightness-150"
                       >
-                        <FiTrash2 size={18} />
+                        <FiTrash2 size={20} className="sm:w-4 sm:h-4" />
                       </button>
                     </Tooltip>
                   )}

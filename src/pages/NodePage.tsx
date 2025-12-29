@@ -32,6 +32,7 @@ export function NodePage() {
   const [sortType, setSortType] = useState<SortType>('none');
   const [filterType, setFilterType] = useState<'all' | 'completed' | 'incomplete'>('all');
   const [showMoveModal, setShowMoveModal] = useState(false);
+  const [nodeToMove, setNodeToMove] = useState<Node | null>(null);
   const [draggedNode, setDraggedNode] = useState<Node | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
   const [nodeToDeleteId, setNodeToDeleteId] = useState<string | null>(null);
@@ -1081,7 +1082,7 @@ export function NodePage() {
   }
 
       return (
-        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col" style={{ paddingTop: effectsEnabled ? '30px' : '0' }}>
+        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col overflow-x-hidden w-full" style={{ paddingTop: effectsEnabled ? '30px' : '0' }}>
       <Header 
         node={currentNode} 
         breadcrumbs={breadcrumbs}
@@ -1095,6 +1096,7 @@ export function NodePage() {
         onImportExport={handleImportExport}
         onMove={() => setShowMoveModal(true)}
         onMarkCompleted={handleMarkCompleted}
+        onTogglePriority={handleTogglePriority}
         currentNodeId={currentNode.id}
       />
       
@@ -1120,6 +1122,10 @@ export function NodePage() {
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     onTogglePriority={handleTogglePriority}
+                    onMove={(node) => {
+                      setNodeToMove(node);
+                      setShowMoveModal(true);
+                    }}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     onDragOver={handleDragOver}
@@ -1159,11 +1165,14 @@ export function NodePage() {
         />
       )}
       
-      {showMoveModal && currentNode && (
+      {showMoveModal && (nodeToMove || currentNode) && (
         <MoveModal
-          sourceNodeId={currentNode.id}
+          sourceNodeId={nodeToMove ? nodeToMove.id : currentNode.id}
           onMove={handleMoveNode}
-          onClose={() => setShowMoveModal(false)}
+          onClose={() => {
+            setShowMoveModal(false);
+            setNodeToMove(null);
+          }}
         />
       )}
       

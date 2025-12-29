@@ -7,13 +7,16 @@ export function Garland() {
   const { theme } = useTheme();
   const [bulbCount, setBulbCount] = useState(0);
   const [width, setWidth] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     // Вычисляем количество лампочек в зависимости от ширины экрана
     const updateBulbCount = () => {
       const w = window.innerWidth;
       setWidth(w);
-      setBulbCount(Math.ceil(w / 50)); // Примерно одна лампочка на 50px (в 2 раза реже)
+      const mobile = w < 768;
+      setIsMobile(mobile);
+      setBulbCount(Math.ceil(w / (mobile ? 80 : 50))); // Реже на мобилках
     };
 
     updateBulbCount();
@@ -31,34 +34,34 @@ export function Garland() {
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 pointer-events-none"
+      className="fixed top-0 left-0 right-0 pointer-events-none overflow-hidden"
       style={{
-        height: '30px', // Увеличена высота для провисания
-        overflow: 'visible',
-        zIndex: 9999, // Поверх всех элементов
+        height: '30px',
+        zIndex: 9999,
       }}
     >
       <svg
         width="100%"
-        height="30" // Увеличена высота SVG
+        height="30"
         style={{
           display: 'block',
+          maxWidth: '100vw',
         }}
       >
         {/* Провод гирлянды с провисанием */}
         {width > 0 && (
           <path
-            d={`M 0,8 Q ${width / 2},18 ${width},8`} // Увеличено провисание до 18px
+            d={`M 0,8 Q ${width / 2},${isMobile ? 14 : 18} ${width},8`} // Меньше провисание на мобилках
             fill="none"
             stroke={wireColor}
-            strokeWidth="1.5"
+            strokeWidth={isMobile ? "1" : "1.5"}
             opacity="0.4"
           />
         )}
         {/* Лампочки */}
         {Array.from({ length: bulbCount }).map((_, index) => {
           const xPercent = bulbCount > 1 ? (index / (bulbCount - 1)) * 100 : 50;
-          const y = 8 + Math.sin((index / Math.max(1, bulbCount - 1)) * Math.PI) * 6; // Увеличено провисание до 6px
+          const y = 8 + Math.sin((index / Math.max(1, bulbCount - 1)) * Math.PI) * (isMobile ? 4 : 6);
           const color = colors[index % colors.length];
           const delay = index * 0.15;
 
@@ -78,7 +81,7 @@ export function Garland() {
               <circle
                 cx={`${xPercent}%`}
                 cy={y + 3}
-                r="4"
+                r={isMobile ? "3" : "4"}
                 fill={color}
                 opacity="0.95"
               >
@@ -91,7 +94,7 @@ export function Garland() {
                 />
                 <animate
                   attributeName="r"
-                  values="3.5;5;3.5"
+                  values={isMobile ? "2.5;3.5;2.5" : "3.5;5;3.5"}
                   dur="1.5s"
                   begin={`${delay}s`}
                   repeatCount="indefinite"
@@ -101,7 +104,7 @@ export function Garland() {
               <circle
                 cx={`${xPercent}%`}
                 cy={y + 3}
-                r="8"
+                r={isMobile ? "6" : "8"}
                 fill={color}
                 opacity="0.4"
               >
@@ -114,7 +117,7 @@ export function Garland() {
                 />
                 <animate
                   attributeName="r"
-                  values="6;10;6"
+                  values={isMobile ? "4;8;4" : "6;10;6"}
                   dur="1.5s"
                   begin={`${delay}s`}
                   repeatCount="indefinite"

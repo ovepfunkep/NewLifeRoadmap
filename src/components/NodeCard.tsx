@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { Node } from '../types';
 import { useTranslation } from '../i18n';
 import { computeProgress, getDeadlineColor, getProgressCounts, formatDeadline } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { useEffects } from '../hooks/useEffects';
-import { FiCheck, FiEdit2, FiTrash2, FiArrowUp } from 'react-icons/fi';
+import { FiCheck, FiEdit2, FiTrash2, FiArrowUp, FiMove } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
 
 interface NodeCardProps {
@@ -15,6 +16,7 @@ interface NodeCardProps {
   onEdit: (node: Node) => void;
   onDelete: (id: string) => void;
   onTogglePriority: (id: string, priority: boolean) => void;
+  onMove?: (node: Node) => void;
   onDragStart?: (node: Node) => void;
   onDragEnd?: () => void;
   onDragOver?: (nodeId: string) => void;
@@ -31,6 +33,7 @@ export function NodeCard({
   onEdit, 
   onDelete,
   onTogglePriority,
+  onMove,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -49,6 +52,179 @@ export function NodeCard({
   const [justDragged, setJustDragged] = useState(false);
   const [isBlinking, setIsBlinking] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Состояние для барабана действий на мобильных (магнит + бесконечная лента)
+  // Важно: во время drag мы НЕ меняем индекс выбранного действия, меняется только offsetPx.
+  // Индекс меняется только после завершения "магнитной" доводки — так избегаем визуальных рывков.
+  const [baseActionIndex, setBaseActionIndex] = useState(0);
+  const baseActionIndexRef = useRef(0);
+  const [offsetPx, setOffsetPx] = useState(0); // Смещение барабана в пикселях (может быть > ITEM_HEIGHT)
+  const offsetPxRef = useRef(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const drumRef = useRef<HTMLDivElement>(null);
+
+  // Синхронизируем рефы с состоянием для использования в нативных обработчиках без "stale closure"
+  useEffect(() => {
+    baseActionIndexRef.current = baseActionIndex;
+  }, [baseActionIndex]);
+
+  useEffect(() => {
+    offsetPxRef.current = offsetPx;
+  }, [offsetPx]);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const actions = [
+    { id: 'complete', icon: FiCheck, action: () => onMarkCompleted(node.id, !node.completed), label: node.completed ? t('node.markIncomplete') : t('node.markCompleted'), color: 'var(--accent)', active: node.completed },
+    { id: 'priority', icon: FiArrowUp, action: () => onTogglePriority(node.id, !node.priority), label: node.priority ? t('tooltip.removePriority') : t('tooltip.priority'), color: 'var(--accent)', active: node.priority },
+    { id: 'edit', icon: FiEdit2, action: () => onEdit(node), label: t('general.edit'), color: 'var(--accent)' },
+    { id: 'move', icon: FiMove, action: () => onMove?.(node), label: t('node.move'), color: 'var(--accent)' },
+    { id: 'delete', icon: FiTrash2, action: () => onDelete(node.id), label: t('general.delete'), color: '#ef4444' },
+  ];
+
+  const ITEM_HEIGHT = 36;
+
+  useEffect(() => {
+    const drum = drumRef.current;
+    if (!drum || !isMobile) return;
+
+    const DRUM_DEBUG = (() => {
+      try {
+        return localStorage.getItem('DRUM_DEBUG') === '1';
+      } catch {
+        return false;
+      }
+    })();
+    const dragStartYRef = { current: 0 };
+    const dragStartOffsetRef = { current: 0 };
+    const isDraggingRef = { current: false };
+    const rafRef = { current: 0 as number | 0 };
+
+    const stopAnim = () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
+    };
+
+    const mod = (n: number, m: number) => ((n % m) + m) % m;
+
+    const animateOffsetTo = (target: number, onDone: () => void) => {
+      stopAnim();
+      const from = offsetPxRef.current;
+      const dist = target - from;
+      if (Math.abs(dist) < 0.5) {
+        setOffsetPx(target);
+        onDone();
+        return;
+      }
+
+      const start = performance.now();
+      const duration = 220; // чуть длиннее, чтобы "магнит" был мягче
+      const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - start) / duration);
+        const v = from + dist * easeOutCubic(t);
+        offsetPxRef.current = v;
+        setOffsetPx(v);
+        if (t < 1) {
+          rafRef.current = requestAnimationFrame(tick);
+        } else {
+          rafRef.current = 0;
+          onDone();
+        }
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      stopAnim();
+      isDraggingRef.current = true;
+      dragStartYRef.current = e.touches[0].clientY;
+      dragStartOffsetRef.current = offsetPxRef.current;
+
+      if (DRUM_DEBUG) {
+        console.log('[Drum] start', {
+          baseActionIndex: baseActionIndexRef.current,
+          offsetPx: offsetPxRef.current,
+        });
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDraggingRef.current) return;
+      const y = e.touches[0]?.clientY;
+      if (typeof y !== 'number') return;
+      const delta = y - dragStartYRef.current;
+      const next = dragStartOffsetRef.current + delta;
+      offsetPxRef.current = next;
+      setOffsetPx(next);
+      if (e.cancelable) e.preventDefault();
+    };
+
+    const handleTouchEndLike = (e?: TouchEvent) => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      if (e?.cancelable) e.preventDefault();
+
+      const currentOffset = offsetPxRef.current;
+      const itemsSwiped = Math.round(currentOffset / ITEM_HEIGHT);
+      const snapTargetOffset = itemsSwiped * ITEM_HEIGHT;
+
+      if (DRUM_DEBUG) {
+        console.log('[Drum] end', {
+          baseActionIndex: baseActionIndexRef.current,
+          currentOffset,
+          itemsSwiped,
+          snapTargetOffset,
+        });
+      }
+
+      // 1) Сначала "магнитом" доводим offset до ближайшего кратного ITEM_HEIGHT
+      // 2) Только после завершения анимации коммитим индекс и сбрасываем offset в 0.
+      animateOffsetTo(snapTargetOffset, () => {
+        // Критично: коммит индекса и сброс offset должны быть атомарными (1 рендер),
+        // иначе возможен краткий промежуточный кадр и визуальный "дёрг".
+        flushSync(() => {
+          if (itemsSwiped !== 0) {
+            const nextBase = mod(baseActionIndexRef.current - itemsSwiped, actions.length);
+            if (DRUM_DEBUG) {
+              console.log('[Drum] commit', {
+                from: baseActionIndexRef.current,
+                to: nextBase,
+              });
+            }
+            setBaseActionIndex(nextBase);
+          }
+          // Важно: offset=0 делаем только когда мы уже стоим ровно на границе,
+          // тогда визуально ничего не "прыгает".
+          setOffsetPx(0);
+        });
+      });
+    };
+
+    drum.addEventListener('touchstart', handleTouchStart, { passive: false });
+    drum.addEventListener('touchmove', handleTouchMove, { passive: false });
+    drum.addEventListener('touchend', handleTouchEndLike, { passive: false });
+    drum.addEventListener('touchcancel', handleTouchEndLike, { passive: false });
+
+    return () => {
+      stopAnim();
+      drum.removeEventListener('touchstart', handleTouchStart);
+      drum.removeEventListener('touchmove', handleTouchMove);
+      drum.removeEventListener('touchend', handleTouchEndLike);
+      drum.removeEventListener('touchcancel', handleTouchEndLike);
+    };
+  }, [isMobile, actions.length]); // Убрали currentActionIndex из зависимостей!
 
   // Мигание прогресс-бара при 100% - пересчитывается при изменении node
   useEffect(() => {
@@ -269,7 +445,7 @@ export function NodeCard({
     <>
       <div 
         data-node-id={node.id}
-        className={`bg-white dark:bg-gray-800 rounded-lg border transition-all p-4 ${
+        className={`bg-white dark:bg-gray-800 rounded-lg border transition-all overflow-hidden ${
           node.priority 
             ? 'border-2' 
             : 'border-gray-300 dark:border-gray-700'
@@ -314,10 +490,10 @@ export function NodeCard({
         onMouseUp={handleCardMouseUp}
         onTouchEnd={handleCardTouchEnd}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-stretch gap-0">
           {/* Заголовок и описание (кликабельный) */}
           <div
-            className="flex-1 min-w-0"
+            className="flex-1 min-w-0 p-4"
             onMouseDown={handleMouseDown}
             onTouchStart={handleTouchStart}
           >
@@ -334,14 +510,11 @@ export function NodeCard({
               className="w-full text-left group"
             >
             <div className="w-full">
-              {/* Название и дедлайн в одну строку */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-gray-900 dark:text-gray-100 group-hover:opacity-75 transition-opacity truncate" style={{ color: 'var(--accent)' }}>
-                  {node.title}
-                </span>
-                {deadlineDisplay && (
+              {/* Дедлайн над названием */}
+              {deadlineDisplay && (
+                <div className="mb-1">
                   <span
-                    className="text-xs px-2 py-0.5 rounded flex-shrink-0 border"
+                    className="text-[10px] px-2 py-0.5 rounded font-medium border uppercase tracking-wider"
                     style={{
                       borderColor: node.completed ? 'var(--accent)' : getDeadlineColor(node),
                       color: node.completed ? 'var(--accent)' : 'white',
@@ -350,12 +523,14 @@ export function NodeCard({
                   >
                     {deadlineDisplay}
                   </span>
-                )}
-                {node.priority && (
-                  <span className="flex-shrink-0 text-xs font-medium rounded border-2" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-                    {t('node.priority')}
-                  </span>
-                )}
+                </div>
+              )}
+
+              {/* Название */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-gray-900 dark:text-gray-100 group-hover:opacity-75 transition-opacity line-clamp-2" style={{ color: 'var(--accent)' }}>
+                  {node.title}
+                </span>
               </div>
               
               {/* Прогресс */}
@@ -390,7 +565,7 @@ export function NodeCard({
               
               {/* Описание */}
               {node.description && (
-                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400 truncate">
+                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                   {node.description}
                 </div>
               )}
@@ -398,60 +573,126 @@ export function NodeCard({
             </button>
           </div>
           
-          {/* Действия (иконки) */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-                   <Tooltip text={node.completed ? t('node.markIncomplete') : t('node.markCompleted')}>
-                     <button
-                       onClick={() => onMarkCompleted(node.id, !node.completed)}
-                       className={`p-2 rounded-lg transition-all border hover:brightness-150 ${
-                         node.completed
-                           ? 'border-transparent'
-                           : 'border-current hover:bg-accent/10'
-                       }`}
-                       style={{ 
-                         color: 'var(--accent)',
-                         backgroundColor: node.completed ? 'var(--accent)' : 'transparent'
-                       }}
-                     >
-                       <FiCheck size={18} style={{ color: node.completed ? 'white' : 'var(--accent)' }} />
-                     </button>
-                   </Tooltip>
-                   
-                  <Tooltip text={node.priority ? t('tooltip.removePriority') : t('tooltip.priority')}>
+          {/* Действия (иконки или карусель) */}
+          <div className="flex items-stretch gap-0 flex-shrink-0">
+            {isMobile ? (
+              <div 
+                ref={drumRef}
+                className="relative flex items-center justify-center w-20 touch-none border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800 overflow-hidden select-none"
+                style={{ 
+                  minHeight: '120px', 
+                  maxHeight: '140px' 
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // В момент тапа считаем, что выбран тот, кто ближе к центру при текущем offsetPx.
+                  // После отпускания барабан сам прилипнет и закоммитит baseActionIndex.
+                  const items = Math.round(offsetPx / ITEM_HEIGHT);
+                  const len = actions.length;
+                  const idx = ((baseActionIndex - items) % len + len) % len;
+                  actions[idx].action();
+                }}
+              >
+                {/* Барабан действий */}
+                <div 
+                  className="flex flex-col items-center justify-center h-full relative"
+                  style={{ 
+                    // Смещение применяется ко всему контейнеру для плавности
+                    transform: `translateY(${offsetPx}px)`,
+                    // Анимацию магнита делаем через requestAnimationFrame, чтобы не было рывков при смене индекса.
+                    transition: 'none'
+                  }}
+                >
+                  {/* Отрисовываем большой диапазон для бесконечного скролла */}
+                  {Array.from({ length: 41 }, (_, i) => i - 20).map((offset) => {
+                    const actionIndex = ((baseActionIndex + offset) % actions.length + actions.length) % actions.length;
+                    const action = actions[actionIndex];
+                    const Icon = action.icon;
+                    
+                    // Вычисляем расстояние от центра (0) с учетом текущего сдвига в пикселях
+                    const visualOffset = (offset * ITEM_HEIGHT) + offsetPx;
+                    const dist = Math.abs(visualOffset);
+                    // Выбранный элемент определяем дискретно (по ближайшему к центру),
+                    // чтобы он не "мигал" на границе из-за дробных offsetPx.
+                    const centerOffset = Math.round(-offsetPx / ITEM_HEIGHT);
+                    const isSelected = offset === centerOffset;
+                    
+                    // Масштаб и прозрачность
+                    const scale = Math.max(0.6, 1.2 - (dist / (ITEM_HEIGHT * 2))); 
+                    const opacity = isSelected ? 1 : Math.max(0, Math.min(0.5, (1 - (dist / (ITEM_HEIGHT * 3))) + 0.15));
+
+                    // Не рендерим слишком далекие элементы для оптимизации
+                    if (dist > 150) return null;
+
+                    return (
+                      <div 
+                        key={offset}
+                        className="absolute flex items-center justify-center transition-all duration-100"
+                        style={{ 
+                          top: '50%',
+                          marginTop: `${offset * ITEM_HEIGHT - (ITEM_HEIGHT / 2)}px`,
+                          height: `${ITEM_HEIGHT}px`,
+                          width: '100%',
+                          transform: `scale(${scale})`,
+                          opacity: isSelected ? 1 : opacity,
+                          color: action.color,
+                          zIndex: isSelected ? 10 : 1
+                        }}
+                      >
+                        <div 
+                          className={`p-1.5 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                            isSelected 
+                              ? 'border-2 shadow-sm' 
+                              : '' 
+                          }`}
+                          style={{
+                            backgroundColor: isSelected && action.active ? action.color : 'transparent',
+                            borderColor: isSelected 
+                              ? (action.active ? 'transparent' : 'currentColor')
+                              : 'transparent',
+                            color: isSelected && action.active ? 'white' : action.color,
+                            ...(action.id === 'delete' && isSelected ? { borderColor: '#ef4444', color: '#ef4444' } : {})
+                          }}
+                        >
+                          <Icon size={18} style={{ color: isSelected && action.active ? 'white' : undefined }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Визуальный градиент (маска) сверху и снизу для скрытия краев */}
+                <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white via-transparent to-white dark:from-gray-800 dark:via-transparent dark:to-gray-800 opacity-90" 
+                     style={{ maskImage: 'linear-gradient(to bottom, black 0%, transparent 20%, transparent 80%, black 100%)' }}
+                />
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 p-4">
+                {actions.map((action) => (
+                  <Tooltip key={action.id} text={action.label}>
                     <button
-                      onClick={() => onTogglePriority(node.id, !node.priority)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        action.action();
+                      }}
                       className={`p-2 rounded-lg transition-all border hover:brightness-150 ${
-                        node.priority
+                        action.active
                           ? 'border-transparent'
                           : 'border-current hover:bg-accent/10'
                       }`}
                       style={{ 
-                        color: 'var(--accent)',
-                        backgroundColor: node.priority ? 'var(--accent)' : 'transparent'
+                        color: action.color,
+                        backgroundColor: action.active ? action.color : 'transparent'
                       }}
                     >
-                      <FiArrowUp size={18} style={{ color: node.priority ? 'white' : 'var(--accent)' }} />
+                      {React.createElement(action.icon, { 
+                        size: 18, 
+                        style: { color: action.active ? 'white' : action.color } 
+                      })}
                     </button>
                   </Tooltip>
-                   
-                   <Tooltip text={t('general.edit')}>
-                     <button
-                       onClick={() => onEdit(node)}
-                       className="p-2 rounded-lg hover:bg-accent/10 transition-all hover:brightness-150"
-                       style={{ color: 'var(--accent)' }}
-                     >
-                       <FiEdit2 size={18} />
-                     </button>
-                   </Tooltip>
-                   
-                   <Tooltip text={t('general.delete')}>
-                     <button
-                       onClick={() => onDelete(node.id)}
-                       className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-all hover:brightness-150"
-                     >
-                       <FiTrash2 size={18} />
-                     </button>
-                   </Tooltip>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
