@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTranslation } from '../i18n';
 import { TELEGRAM_BOT_USERNAME } from '../utils/constants';
 import { getCurrentUser } from '../firebase/auth';
