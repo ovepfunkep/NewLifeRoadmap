@@ -14,6 +14,16 @@ interface DeadlineListProps {
   onCreateTask?: (date: Date) => void; // Обработчик создания задачи с датой
 }
 
+// Проверка, является ли дедлайн прошедшим
+function isPastDeadline(deadline: string): boolean {
+  const deadlineDate = new Date(deadline);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const dDate = new Date(deadlineDate);
+  dDate.setHours(0, 0, 0, 0);
+  return dDate < now;
+}
+
 // Проверка, является ли дедлайн срочным (в ближайшую неделю)
 function isUrgentDeadline(deadline: string): boolean {
   const deadlineDate = new Date(deadline);
@@ -36,12 +46,16 @@ function groupDeadlines(node: Node): Node[] {
     
     // Собираем все дедлайны из поддерева (включая сам шаг)
     const allDeadlines: Node[] = [];
-    if (childHasDeadline) {
+    if (childHasDeadline && !isPastDeadline(child.deadline!)) {
       allDeadlines.push(child);
     }
     
-    // Добавляем дедлайны из поддерева
-    const subtreeDeadlines = collectDeadlines(child).filter(dl => !dl.completed && dl.deadline);
+    // Добавляем дедлайны из поддерева, исключая прошедшие
+    const subtreeDeadlines = collectDeadlines(child).filter(dl => 
+      !dl.completed && 
+      dl.deadline && 
+      !isPastDeadline(dl.deadline)
+    );
     allDeadlines.push(...subtreeDeadlines);
     
     if (allDeadlines.length === 0) continue;

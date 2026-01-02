@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import { Node } from '../types';
 import { useTranslation } from '../i18n';
@@ -7,6 +7,7 @@ import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { useEffects } from '../hooks/useEffects';
 import { FiCheck, FiEdit2, FiTrash2, FiArrowUp, FiMove } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface NodeCardProps {
   node: Node;
@@ -24,6 +25,8 @@ interface NodeCardProps {
   isDragOver?: boolean;
   draggedNode?: Node | null;
   currentNodeId?: string;
+  isBurning?: boolean; 
+  isMovingOut?: boolean; 
 }
 
 export function NodeCard({ 
@@ -40,7 +43,9 @@ export function NodeCard({
   onDragLeave,
   isDragOver = false,
   draggedNode,
-  currentNodeId
+  currentNodeId,
+  isBurning: isBurningProp = false,
+  isMovingOut: isMovingOutProp = false
 }: NodeCardProps) {
   useDeadlineTicker();
   const t = useTranslation();
@@ -54,26 +59,19 @@ export function NodeCard({
   const [isLongPressing, setIsLongPressing] = useState(false);
   const [longPressProgress, setLongPressProgress] = useState(0);
   const [longPressPos, setLongPressPos] = useState({ x: 0, y: 0 });
+  
+  const isBurning = isBurningProp;
+  const isMovingOut = isMovingOutProp;
+
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Состояние для барабана действий на мобильных (магнит + бесконечная лента)
-  // Важно: во время drag мы НЕ меняем индекс выбранного действия, меняется только offsetPx.
-  // Индекс меняется только после завершения "магнитной" доводки — так избегаем визуальных рывков.
   const [baseActionIndex, setBaseActionIndex] = useState(0);
   const baseActionIndexRef = useRef(0);
-  const [offsetPx, setOffsetPx] = useState(0); // Смещение барабана в пикселях (может быть > ITEM_HEIGHT)
+  const [offsetPx, setOffsetPx] = useState(0); 
   const offsetPxRef = useRef(0);
   const [isMobile, setIsMobile] = useState(false);
   const drumRef = useRef<HTMLDivElement>(null);
-
-  // Синхронизируем рефы с состоянием для использования в нативных обработчиках без "stale closure"
-  useEffect(() => {
-    baseActionIndexRef.current = baseActionIndex;
-  }, [baseActionIndex]);
-
-  useEffect(() => {
-    offsetPxRef.current = offsetPx;
-  }, [offsetPx]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -84,13 +82,29 @@ export function NodeCard({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const actions = [
+  // Синхронизируем рефы с состоянием для использования в нативных обработчиках без "stale closure"
+  useEffect(() => {
+    baseActionIndexRef.current = baseActionIndex;
+  }, [baseActionIndex]);
+
+  useEffect(() => {
+    offsetPxRef.current = offsetPx;
+  }, [offsetPx]);
+
+  // Реф для хранения актуальных действий, чтобы избежать stale closure в нативных событиях
+  const actionsRef = useRef<any[]>([]);
+
+  const actions = useMemo(() => [
     { id: 'complete', icon: FiCheck, action: () => onMarkCompleted(node.id, !node.completed), label: node.completed ? t('node.markIncomplete') : t('node.markCompleted'), color: 'var(--accent)', active: node.completed },
     { id: 'priority', icon: FiArrowUp, action: () => onTogglePriority(node.id, !node.priority), label: node.priority ? t('tooltip.removePriority') : t('tooltip.priority'), color: 'var(--accent)', active: node.priority },
     { id: 'edit', icon: FiEdit2, action: () => onEdit(node), label: t('general.edit'), color: 'var(--accent)' },
     { id: 'move', icon: FiMove, action: () => onMove?.(node), label: t('node.move'), color: 'var(--accent)' },
     { id: 'delete', icon: FiTrash2, action: () => onDelete(node.id), label: t('general.delete'), color: '#ef4444' },
-  ];
+  ], [node.id, node.completed, node.priority, onMarkCompleted, onTogglePriority, onEdit, onMove, onDelete, t]);
+
+  useEffect(() => {
+    actionsRef.current = actions;
+  }, [actions]);
 
   const ITEM_HEIGHT = 36;
 
@@ -132,7 +146,7 @@ export function NodeCard({
       }
 
       const start = performance.now();
-      const duration = 220; // чуть длиннее, чтобы "магнит" был мягче
+      const duration = 220; 
       const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
       const tick = (now: number) => {
@@ -184,16 +198,13 @@ export function NodeCard({
       const currentOffset = offsetPxRef.current;
       const totalDelta = Math.abs(currentOffset - dragStartOffsetRef.current);
       
-      // Если это был короткий тап (маленькое смещение), вызываем действие
-      // Но только если мы не только что закончили скролл (защита от "двойных" срабатываний)
       if (totalDelta < 8 && (performance.now() - lastScrollEndTimeRef.current > 300)) {
         const items = Math.round(currentOffset / ITEM_HEIGHT);
-        const len = actions.length;
+        const len = actionsRef.current.length;
         const idx = ((baseActionIndexRef.current - items) % len + len) % len;
         
-        actions[idx].action();
+        actionsRef.current[idx].action();
         
-        // Сбрасываем в 0 без анимации если это был тап
         setOffsetPx(0);
         offsetPxRef.current = 0;
         return;
@@ -204,20 +215,7 @@ export function NodeCard({
       const itemsSwiped = Math.round(currentOffset / ITEM_HEIGHT);
       const snapTargetOffset = itemsSwiped * ITEM_HEIGHT;
 
-      if (DRUM_DEBUG) {
-        console.log('[Drum] end', {
-          baseActionIndex: baseActionIndexRef.current,
-          currentOffset,
-          itemsSwiped,
-          snapTargetOffset,
-        });
-      }
-
-      // 1) Сначала "магнитом" доводим offset до ближайшего кратного ITEM_HEIGHT
-      // 2) Только после завершения анимации коммитим индекс и сбрасываем offset в 0.
       animateOffsetTo(snapTargetOffset, () => {
-        // Критично: коммит индекса и сброс offset должны быть атомарными (1 рендер),
-        // иначе возможен краткий промежуточный кадр и визуальный "дёрг".
         flushSync(() => {
           if (itemsSwiped !== 0) {
             const nextBase = mod(baseActionIndexRef.current - itemsSwiped, actions.length);
@@ -243,12 +241,10 @@ export function NodeCard({
       drum.removeEventListener('touchend', handleTouchEndLike);
       drum.removeEventListener('touchcancel', handleTouchEndLike);
     };
-  }, [isMobile, actions.length]); // Убрали currentActionIndex из зависимостей!
+  }, [isMobile, actions.length]);
 
-  // Мигание прогресс-бара при 100% - пересчитывается при изменении node
   useEffect(() => {
     const currentProgress = computeProgress(node);
-    // Мигаем когда прогресс 100%, эффекты включены, и узел сам не помечен как выполненный
     if (currentProgress === 100 && effectsEnabled && !node.completed) {
       setIsBlinking(true);
     } else {
@@ -256,7 +252,6 @@ export function NodeCard({
     }
   }, [node, effectsEnabled]);
 
-  // Очищаем таймер при размонтировании
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {
@@ -286,7 +281,6 @@ export function NodeCard({
         clearTimeout(timeoutRef.current);
       }
       timeoutRef.current = setTimeout(() => setJustDragged(false), 100);
-      // Не вызываем onDragEnd здесь - он будет вызван в handleCardMouseUp при наведении на карточку
     };
 
     const handleTouchEnd = () => {
@@ -296,7 +290,6 @@ export function NodeCard({
         clearTimeout(timeoutRef.current);
       }
       timeoutRef.current = setTimeout(() => setJustDragged(false), 100);
-      // Не вызываем onDragEnd здесь - он будет вызван в handleCardTouchEnd при наведении на карточку
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -316,78 +309,48 @@ export function NodeCard({
     };
   }, [isDragging]);
 
-  // Обработчики для drag over - по аналогии с крошками
   const handleMouseEnter = () => {
-    console.log('[NodeCard] handleMouseEnter', { 
-      nodeId: node.id, 
-      draggedNodeId: draggedNode?.id, 
-      currentNodeId,
-      hasDraggedNode: !!draggedNode
-    });
-    // Запрещаем перетаскивание в текущий узел
-    if (currentNodeId && node.id === currentNodeId) {
-      console.log('[NodeCard] Blocked: cannot drag to current node');
-      return;
-    }
+    if (currentNodeId && node.id === currentNodeId) return;
     if (draggedNode && draggedNode.id !== node.id) {
-      console.log('[NodeCard] Calling onDragOver', node.id);
       onDragOver?.(node.id);
-    } else {
-      console.log('[NodeCard] No drag over: no draggedNode or same node');
     }
   };
 
   const handleMouseLeave = () => {
-    console.log('[NodeCard] handleMouseLeave', { nodeId: node.id });
-    // Сбрасываем подсветку при уходе мышки с карточки
     onDragLeave?.();
   };
 
   const handleCardMouseUp = () => {
     if (draggedNode && draggedNode.id !== node.id) {
-      // Сбрасываем justDragged сразу после завершения перетаскивания
       setJustDragged(false);
-      // Небольшая задержка перед вызовом onDragEnd, чтобы избежать конфликта с onClick
       setTimeout(() => {
         onDragEnd?.();
       }, 10);
     } else {
-      // Если не было перетаскивания, сбрасываем justDragged сразу
       setJustDragged(false);
     }
   };
 
   const handleCardTouchEnd = () => {
-    console.log('[NodeCard] handleCardTouchEnd', { 
-      nodeId: node.id, 
-      draggedNodeId: draggedNode?.id,
-      isDifferent: draggedNode && draggedNode.id !== node.id
-    });
     if (draggedNode && draggedNode.id !== node.id) {
-      console.log('[NodeCard] Calling onDragEnd from touch end');
       onDragEnd?.();
     }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return; // только левая кнопка мыши
-    console.log('[NodeCard] handleMouseDown', { nodeId: node.id });
-    // Запоминаем начальную позицию
+    if (e.button !== 0) return; 
     const startX = e.clientX;
     const startY = e.clientY;
     let hasStartedDrag = false;
     
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      // Проверяем, что мышь сдвинулась минимум на 3px при зажатой мышке - это означает начало drag
       const deltaX = Math.abs(moveEvent.clientX - startX);
       const deltaY = Math.abs(moveEvent.clientY - startY);
       if (!hasStartedDrag && (deltaX > 3 || deltaY > 3)) {
         hasStartedDrag = true;
-        console.log('[NodeCard] Drag started (mouse)', { nodeId: node.id, deltaX, deltaY });
         setIsDragging(true);
         setDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
         onDragStart?.(node);
-        // Предотвращаем выделение текста только после начала перетаскивания
         document.body.style.userSelect = 'none';
       }
       if (hasStartedDrag) {
@@ -396,7 +359,7 @@ export function NodeCard({
     };
     
     const handleMouseUp = () => {
-      document.body.style.userSelect = ''; // Восстанавливаем выделение текста
+      document.body.style.userSelect = ''; 
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       if (hasStartedDrag) {
@@ -503,258 +466,235 @@ export function NodeCard({
     window.addEventListener('touchcancel', handleTouchEnd);
   };
 
-
   return (
     <>
-      <div 
-        data-node-id={node.id}
-        className={`bg-white dark:bg-gray-800 rounded-lg border transition-all overflow-hidden ${
-          node.priority 
-            ? 'border-2' 
-            : 'border-gray-300 dark:border-gray-700'
-        } ${
-          isDragOver ? 'ring-2 ring-offset-2' : ''
-        } ${
-          draggedNode && draggedNode.id !== node.id ? 'opacity-60' : ''
-        }`}
-        style={{
-          ...(node.priority ? { borderColor: 'var(--accent)' } : {}),
-          // Material Design elevation shadows для светлой темы
-          boxShadow: node.priority 
-            ? '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)' // dp2 для приоритетных
-            : '0 1px 2px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.06)', // dp1 для обычных
-          ...(isDragOver ? { 
-            boxShadow: `0 0 0 3px var(--accent), 0 4px 8px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.1)`, // dp8 при drag-over
-            transition: 'all 0.3s ease'
-          } : {}),
-          ...(draggedNode && draggedNode.id !== node.id && (!currentNodeId || node.id !== currentNodeId) ? {
-            borderColor: 'var(--accent)',
-            opacity: 0.7
-          } : {})
-        }}
-        onMouseEnter={(e) => {
-          handleMouseEnter();
-          // Увеличиваем elevation при hover
-          if (!isDragOver && !draggedNode) {
-            e.currentTarget.style.boxShadow = node.priority
-              ? '0 4px 8px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.1)' // dp4
-              : '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)'; // dp2
-          }
-        }}
-        onMouseLeave={(e) => {
-          handleMouseLeave();
-          // Возвращаем обычный elevation
-          if (!isDragOver && !draggedNode) {
-            e.currentTarget.style.boxShadow = node.priority
-              ? '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)' // dp2
-              : '0 1px 2px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.06)'; // dp1
-          }
-        }}
-        onMouseUp={handleCardMouseUp}
-        onTouchEnd={handleCardTouchEnd}
-      >
-        <div className="flex items-stretch gap-0">
-          {/* Заголовок и описание (кликабельный) */}
-          <div
-            className="flex-1 min-w-0 p-4"
-            onMouseDown={handleMouseDown}
-            onTouchStart={handleTouchStart}
-          >
-            <button
-              onClick={(e) => {
-                // Предотвращаем клик, если только что закончили drag
-                if (justDragged) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  return;
-                }
-                onNavigate(node.id);
-              }}
-              className="w-full text-left group"
+      <div className="relative">
+        <motion.div 
+          data-node-id={node.id}
+          initial={false}
+          animate={{
+            x: isMovingOut ? -100 : 0,
+            opacity: isMovingOut || isBurning ? 0 : 1,
+            scale: isMovingOut ? 0.95 : 1,
+          }}
+          transition={{
+            x: { duration: effectsEnabled ? 0.8 : 0, ease: "easeIn" },
+            opacity: { duration: isMovingOut ? (effectsEnabled ? 0.4 : 0) : 0.3 },
+          }}
+          className={`bg-white dark:bg-gray-800 rounded-lg border transition-all overflow-hidden relative ${
+            node.priority 
+              ? 'border-[3px]' 
+              : 'border-gray-300 dark:border-gray-700'
+          } ${
+            isDragOver ? 'ring-2 ring-offset-2' : ''
+          } ${
+            draggedNode && draggedNode.id !== node.id ? 'opacity-60' : ''
+          }`}
+          style={{
+            ...(node.priority ? { borderColor: 'var(--accent)' } : {}),
+            ...(node.completed ? { 
+              opacity: 0.85, 
+              backgroundColor: 'rgba(var(--accent-rgb), 0.03)',
+              filter: 'grayscale(0.2)'
+            } : {}),
+            boxShadow: node.priority 
+              ? '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)' 
+              : '0 1px 2px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.06)',
+            ...(isDragOver ? { 
+              boxShadow: `0 0 0 3px var(--accent), 0 4px 8px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.1)`, 
+              transition: 'all 0.3s ease'
+            } : {}),
+            ...(draggedNode && draggedNode.id !== node.id && (!currentNodeId || node.id !== currentNodeId) ? {
+              borderColor: 'var(--accent)',
+              opacity: 0.7
+            } : {}),
+            visibility: isBurning && effectsEnabled ? 'hidden' : 'visible'
+          }}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          onMouseUp={handleCardMouseUp}
+          onTouchEnd={handleCardTouchEnd}
+        >
+          <div className="flex items-stretch gap-0">
+            <div
+              className="flex-1 min-w-0 p-4"
+              onMouseDown={handleMouseDown}
+              onTouchStart={handleTouchStart}
             >
-            <div className="w-full">
-              {/* Дедлайн над названием */}
-              {deadlineDisplay && (
-                <div className="mb-1">
-                  <span
-                    className="text-[10px] px-2 py-0.5 rounded font-medium border uppercase tracking-wider"
-                    style={{
-                      borderColor: node.completed ? 'var(--accent)' : getDeadlineColor(node),
-                      color: node.completed ? 'var(--accent)' : 'white',
-                      backgroundColor: node.completed ? 'transparent' : getDeadlineColor(node),
-                    }}
-                  >
-                    {deadlineDisplay}
-                  </span>
-                </div>
-              )}
-
-              {/* Название */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-gray-900 dark:text-gray-100 group-hover:opacity-75 transition-opacity line-clamp-2" style={{ color: 'var(--accent)' }}>
-                  {node.title}
-                </span>
-              </div>
-              
-              {/* Прогресс */}
-              {node.children.length > 0 && (
-                <div className="flex items-center gap-1 mt-1">
-                  <div className="w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-300 ${isBlinking ? 'animate-pulse' : ''}`}
-                      style={{
-                        width: `${progress}%`,
-                        backgroundColor: progress === 100 ? 'var(--accent)' : '#9ca3af',
-                        animation: isBlinking ? 'pulse 0.5s ease-in-out infinite' : undefined,
-                      }}
-                    />
-                  </div>
-                  <Tooltip text={`${getProgressCounts(node).completed} / ${getProgressCounts(node).total}`}>
-                    <span 
-                      className={`text-xs ${
-                        progress === 100 
-                          ? '' 
-                          : 'text-gray-600 dark:text-gray-400'
-                      }`}
-                      style={{ 
-                        color: progress === 100 ? 'var(--accent)' : undefined 
-                      }}
-                    >
-                      {progress}%
+              <button
+                onClick={(e) => {
+                  if (justDragged) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                  }
+                  onNavigate(node.id);
+                }}
+                className="w-full text-left group"
+              >
+                <div className="w-full">
+                  {deadlineDisplay && (
+                    <div className="mb-1">
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded font-medium border uppercase tracking-wider"
+                        style={{
+                          borderColor: node.completed ? 'var(--accent)' : getDeadlineColor(node),
+                          color: node.completed ? 'var(--accent)' : 'white',
+                          backgroundColor: node.completed ? 'transparent' : getDeadlineColor(node),
+                        }}
+                      >
+                        {deadlineDisplay}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-gray-900 dark:text-gray-100 group-hover:opacity-75 transition-opacity line-clamp-2" style={{ color: 'var(--accent)' }}>
+                      {node.title}
                     </span>
-                  </Tooltip>
+                  </div>
+                  {node.children.length > 0 && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <div className="w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${isBlinking ? 'animate-pulse' : ''}`}
+                          style={{
+                            width: `${progress}%`,
+                            backgroundColor: progress === 100 ? 'var(--accent)' : '#9ca3af',
+                            animation: isBlinking ? 'pulse 0.5s ease-in-out infinite' : undefined,
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">{progress}%</span>
+                    </div>
+                  )}
+                  {node.description && (
+                    <div className="mt-1 text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
+                      {node.description}
+                    </div>
+                  )}
                 </div>
-              )}
-              
-              {/* Описание */}
-              {node.description && (
-                <div className="mt-1 text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                  {node.description}
+              </button>
+            </div>
+            
+            <div className="flex items-stretch gap-0 flex-shrink-0">
+              {isMobile ? (
+                <div ref={drumRef} className="relative flex items-center justify-center w-20 touch-none border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800 overflow-hidden select-none min-h-[120px] max-h-[140px]">
+                  <div className="flex flex-col items-center justify-center h-full relative" style={{ transform: `translateY(${offsetPx}px)`, transition: 'none' }}>
+                    {Array.from({ length: 41 }, (_, i) => i - 20).map((offset) => {
+                      const actionIndex = ((baseActionIndex + offset) % actions.length + actions.length) % actions.length;
+                      const action = actions[actionIndex];
+                      const Icon = action.icon;
+                      const centerOffset = Math.round(-offsetPx / ITEM_HEIGHT);
+                      const isSelected = offset === centerOffset;
+                      const dist = Math.abs((offset * ITEM_HEIGHT) + offsetPx);
+                      const scale = Math.max(0.6, 1.2 - (dist / (ITEM_HEIGHT * 2))); 
+                      const opacity = isSelected ? 1 : Math.max(0, Math.min(0.5, (1 - (dist / (ITEM_HEIGHT * 3))) + 0.15));
+                      if (dist > 150) return null;
+                      return (
+                        <div key={offset} className="absolute flex items-center justify-center" style={{ top: '50%', marginTop: `${offset * ITEM_HEIGHT - (ITEM_HEIGHT / 2)}px`, height: `${ITEM_HEIGHT}px`, width: '100%', transform: `scale(${scale})`, opacity: isSelected ? 1 : opacity, color: action.color, zIndex: isSelected ? 10 : 1, transition: 'none' }}>
+                          <div className={`p-1.5 rounded-lg flex items-center justify-center ${isSelected ? 'border-2 shadow-sm' : ''}`} style={{ backgroundColor: isSelected && action.active ? action.color : 'transparent', borderColor: isSelected ? (action.active ? 'transparent' : 'currentColor') : 'transparent', color: isSelected && action.active ? 'white' : action.color, transition: 'none', ...(action.id === 'delete' && isSelected ? { borderColor: '#ef4444', color: '#ef4444' } : {}) }}>
+                            <Icon size={18} style={{ color: isSelected && action.active ? 'white' : undefined }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white via-transparent to-white dark:from-gray-800 dark:via-transparent dark:to-gray-800 opacity-90" style={{ maskImage: 'linear-gradient(to bottom, black 0%, transparent 20%, transparent 80%, black 100%)' }} />
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 p-4">
+                  {actions.map((action) => (
+                    <Tooltip key={action.id} text={action.label}>
+                      <button onClick={(e) => { e.stopPropagation(); action.action(); }} className={`p-2 rounded-lg transition-all border hover:brightness-150 ${action.active ? 'border-transparent' : 'border-current hover:bg-accent/10'}`} style={{ color: action.color, backgroundColor: action.active ? action.color : 'transparent' }}>
+                        {React.createElement(action.icon, { size: 18, style: { color: action.active ? 'white' : action.color } })}
+                      </button>
+                    </Tooltip>
+                  ))}
                 </div>
               )}
             </div>
-            </button>
           </div>
-          
-          {/* Действия (иконки или карусель) */}
-          <div className="flex items-stretch gap-0 flex-shrink-0">
-            {isMobile ? (
-              <div 
-                ref={drumRef}
-                className="relative flex items-center justify-center w-20 touch-none border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800 overflow-hidden select-none"
-                style={{ 
-                  minHeight: '120px', 
-                  maxHeight: '140px' 
-                }}
-              >
-                {/* Барабан действий */}
-                <div 
-                  className="flex flex-col items-center justify-center h-full relative"
-                  style={{ 
-                    // Смещение применяется ко всему контейнеру для плавности
-                    transform: `translateY(${offsetPx}px)`,
-                    // Анимацию магнита делаем через requestAnimationFrame, чтобы не было рывков при смене индекса.
-                    transition: 'none'
-                  }}
-                >
-                  {/* Отрисовываем большой диапазон для бесконечного скролла */}
-                  {Array.from({ length: 41 }, (_, i) => i - 20).map((offset) => {
-                    const actionIndex = ((baseActionIndex + offset) % actions.length + actions.length) % actions.length;
-                    const action = actions[actionIndex];
-                    const Icon = action.icon;
-                    
-                    // Вычисляем расстояние от центра (0) с учетом текущего сдвига в пикселях
-                    const visualOffset = (offset * ITEM_HEIGHT) + offsetPx;
-                    const dist = Math.abs(visualOffset);
-                    // Выбранный элемент определяем дискретно (по ближайшему к центру),
-                    // чтобы он не "мигал" на границе из-за дробных offsetPx.
-                    const centerOffset = Math.round(-offsetPx / ITEM_HEIGHT);
-                    const isSelected = offset === centerOffset;
-                    
-                    // Масштаб и прозрачность
-                    const scale = Math.max(0.6, 1.2 - (dist / (ITEM_HEIGHT * 2))); 
-                    const opacity = isSelected ? 1 : Math.max(0, Math.min(0.5, (1 - (dist / (ITEM_HEIGHT * 3))) + 0.15));
+        </motion.div>
 
-                    // Не рендерим слишком далекие элементы для оптимизации
-                    if (dist > 150) return null;
+        {isBurning && effectsEnabled && (
+          <div className="absolute inset-0 z-[60] pointer-events-none overflow-visible">
+            {/* Эффект разреза (белая линия) */}
+            <motion.div
+              className="absolute inset-0 z-[70] bg-white shadow-[0_0_15px_white]"
+              style={{ 
+                clipPath: 'polygon(45% 0%, 55% 0%, 40% 20%, 50% 40%, 35% 60%, 45% 80%, 35% 100%, 30% 100%, 40% 80%, 30% 60%, 45% 40%, 35% 20%, 45% 0%)',
+                width: '4px',
+                left: '50%',
+                marginLeft: '-2px',
+                originY: 0
+              }}
+              initial={{ scaleY: 0, opacity: 1 }}
+              animate={{ 
+                scaleY: [0, 1.2, 1.2],
+                opacity: [1, 1, 0],
+              }}
+              transition={{ 
+                duration: 0.4, 
+                times: [0, 0.5, 1],
+                ease: "easeInOut" 
+              }}
+            />
 
-                    return (
-                      <div 
-                        key={offset}
-                        className="absolute flex items-center justify-center"
-                        style={{ 
-                          top: '50%',
-                          marginTop: `${offset * ITEM_HEIGHT - (ITEM_HEIGHT / 2)}px`,
-                          height: `${ITEM_HEIGHT}px`,
-                          width: '100%',
-                          transform: `scale(${scale})`,
-                          opacity: isSelected ? 1 : opacity,
-                          color: action.color,
-                          zIndex: isSelected ? 10 : 1,
-                          // Убираем все переходы, чтобы rAF управлял всем визуалом без задержек
-                          transition: 'none'
-                        }}
-                      >
-                        <div 
-                          className={`p-1.5 rounded-lg flex items-center justify-center ${
-                            isSelected 
-                              ? 'border-2 shadow-sm' 
-                              : '' 
-                          }`}
-                          style={{
-                            backgroundColor: isSelected && action.active ? action.color : 'transparent',
-                            borderColor: isSelected 
-                              ? (action.active ? 'transparent' : 'currentColor')
-                              : 'transparent',
-                            color: isSelected && action.active ? 'white' : action.color,
-                            transition: 'none', // Убираем все переходы внутри барабана
-                            ...(action.id === 'delete' && isSelected ? { borderColor: '#ef4444', color: '#ef4444' } : {})
-                          }}
-                        >
-                          <Icon size={18} style={{ color: isSelected && action.active ? 'white' : undefined }} />
-                        </div>
-                      </div>
-                    );
-                  })}
+            {/* Левая половина */}
+            <motion.div
+              className="absolute inset-y-0 left-0 w-1/2 bg-white dark:bg-gray-800 border-y border-l border-gray-300 dark:border-gray-700 rounded-l-lg shadow-xl"
+              style={{ 
+                clipPath: 'polygon(0% 0%, 100% 0%, 85% 20%, 100% 40%, 80% 60%, 100% 80%, 90% 100%, 0% 100%)',
+                backgroundColor: node.completed ? 'rgba(var(--accent-rgb), 0.05)' : undefined
+              }}
+              initial={{ x: 0, y: 0, rotate: 0 }}
+              animate={{ 
+                x: [0, -20, -150], 
+                y: [0, 0, 800], 
+                rotate: [0, -2, -35],
+              }}
+              transition={{ 
+                duration: 1.2, 
+                times: [0, 0.3, 1],
+                ease: [0.45, 0, 0.55, 1],
+                delay: 0.2
+              }}
+            >
+              <div className="p-4 w-[200%]">
+                <span className="font-semibold" style={{ color: 'var(--accent)' }}>{node.title}</span>
+              </div>
+            </motion.div>
+
+            {/* Правая половина */}
+            <motion.div
+              className="absolute inset-y-0 right-0 w-1/2 bg-white dark:bg-gray-800 border-y border-r border-gray-300 dark:border-gray-700 rounded-r-lg shadow-xl"
+              style={{ 
+                clipPath: 'polygon(15% 0%, 100% 0%, 100% 100%, 10% 100%, 20% 80%, 0% 60%, 15% 40%, 0% 20%)',
+                backgroundColor: node.completed ? 'rgba(var(--accent-rgb), 0.05)' : undefined
+              }}
+              initial={{ x: 0, y: 0, rotate: 0 }}
+              animate={{ 
+                x: [0, 20, 180], 
+                y: [0, 0, 850], 
+                rotate: [0, 2, 45],
+              }}
+              transition={{ 
+                duration: 1.2, 
+                times: [0, 0.3, 1],
+                ease: [0.45, 0, 0.55, 1],
+                delay: 0.2
+              }}
+            >
+              <div className="p-4 w-[200%] -ml-[100%]">
+                <div className="flex justify-end pr-10">
+                   <FiTrash2 size={24} color="#ef4444" />
                 </div>
-                {/* Визуальный градиент (маска) сверху и снизу для скрытия краев */}
-                <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white via-transparent to-white dark:from-gray-800 dark:via-transparent dark:to-gray-800 opacity-90" 
-                     style={{ maskImage: 'linear-gradient(to bottom, black 0%, transparent 20%, transparent 80%, black 100%)' }}
-                />
               </div>
-            ) : (
-              <div className="flex items-center gap-1 p-4">
-                {actions.map((action) => (
-                  <Tooltip key={action.id} text={action.label}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        action.action();
-                      }}
-                      className={`p-2 rounded-lg transition-all border hover:brightness-150 ${
-                        action.active
-                          ? 'border-transparent'
-                          : 'border-current hover:bg-accent/10'
-                      }`}
-                      style={{ 
-                        color: action.color,
-                        backgroundColor: action.active ? action.color : 'transparent'
-                      }}
-                    >
-                      {React.createElement(action.icon, { 
-                        size: 18, 
-                        style: { color: action.active ? 'white' : action.color } 
-                      })}
-                    </button>
-                  </Tooltip>
-                ))}
-              </div>
-            )}
+            </motion.div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Полупрозрачная копия при перетаскивании */}
       {isDragging && draggedNode?.id === node.id && (
         <div
           className="fixed pointer-events-none z-50 opacity-50 transform scale-50"
@@ -777,19 +717,17 @@ export function NodeCard({
         </div>
       )}
 
-      {/* Индикатор долгого нажатия */}
       {isLongPressing && (
         <div 
           className="fixed pointer-events-none z-[110]"
           style={{
-            left: longPressPos.x - 30, // Сдвигаем влево
-            top: longPressPos.y - 30,  // Сдвигаем вверх
+            left: longPressPos.x - 30,
+            top: longPressPos.y - 30,
             width: '30px',
             height: '30px'
           }}
         >
           <svg width="30" height="30" viewBox="0 0 40 40" className="drop-shadow-sm">
-            {/* Тонкий контур, который будет заполняться */}
             <circle
               cx="20"
               cy="20"

@@ -114,6 +114,7 @@ export function SyncManager() {
       
       // Исключаем зашифрованные данные из сравнения, если дешифровка не удалась
       const filteredCloud = cloud.filter(node => !node.isEncrypted || (node.isEncrypted && node.title));
+      
       const hasDiff = hasDifferences(localNodes, filteredCloud);
       log(`[loadCloudDataSilently] Data differs: ${hasDiff} (filtered cloud: ${filteredCloud.length}/${cloud.length})`);
       

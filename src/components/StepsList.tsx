@@ -4,6 +4,8 @@ import { NodeCard } from './NodeCard';
 import { Tooltip } from './Tooltip';
 import { FiPlus, FiCalendar, FiCheck } from 'react-icons/fi';
 import { FaSort } from 'react-icons/fa';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useEffects } from '../hooks/useEffects';
 
 type SortType = 'none' | 'name' | 'deadline';
 type FilterType = 'all' | 'completed' | 'incomplete';
@@ -28,6 +30,8 @@ interface StepsListProps {
   filterType: FilterType;
   onFilterChange: (filter: FilterType) => void;
   currentNodeId?: string;
+  animatingBurnId?: string | null;
+  animatingMoveId?: string | null;
 }
 
 export function StepsList({ 
@@ -49,8 +53,12 @@ export function StepsList({
   onSortChange,
   filterType,
   onFilterChange,
-  currentNodeId
+  currentNodeId,
+  animatingBurnId,
+  animatingMoveId
 }: StepsListProps) {
+  const { effectsEnabled } = useEffects();
+  
   // Фильтрация
   const filteredChildren = children.filter(child => {
     if (filterType === 'all') return true;
@@ -209,30 +217,44 @@ export function StepsList({
         </Tooltip>
       </div>
       <div className="space-y-3">
-        {sortedChildren.map((child, index) => (
-          <div
-            key={child.id}
-            className="transition-all duration-500 ease-in-out"
-          >
-            <NodeCard
-              node={child}
-              index={index}
-              onNavigate={onNavigate}
-              onMarkCompleted={onMarkCompleted}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onTogglePriority={onTogglePriority}
-              onMove={onMove}
-              onDragStart={onDragStart}
-              onDragEnd={onDragEnd}
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
-              isDragOver={dragOverNodeId === child.id && (!currentNodeId || child.id !== currentNodeId)}
-              draggedNode={draggedNode}
-              currentNodeId={currentNodeId}
-            />
-          </div>
-        ))}
+        <AnimatePresence initial={false} mode="popLayout">
+          {sortedChildren.map((child, index) => (
+            <motion.div
+              key={child.id}
+              layout={effectsEnabled ? "position" : false}
+              initial={effectsEnabled ? { opacity: 0, scale: 0.9, y: 20 } : false}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={effectsEnabled ? { opacity: 0, scale: 0.8, transition: { duration: 0.2 } } : { opacity: 0 }}
+              transition={{ 
+                type: 'spring', 
+                stiffness: 400, 
+                damping: 35,
+                opacity: { duration: 0.2 }
+              }}
+            >
+              <NodeCard
+                node={child}
+                index={index}
+                onNavigate={onNavigate}
+                onMarkCompleted={onMarkCompleted}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onTogglePriority={onTogglePriority}
+                onMove={onMove}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                isDragOver={dragOverNodeId === child.id && (!currentNodeId || child.id !== currentNodeId)}
+                draggedNode={draggedNode}
+                currentNodeId={currentNodeId}
+                isBurning={animatingBurnId === child.id}
+                isMovingOut={animatingMoveId === child.id}
+                onCancelDelete={() => {}} // Временная заглушка, отмена в тосте
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   );

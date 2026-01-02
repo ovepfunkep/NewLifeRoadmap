@@ -6,6 +6,7 @@ import { computeProgress, getDeadlineColor, getProgressCounts, formatDeadline } 
 import { useEffects } from '../hooks/useEffects';
 import { FiEdit2, FiDownload, FiMove, FiCheck, FiTrash2, FiArrowUp } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface HeaderProps {
   node: Node;
@@ -90,10 +91,13 @@ export function Header({
 
   return (
           <header 
-            className="sticky top-0 z-50 bg-white dark:bg-gray-900 backdrop-blur-md border-b border-gray-300 dark:border-gray-800 overflow-visible"
+            className={`sticky top-0 z-50 bg-white dark:bg-gray-900 backdrop-blur-md border-b overflow-visible transition-all ${
+              node.priority ? 'border-b-[3px]' : 'border-gray-300 dark:border-gray-800'
+            }`}
             style={{
               // Material Design elevation dp4 для header (выше чем контейнеры)
-              boxShadow: '0 4px 8px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.08)'
+              boxShadow: '0 4px 8px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.08)',
+              borderColor: node.priority ? 'var(--accent)' : undefined
             }}
           >
             <div className="container mx-auto px-4 py-3 relative">
@@ -115,22 +119,39 @@ export function Header({
                       onMouseUp={() => handleBreadcrumbMouseUp(crumb.id)}
                       onTouchEnd={() => handleBreadcrumbTouchEnd(crumb.id)}
                       data-node-id={crumb.id}
-                      className="hover:text-gray-900 dark:hover:text-gray-100 truncate max-w-[200px] px-2 py-1 rounded transition-all"
+                      className="hover:text-gray-900 dark:hover:text-gray-100 truncate max-w-[200px] px-2 py-1 rounded transition-all relative"
                       style={{
                         ...(isDragOver ? {
-                          borderColor: 'var(--accent)',
-                          borderWidth: '1px',
-                          borderStyle: 'solid',
-                          borderRadius: '0.5rem',
-                          transition: 'all 0.2s ease'
-                        } : {
-                          borderWidth: '1px',
-                          borderStyle: 'solid',
-                          borderColor: 'transparent'
-                        })
+                          color: 'var(--accent)',
+                          fontWeight: 'bold',
+                        } : {})
                       }}
                     >
                       {crumb.title}
+                      <AnimatePresence>
+                        {isDragOver && effectsEnabled && (
+                          <motion.div
+                            layoutId="breadcrumb-drag-highlight"
+                            className="absolute inset-0 border-2 rounded-lg z-[-1]"
+                            style={{ borderColor: 'var(--accent)' }}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ 
+                              opacity: [0.3, 0.6, 0.3], 
+                              scale: 1,
+                              boxShadow: [
+                                '0 0 0px var(--accent)',
+                                '0 0 15px var(--accent)',
+                                '0 0 0px var(--accent)'
+                              ]
+                            }}
+                            exit={{ opacity: 0, scale: 1.1 }}
+                            transition={{ 
+                              opacity: { repeat: Infinity, duration: 1 },
+                              boxShadow: { repeat: Infinity, duration: 1 }
+                            }}
+                          />
+                        )}
+                      </AnimatePresence>
                     </button>
                     {idx < breadcrumbs.length - 1 && (
                       <span className="text-gray-400">/</span>
@@ -156,7 +177,8 @@ export function Header({
                               </span>
                             </div>
                           )}
-                          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                          <h1 className={`text-2xl font-bold transition-all ${node.completed ? 'opacity-80' : 'text-gray-900 dark:text-gray-100'}`}
+                              style={{ color: node.completed ? 'var(--accent)' : undefined }}>
                             {node.title}
                           </h1>
                         </div>

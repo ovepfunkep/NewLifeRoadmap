@@ -36,6 +36,8 @@ export function NodePage() {
   const [draggedNode, setDraggedNode] = useState<Node | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
   const [nodeToDeleteId, setNodeToDeleteId] = useState<string | null>(null);
+  const [animatingBurnId, setAnimatingBurnId] = useState<string | null>(null);
+  const [animatingMoveId, setAnimatingMoveId] = useState<string | null>(null);
   const { showToast, updateToast, removeToast } = useToast();
   const { effectsEnabled } = useEffects();
   const { setLanguage } = useLanguage();
@@ -610,11 +612,19 @@ export function NodePage() {
     setNodeToDeleteId(null);
     const nodeToDelete = currentNode?.children.find(c => c.id === id) || currentNode;
     if (!nodeToDelete) return;
+
+    // Запускаем анимацию удаления только если эффекты включены
+    if (effectsEnabled) {
+      setAnimatingBurnId(id);
+      // Ждем окончания анимации перед физическим удалением
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
     
     const deletedNode = JSON.parse(JSON.stringify(nodeToDelete));
     const deletedParentId = nodeToDelete.parentId;
     
     await deleteNode(id);
+    setAnimatingBurnId(null); // Сбрасываем ID после удаления
     
     // Показываем объединенный тост с иконкой загрузки для синхронизации
     const syncToastId = showToast(t('toast.nodeDeleted'), async () => {
@@ -647,6 +657,11 @@ export function NodePage() {
           return ids;
         };
         const childrenIds = collectChildrenIds(nodeToDelete);
+        
+        // ВАЖНО: При удалении мы ждем какое-то время (например, пока висит тост с отменой), 
+        // прежде чем удалять в облаке. Либо просто удаляем, а при отмене восстановим.
+        // Сейчас мы удаляем сразу в облаке, чтобы данные не висели.
+        
         await deleteNodeFromFirestore(id, childrenIds.slice(1)); // Убираем сам узел из списка детей
         
         // Также синхронизируем родителя если есть
@@ -704,9 +719,19 @@ export function NodePage() {
       return;
     }
 
+    // Запускаем анимацию уплывания только если эффекты включены
+    if (effectsEnabled) {
+      setAnimatingMoveId(sourceNodeId);
+      // Ждем окончания анимации (пользователь просил медленнее)
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
+
     // Получаем узел для перемещения
     const sourceNode = await getNode(sourceNodeId);
-    if (!sourceNode) return;
+    if (!sourceNode) {
+      setAnimatingMoveId(null);
+      return;
+    }
 
     // Проверяем, не является ли targetNodeId потомком sourceNodeId (предотвращение рекурсии)
     const isDescendant = (node: Node, targetId: string): boolean => {
@@ -719,6 +744,7 @@ export function NodePage() {
     
     if (isDescendant(sourceNode, targetNodeId)) {
       showToast('Нельзя переместить задачу в её собственный подшаг');
+      setAnimatingMoveId(null);
       return;
     }
 
@@ -751,7 +777,10 @@ export function NodePage() {
 
     // Добавляем в новый родитель
     const targetNode = await getNode(targetNodeId);
-    if (!targetNode) return;
+    if (!targetNode) {
+      setAnimatingMoveId(null);
+      return;
+    }
 
     updateParentIds(sourceNode, targetNodeId);
     await saveNode(sourceNode);
@@ -762,6 +791,8 @@ export function NodePage() {
       updatedAt: new Date().toISOString(),
     };
     await saveNode(updatedTarget);
+    
+    setAnimatingMoveId(null); // Сбрасываем ID после перемещения
 
     // Функция отмены перемещения
     const undoMove = async () => {
@@ -1137,6 +1168,8 @@ export function NodePage() {
                     filterType={filterType}
                     onFilterChange={setFilterType}
                     currentNodeId={currentNode.id}
+                    animatingBurnId={animatingBurnId}
+                    animatingMoveId={animatingMoveId}
                   />
                 </div>
               </div>
