@@ -331,8 +331,8 @@ export function NodePage() {
   }, [currentNode, showEditor, showImportExport, showMoveModal, navigateToNode, breadcrumbs, getVisibleSteps, handleCreateChild]);
 
   // Функция загрузки узла (вынесена для переиспользования)
-  const loadNode = useCallback(async (targetNodeId?: string) => {
-    setLoading(true);
+  const loadNode = useCallback(async (targetNodeId?: string, silent = false) => {
+    if (!silent) setLoading(true);
     try {
       await initDB();
       
@@ -408,7 +408,7 @@ export function NodePage() {
   useEffect(() => {
     const handleDataUpdated = () => {
       console.log('[NodePage] Data updated event received, reloading current node...');
-      loadNode();
+      loadNode(undefined, true);
     };
 
     window.addEventListener('syncManager:dataUpdated', handleDataUpdated);

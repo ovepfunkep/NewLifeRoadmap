@@ -51,6 +51,9 @@ export function NodeCard({
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [justDragged, setJustDragged] = useState(false);
   const [isBlinking, setIsBlinking] = useState(false);
+  const [isLongPressing, setIsLongPressing] = useState(false);
+  const [longPressProgress, setLongPressProgress] = useState(0);
+  const [longPressPos, setLongPressPos] = useState({ x: 0, y: 0 });
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Состояние для барабана действий на мобильных (магнит + бесконечная лента)
@@ -106,6 +109,7 @@ export function NodeCard({
     const dragStartOffsetRef = { current: 0 };
     const isDraggingRef = { current: false };
     const rafRef = { current: 0 as number | 0 };
+    const lastScrollEndTimeRef = { current: 0 };
 
     const stopAnim = () => {
       if (rafRef.current) {
@@ -166,6 +170,7 @@ export function NodeCard({
       const y = e.touches[0]?.clientY;
       if (typeof y !== 'number') return;
       const delta = y - dragStartYRef.current;
+      
       const next = dragStartOffsetRef.current + delta;
       offsetPxRef.current = next;
       setOffsetPx(next);
@@ -175,9 +180,27 @@ export function NodeCard({
     const handleTouchEndLike = (e?: TouchEvent) => {
       if (!isDraggingRef.current) return;
       isDraggingRef.current = false;
+      
+      const currentOffset = offsetPxRef.current;
+      const totalDelta = Math.abs(currentOffset - dragStartOffsetRef.current);
+      
+      // Если это был короткий тап (маленькое смещение), вызываем действие
+      // Но только если мы не только что закончили скролл (защита от "двойных" срабатываний)
+      if (totalDelta < 8 && (performance.now() - lastScrollEndTimeRef.current > 300)) {
+        const items = Math.round(currentOffset / ITEM_HEIGHT);
+        const len = actions.length;
+        const idx = ((baseActionIndexRef.current - items) % len + len) % len;
+        
+        actions[idx].action();
+        
+        // Сбрасываем в 0 без анимации если это был тап
+        setOffsetPx(0);
+        offsetPxRef.current = 0;
+        return;
+      }
+
       if (e?.cancelable) e.preventDefault();
 
-      const currentOffset = offsetPxRef.current;
       const itemsSwiped = Math.round(currentOffset / ITEM_HEIGHT);
       const snapTargetOffset = itemsSwiped * ITEM_HEIGHT;
 
@@ -203,6 +226,7 @@ export function NodeCard({
           }
           offsetPxRef.current = 0;
           setOffsetPx(0);
+          lastScrollEndTimeRef.current = performance.now();
         });
       });
     };
@@ -392,34 +416,77 @@ export function NodeCard({
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length !== 1) return;
-    console.log('[NodeCard] handleTouchStart', { nodeId: node.id });
     const touch = e.touches[0];
     const startX = touch.clientX;
     const startY = touch.clientY;
+    
+    setLongPressPos({ x: startX, y: startY });
+    setIsLongPressing(true);
+    setLongPressProgress(0);
+
     let hasStartedDrag = false;
+    const LONG_PRESS_DURATION = 600;
+    const startTime = performance.now();
+    let animFrame: number | null = null;
+    
+    const startDrag = (x: number, y: number) => {
+      hasStartedDrag = true;
+      setIsLongPressing(false);
+      setLongPressProgress(0);
+      setIsDragging(true);
+      setDragPosition({ x, y });
+      onDragStart?.(node);
+      document.body.style.userSelect = 'none';
+      
+      if (window.navigator && window.navigator.vibrate) {
+        window.navigator.vibrate(50);
+      }
+    };
+
+    const updateProgress = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / LONG_PRESS_DURATION);
+      
+      if (progress < 1) {
+        setLongPressProgress(progress);
+        animFrame = requestAnimationFrame(updateProgress);
+      } else {
+        setLongPressProgress(1);
+        startDrag(startX, startY);
+      }
+    };
+
+    animFrame = requestAnimationFrame(updateProgress);
     
     const handleTouchMove = (moveEvent: TouchEvent) => {
       if (moveEvent.touches.length !== 1) return;
       const touch = moveEvent.touches[0];
       const deltaX = Math.abs(touch.clientX - startX);
       const deltaY = Math.abs(touch.clientY - startY);
-      if (!hasStartedDrag && (deltaX > 5 || deltaY > 5)) {
-        hasStartedDrag = true;
-        console.log('[NodeCard] Drag started (touch)', { nodeId: node.id, deltaX, deltaY });
-        setIsDragging(true);
+
+      if (!hasStartedDrag) {
+        if (deltaX > 10 || deltaY > 10) {
+          if (animFrame) cancelAnimationFrame(animFrame);
+          setIsLongPressing(false);
+          setLongPressProgress(0);
+          window.removeEventListener('touchmove', handleTouchMove);
+          window.removeEventListener('touchend', handleTouchEnd);
+        }
+      } else {
         setDragPosition({ x: touch.clientX, y: touch.clientY });
-        onDragStart?.(node);
-        moveEvent.preventDefault(); // Предотвращаем скролл
-      }
-      if (hasStartedDrag) {
-        setDragPosition({ x: touch.clientX, y: touch.clientY });
-        moveEvent.preventDefault();
+        if (moveEvent.cancelable) moveEvent.preventDefault();
       }
     };
     
     const handleTouchEnd = () => {
+      if (animFrame) cancelAnimationFrame(animFrame);
+      setIsLongPressing(false);
+      setLongPressProgress(0);
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+      document.body.style.userSelect = '';
+      
       if (hasStartedDrag) {
         setIsDragging(false);
         setJustDragged(true);
@@ -433,6 +500,7 @@ export function NodeCard({
     
     window.addEventListener('touchmove', handleTouchMove, { passive: false });
     window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchcancel', handleTouchEnd);
   };
 
 
@@ -578,15 +646,6 @@ export function NodeCard({
                   minHeight: '120px', 
                   maxHeight: '140px' 
                 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // В момент тапа считаем, что выбран тот, кто ближе к центру при текущем offsetPx.
-                  // После отпускания барабан сам прилипнет и закоммитит baseActionIndex.
-                  const items = Math.round(offsetPx / ITEM_HEIGHT);
-                  const len = actions.length;
-                  const idx = ((baseActionIndex - items) % len + len) % len;
-                  actions[idx].action();
-                }}
               >
                 {/* Барабан действий */}
                 <div 
@@ -622,7 +681,7 @@ export function NodeCard({
                     return (
                       <div 
                         key={offset}
-                        className="absolute flex items-center justify-center transition-all duration-100"
+                        className="absolute flex items-center justify-center"
                         style={{ 
                           top: '50%',
                           marginTop: `${offset * ITEM_HEIGHT - (ITEM_HEIGHT / 2)}px`,
@@ -631,11 +690,13 @@ export function NodeCard({
                           transform: `scale(${scale})`,
                           opacity: isSelected ? 1 : opacity,
                           color: action.color,
-                          zIndex: isSelected ? 10 : 1
+                          zIndex: isSelected ? 10 : 1,
+                          // Убираем все переходы, чтобы rAF управлял всем визуалом без задержек
+                          transition: 'none'
                         }}
                       >
                         <div 
-                          className={`p-1.5 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                          className={`p-1.5 rounded-lg flex items-center justify-center ${
                             isSelected 
                               ? 'border-2 shadow-sm' 
                               : '' 
@@ -646,6 +707,7 @@ export function NodeCard({
                               ? (action.active ? 'transparent' : 'currentColor')
                               : 'transparent',
                             color: isSelected && action.active ? 'white' : action.color,
+                            transition: 'none', // Убираем все переходы внутри барабана
                             ...(action.id === 'delete' && isSelected ? { borderColor: '#ef4444', color: '#ef4444' } : {})
                           }}
                         >
@@ -712,6 +774,45 @@ export function NodeCard({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Индикатор долгого нажатия */}
+      {isLongPressing && (
+        <div 
+          className="fixed pointer-events-none z-[110]"
+          style={{
+            left: longPressPos.x - 30, // Сдвигаем влево
+            top: longPressPos.y - 30,  // Сдвигаем вверх
+            width: '30px',
+            height: '30px'
+          }}
+        >
+          <svg width="30" height="30" viewBox="0 0 40 40" className="drop-shadow-sm">
+            {/* Тонкий контур, который будет заполняться */}
+            <circle
+              cx="20"
+              cy="20"
+              r="16"
+              fill="none"
+              stroke="white"
+              strokeWidth="2"
+              className="opacity-20"
+            />
+            <circle
+              cx="20"
+              cy="20"
+              r="16"
+              fill="none"
+              stroke="var(--accent)"
+              strokeWidth="3"
+              strokeDasharray="100.5"
+              strokeDashoffset={100.5 * (1 - longPressProgress)}
+              strokeLinecap="round"
+              transform="rotate(-90 20 20)"
+              style={{ transition: 'none' }}
+            />
+          </svg>
         </div>
       )}
     </>
