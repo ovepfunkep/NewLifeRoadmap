@@ -9,9 +9,7 @@ import { setupSecurity } from '../utils/securityManager';
 const isDev = import.meta.env.DEV;
 
 function log(message: string, ...args: any[]) {
-  if (isDev) {
-    console.log(`[Auth] ${message}`, ...args);
-  }
+  // Debug logging disabled
 }
 
 export function AuthAvatar() {

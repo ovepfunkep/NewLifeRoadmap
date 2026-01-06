@@ -8,9 +8,7 @@ import { encryptData, decryptData } from '../utils/crypto';
 const isDev = import.meta.env.DEV;
 
 function log(message: string, ...args: any[]) {
-  if (isDev) {
-    console.log(`[Sync] ${message}`, ...args);
-  }
+  // Debug logging disabled
 }
 
 /**

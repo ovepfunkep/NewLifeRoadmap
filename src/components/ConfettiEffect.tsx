@@ -5,9 +5,7 @@ import { useEffects } from '../hooks/useEffects';
 const isDev = import.meta.env.DEV;
 
 function log(message: string, ...args: any[]) {
-  if (isDev) {
-    console.log(`[Confetti] ${message}`, ...args);
-  }
+  // Debug logging disabled
 }
 
 interface ConfettiEffectProps {
@@ -134,7 +132,7 @@ export function ConfettiEffect({ trigger, childCount = 0 }: ConfettiEffectProps)
     }
     fadeTimeoutRef.current = setTimeout(() => {
       log('Starting fade out');
-      if (canvas && document.body.contains(canvas)) {
+      if (canvas instanceof HTMLCanvasElement && document.body.contains(canvas)) {
         canvas.style.opacity = '0';
       }
     }, 28000); // Начинаем затухание за 2 секунды до конца анимации
@@ -145,7 +143,7 @@ export function ConfettiEffect({ trigger, childCount = 0 }: ConfettiEffectProps)
     }
     cleanupTimeoutRef.current = setTimeout(() => {
       log('Cleaning up canvas');
-      if (canvas && document.body.contains(canvas)) {
+      if (canvas instanceof HTMLCanvasElement && document.body.contains(canvas)) {
         try {
           document.body.removeChild(canvas);
           canvasRef.current = null;

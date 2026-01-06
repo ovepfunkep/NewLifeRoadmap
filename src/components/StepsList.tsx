@@ -92,7 +92,7 @@ export function StepsList({
   if (children.length === 0) {
     return (
       <div 
-        className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 p-5"
+        className="bg-white dark:bg-gray-800 rounded-xl border border-gray-300 dark:border-gray-700 p-5"
         style={{
           // Material Design elevation dp2 для контейнера списка
           boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)'
@@ -100,7 +100,7 @@ export function StepsList({
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {t('node.steps') || 'Шаги'}
+            {t('node.steps') || 'Задачи'}
           </h2>
           <Tooltip text={t('node.createChild')}>
             <button
@@ -112,7 +112,7 @@ export function StepsList({
             </button>
           </Tooltip>
         </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4 italic">
           {t('node.noChildren')}
         </p>
       </div>
@@ -121,7 +121,7 @@ export function StepsList({
 
   return (
     <div 
-      className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 p-5"
+      className="bg-white dark:bg-gray-800 rounded-xl border border-gray-300 dark:border-gray-700 p-5"
       style={{
         // Material Design elevation dp2 для контейнера списка
         boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)'
@@ -130,7 +130,7 @@ export function StepsList({
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {t('node.steps') || 'Шаги'}
+            {t('node.steps') || 'Задачи'}
           </h2>
           {/* Сортировки */}
           <div className="flex items-center gap-1">

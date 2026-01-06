@@ -6,10 +6,6 @@ import { VitePWA } from 'vite-plugin-pwa';
 // В GitHub Actions это устанавливается через GITHUB_PAGES_BASE
 const base = process.env.GITHUB_PAGES_BASE || '/';
 
-// Отладочный вывод для проверки base path при сборке
-console.log('Vite config - GITHUB_PAGES_BASE:', process.env.GITHUB_PAGES_BASE);
-console.log('Vite config - base:', base);
-
 export default defineConfig({
   base,
   plugins: [

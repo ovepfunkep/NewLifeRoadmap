@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { generateId } from '../utils';
-import { FiAlertCircle } from 'react-icons/fi';
+import { FiAlertCircle, FiCalendar, FiClock } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
 import { useLanguage } from '../contexts/LanguageContext';
 import { TelegramLinkModal } from './TelegramLinkModal';
@@ -277,39 +277,41 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
     >
       <div 
         ref={modalRef}
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md mx-4"
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md mx-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6">
           {node ? t('node.editNode') : t('node.createChild')}
         </h2>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent"
-              placeholder={t('editor.title')}
-              required
-              autoFocus
-            />
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="flex items-center gap-3">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 focus:outline-none focus:border-accent transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600"
+                placeholder={t('editor.title')}
+                required
+                autoFocus
+              />
+            </div>
             <Tooltip text={t('node.priority')}>
               <button
                 type="button"
                 onClick={() => setPriority(!priority)}
-                className={`p-2 rounded-lg transition-all border hover:brightness-150 ${
+                className={`p-3 rounded-xl transition-all border-2 ${
                   priority
-                    ? 'border-transparent'
-                    : 'border-current hover:bg-accent/10'
+                    ? 'border-transparent shadow-lg shadow-accent/20'
+                    : 'border-gray-100 dark:border-gray-800 hover:border-accent/30'
                 }`}
                 style={{ 
-                  color: 'var(--accent)',
+                  color: priority ? 'white' : 'var(--accent)',
                   backgroundColor: priority ? 'var(--accent)' : 'transparent'
                 }}
               >
-                <FiAlertCircle size={18} style={{ color: priority ? 'white' : 'var(--accent)' }} />
+                <FiAlertCircle size={20} />
               </button>
             </Tooltip>
           </div>
@@ -319,49 +321,69 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent"
+              className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 focus:outline-none focus:border-accent transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 text-sm resize-none"
               placeholder={t('editor.description')}
             />
           </div>
           
-          <div className="flex items-center gap-2">
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                {t('editor.deadline')}
-              </label>
-              <input
-                type="date"
-                value={deadlineDate}
-                onChange={handleDateChange}
-                lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent"
-              />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="relative group">
+              <div 
+                className="relative cursor-pointer"
+                onClick={() => {
+                  const input = document.getElementById('deadlineDateInput');
+                  if (input) (input as any).showPicker?.() || input.focus();
+                }}
+              >
+                <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                  {deadlineDate ? new Date(deadlineDate).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' }) : <span className="text-gray-400 dark:text-gray-600">Дата</span>}
+                </div>
+                <FiCalendar className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                <input
+                  id="deadlineDateInput"
+                  type="date"
+                  value={deadlineDate}
+                  onChange={handleDateChange}
+                  lang={language === 'ru' ? 'ru-RU' : 'en-US'}
+                  className="absolute inset-0 opacity-0 pointer-events-none"
+                />
+              </div>
             </div>
-            <div className="w-32">
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                {t('editor.time')}
-              </label>
-              <input
-                type="time"
-                value={deadlineTime}
-                onChange={(e) => setDeadlineTime(e.target.value)}
-                lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent"
-              />
+            <div className="relative group">
+              <div 
+                className="relative cursor-pointer"
+                onClick={() => {
+                  const input = document.getElementById('deadlineTimeInput');
+                  if (input) (input as any).showPicker?.() || input.focus();
+                }}
+              >
+                <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                  {deadlineTime || <span className="text-gray-400 dark:text-gray-600">Время</span>}
+                </div>
+                <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                <input
+                  id="deadlineTimeInput"
+                  type="time"
+                  value={deadlineTime}
+                  onChange={(e) => setDeadlineTime(e.target.value)}
+                  lang={language === 'ru' ? 'ru-RU' : 'en-US'}
+                  className="absolute inset-0 opacity-0 pointer-events-none"
+                />
+              </div>
             </div>
           </div>
           
           {/* Блок уведомлений Telegram */}
-          {deadlineDate && deadlineTime && (
-            <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-100 dark:border-gray-800 space-y-3">
+          {deadlineDate && (
+            <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border-2 border-gray-100 dark:border-gray-800 space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
                   {t('telegram.title')}
                 </span>
                 <button
                   type="button"
                   onClick={handleAddReminder}
-                  className="text-xs font-medium text-accent hover:opacity-80 transition-opacity"
+                  className="text-xs font-bold hover:opacity-80 transition-opacity"
                   style={{ color: 'var(--accent)' }}
                 >
                   + {t('telegram.addReminder')}
@@ -373,7 +395,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
                   {reminders.map((rem, idx) => {
                     const error = getReminderError(rem);
                     return (
-                      <div key={idx} className="space-y-1">
+                      <div key={idx} className="space-y-1.5">
                         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                           <span className="shrink-0">{t('telegram.remindMe')}</span>
                           <input
@@ -381,15 +403,15 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
                             min="1"
                             value={rem.value}
                             onChange={(e) => handleUpdateReminder(idx, 'value', parseInt(e.target.value) || 0)}
-                            className={`w-14 px-2 py-1 bg-white dark:bg-gray-800 border rounded text-center focus:outline-none focus:ring-1 ${
-                              error ? 'border-red-500 focus:ring-red-500' : 'border-gray-200 dark:border-gray-700 focus:ring-accent'
+                            className={`w-14 px-2 py-1 bg-white dark:bg-gray-800 border-2 rounded-lg text-center focus:outline-none transition-all ${
+                              error ? 'border-red-200 focus:border-red-500' : 'border-gray-100 dark:border-gray-700 focus:border-accent'
                             }`}
                           />
                           <select
                             value={rem.unit}
                             onChange={(e) => handleUpdateReminder(idx, 'unit', e.target.value)}
-                            className={`px-2 py-1 bg-white dark:bg-gray-800 border rounded focus:outline-none focus:ring-1 ${
-                              error ? 'border-red-500 focus:ring-red-500' : 'border-gray-200 dark:border-gray-700 focus:ring-accent'
+                            className={`px-2 py-1 bg-white dark:bg-gray-800 border-2 rounded-lg focus:outline-none transition-all ${
+                              error ? 'border-red-200 focus:border-red-500' : 'border-gray-100 dark:border-gray-700 focus:border-accent'
                             }`}
                           >
                             <option value="hours">{t('telegram.hours')}</option>
@@ -398,7 +420,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
                           <button 
                             type="button" 
                             onClick={() => handleRemoveReminder(idx)}
-                            className="ml-auto p-1 text-gray-400 hover:text-red-500 transition-colors"
+                            className="ml-auto p-1.5 text-gray-300 hover:text-red-500 transition-colors"
                           >
                             &times;
                           </button>
@@ -413,25 +435,25 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
                   })}
                 </div>
               ) : (
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 italic">
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 italic text-center py-1">
                   Напоминания не настроены
                 </p>
               )}
             </div>
           )}
           
-          <div className="flex gap-3 justify-end">
+          <div className="flex gap-3 justify-end pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              className="px-6 py-2.5 text-sm font-bold rounded-xl border-2 border-gray-100 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-all"
             >
               {t('general.cancel')}
             </button>
             <button
               type="submit"
               disabled={reminders.some(rem => getReminderError(rem) !== null)}
-              className="px-4 py-2 text-sm rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-8 py-2.5 text-sm font-bold rounded-xl text-white transition-all shadow-lg shadow-accent/20 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 active:scale-95"
               style={{ backgroundColor: 'var(--accent)' }}
             >
               {t('general.save')}
@@ -455,4 +477,3 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
     </div>
   );
 }
-

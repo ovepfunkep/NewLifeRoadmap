@@ -13,9 +13,7 @@ import { initSecurity } from '../utils/securityManager';
 const isDev = import.meta.env.DEV;
 
 function log(message: string, ...args: any[]) {
-  if (isDev) {
-    console.log(`[SyncManager] ${message}`, ...args);
-  }
+  // Debug logging disabled
 }
 
 // Событие для уведомления об обновлении данных
@@ -125,27 +123,52 @@ export function SyncManager() {
         return;
       }
       
-      log('[loadCloudDataSilently] Data differs, loading cloud data to local DB...');
+      log('[loadCloudDataSilently] Data differs, merging cloud data with local DB...');
       
-      // Тихо загружаем облачные данные (только валидные)
+      // Сливаем облачные данные с локальными на основе даты обновления
       let db: Awaited<ReturnType<typeof openDB>> | null = null;
       try {
-        log('[loadCloudDataSilently] Clearing local nodes...');
-        await clearAllNodes();
-        
         log('[loadCloudDataSilently] Opening DB...');
         db = await openDB('LifeRoadmapDB', 2);
-        const tx = db.transaction('nodes', 'readwrite');
         
-        log(`[loadCloudDataSilently] Saving ${filteredCloud.length} nodes to local DB...`);
-        for (const node of filteredCloud) {
-          await tx.store.put(node);
+        // Получаем все локальные узлы для сравнения
+        const localNodes = await getAllNodes();
+        const localMap = new Map(localNodes.map(n => [n.id, n]));
+        
+        const tx = db.transaction('nodes', 'readwrite');
+        let updateCount = 0;
+        let skipCount = 0;
+        let newCount = 0;
+        
+        log(`[loadCloudDataSilently] Processing ${filteredCloud.length} nodes from cloud...`);
+        
+        for (const cloudNode of filteredCloud) {
+          const localNode = localMap.get(cloudNode.id);
+          
+          if (!localNode) {
+            // Нового узла нет локально - сохраняем
+            await tx.store.put(cloudNode);
+            newCount++;
+          } else {
+            // Узел есть и там и там - сравниваем даты
+            const cloudUpdated = cloudNode.updatedAt ? new Date(cloudNode.updatedAt).getTime() : 0;
+            const localUpdated = localNode.updatedAt ? new Date(localNode.updatedAt).getTime() : 0;
+            
+            if (cloudUpdated > localUpdated) {
+              // Облачный узел свежее - обновляем локально
+              await tx.store.put(cloudNode);
+              updateCount++;
+            } else {
+              // Локальный узел свежее или такой же - пропускаем
+              skipCount++;
+            }
+          }
         }
         
         await tx.done;
-        log(`[loadCloudDataSilently] Successfully loaded ${cloud.length} nodes from cloud to local DB`);
+        log(`[loadCloudDataSilently] Sync complete: ${newCount} new, ${updateCount} updated, ${skipCount} skipped (local was fresher)`);
         
-        // Уведомляем компоненты об обновлении данных вместо перезагрузки страницы
+        // Уведомляем компоненты об обновлении данных
         log('[loadCloudDataSilently] Notifying components about data update...');
         notifyDataUpdated();
         silentLoadInProgressRef.current = false;

@@ -72,6 +72,13 @@ export function NodeCard({
   const offsetPxRef = useRef(0);
   const [isMobile, setIsMobile] = useState(false);
   const drumRef = useRef<HTMLDivElement>(null);
+  const drumDragStartYRef = useRef(0);
+  const drumDragStartOffsetRef = useRef(0);
+  const drumIsDraggingRef = useRef(false);
+  const drumHasMovedRef = useRef(false);
+  const drumRafRef = useRef(0);
+  const drumTouchIdRef = useRef<number | null>(null);
+  const lastScrollEndTimeRef = useRef(0);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -106,99 +113,88 @@ export function NodeCard({
     actionsRef.current = actions;
   }, [actions]);
 
-  const ITEM_HEIGHT = 36;
+  const ITEM_HEIGHT = 30; // Reduced height for better visibility
+
+  const mod = (n: number, m: number) => ((n % m) + m) % m;
+
+  const stopAnim = () => {
+    if (drumRafRef.current) {
+      cancelAnimationFrame(drumRafRef.current);
+      drumRafRef.current = 0;
+    }
+  };
+
+  const animateOffsetTo = (target: number, onDone: () => void) => {
+    stopAnim();
+    const from = offsetPxRef.current;
+    const dist = target - from;
+    if (Math.abs(dist) < 0.5) {
+      offsetPxRef.current = target;
+      setOffsetPx(target);
+      onDone();
+      return;
+    }
+
+    const start = performance.now();
+    const duration = 220; 
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const v = from + dist * easeOutCubic(t);
+      offsetPxRef.current = v;
+      setOffsetPx(v);
+      if (t < 1) {
+        drumRafRef.current = requestAnimationFrame(tick);
+      } else {
+        drumRafRef.current = 0;
+        onDone();
+      }
+    };
+    drumRafRef.current = requestAnimationFrame(tick);
+  };
 
   useEffect(() => {
     const drum = drumRef.current;
     if (!drum || !isMobile) return;
 
-    const DRUM_DEBUG = (() => {
-      try {
-        return localStorage.getItem('DRUM_DEBUG') === '1';
-      } catch {
-        return false;
-      }
-    })();
-    const dragStartYRef = { current: 0 };
-    const dragStartOffsetRef = { current: 0 };
-    const isDraggingRef = { current: false };
-    const rafRef = { current: 0 as number | 0 };
-    const lastScrollEndTimeRef = { current: 0 };
-
-    const stopAnim = () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = 0;
-      }
-    };
-
-    const mod = (n: number, m: number) => ((n % m) + m) % m;
-
-    const animateOffsetTo = (target: number, onDone: () => void) => {
-      stopAnim();
-      const from = offsetPxRef.current;
-      const dist = target - from;
-      if (Math.abs(dist) < 0.5) {
-        offsetPxRef.current = target;
-        setOffsetPx(target);
-        onDone();
-        return;
-      }
-
-      const start = performance.now();
-      const duration = 220; 
-      const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-
-      const tick = (now: number) => {
-        const t = Math.min(1, (now - start) / duration);
-        const v = from + dist * easeOutCubic(t);
-        offsetPxRef.current = v;
-        setOffsetPx(v);
-        if (t < 1) {
-          rafRef.current = requestAnimationFrame(tick);
-        } else {
-          rafRef.current = 0;
-          onDone();
-        }
-      };
-      rafRef.current = requestAnimationFrame(tick);
-    };
-
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      stopAnim();
-      isDraggingRef.current = true;
-      dragStartYRef.current = e.touches[0].clientY;
-      dragStartOffsetRef.current = offsetPxRef.current;
-
-      if (DRUM_DEBUG) {
-        console.log('[Drum] start', {
-          baseActionIndex: baseActionIndexRef.current,
-          offsetPx: offsetPxRef.current,
-        });
-      }
-    };
-
     const handleTouchMove = (e: TouchEvent) => {
-      if (!isDraggingRef.current) return;
-      const y = e.touches[0]?.clientY;
-      if (typeof y !== 'number') return;
-      const delta = y - dragStartYRef.current;
+      if (!drumIsDraggingRef.current) return;
       
-      const next = dragStartOffsetRef.current + delta;
+      const touch = Array.from(e.touches).find(t => t.identifier === drumTouchIdRef.current);
+      if (!touch) return;
+      
+      const y = touch.clientY;
+      const delta = y - drumDragStartYRef.current;
+      
+      if (Math.abs(delta) > 5) {
+        drumHasMovedRef.current = true;
+      }
+
+      const next = drumDragStartOffsetRef.current + delta;
       offsetPxRef.current = next;
       setOffsetPx(next);
       if (e.cancelable) e.preventDefault();
     };
 
     const handleTouchEndLike = (e?: TouchEvent) => {
-      if (!isDraggingRef.current) return;
-      isDraggingRef.current = false;
+      if (!drumIsDraggingRef.current) return;
+
+      if (e && e.changedTouches) {
+        const touch = Array.from(e.changedTouches).find(t => t.identifier === drumTouchIdRef.current);
+        if (!touch) return; 
+      }
+
+      drumIsDraggingRef.current = false;
+      drumTouchIdRef.current = null;
       
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEndLike);
+      window.removeEventListener('touchcancel', handleTouchEndLike);
+
       const currentOffset = offsetPxRef.current;
-      const totalDelta = Math.abs(currentOffset - dragStartOffsetRef.current);
       
-      if (totalDelta < 8 && (performance.now() - lastScrollEndTimeRef.current > 300)) {
+      if (!drumHasMovedRef.current && (performance.now() - lastScrollEndTimeRef.current > 300)) {
         const items = Math.round(currentOffset / ITEM_HEIGHT);
         const len = actionsRef.current.length;
         const idx = ((baseActionIndexRef.current - items) % len + len) % len;
@@ -218,7 +214,7 @@ export function NodeCard({
       animateOffsetTo(snapTargetOffset, () => {
         flushSync(() => {
           if (itemsSwiped !== 0) {
-            const nextBase = mod(baseActionIndexRef.current - itemsSwiped, actions.length);
+            const nextBase = mod(baseActionIndexRef.current - itemsSwiped, actionsRef.current.length);
             setBaseActionIndex(nextBase);
             baseActionIndexRef.current = nextBase;
           }
@@ -229,19 +225,91 @@ export function NodeCard({
       });
     };
 
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      
+      const touch = e.touches[0];
+      drumTouchIdRef.current = touch.identifier;
+      
+      if (e.cancelable) e.preventDefault(); 
+      e.stopPropagation(); 
+      stopAnim();
+      drumIsDraggingRef.current = true;
+      drumHasMovedRef.current = false; 
+      drumDragStartYRef.current = touch.clientY;
+      drumDragStartOffsetRef.current = offsetPxRef.current;
+
+      window.addEventListener('touchmove', handleTouchMove, { passive: false });
+      window.addEventListener('touchend', handleTouchEndLike, { passive: false });
+      window.addEventListener('touchcancel', handleTouchEndLike, { passive: false });
+    };
+
+    const handleMouseDownNative = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      stopAnim();
+      drumIsDraggingRef.current = true;
+      drumHasMovedRef.current = false;
+      drumDragStartYRef.current = e.clientY;
+      drumDragStartOffsetRef.current = offsetPxRef.current;
+
+      const handleMouseMoveMouse = (me: MouseEvent) => {
+        if (!drumIsDraggingRef.current) return;
+        const delta = me.clientY - drumDragStartYRef.current;
+        if (Math.abs(delta) > 5) drumHasMovedRef.current = true;
+        const next = drumDragStartOffsetRef.current + delta;
+        offsetPxRef.current = next;
+        setOffsetPx(next);
+      };
+
+      const handleMouseUpMouse = (me: MouseEvent) => {
+        drumIsDraggingRef.current = false;
+        window.removeEventListener('mousemove', handleMouseMoveMouse);
+        window.removeEventListener('mouseup', handleMouseUpMouse);
+        
+        const currentOffset = offsetPxRef.current;
+        if (!drumHasMovedRef.current) {
+          const items = Math.round(currentOffset / ITEM_HEIGHT);
+          const len = actionsRef.current.length;
+          const idx = ((baseActionIndexRef.current - items) % len + len) % len;
+          actionsRef.current[idx].action();
+          setOffsetPx(0);
+          offsetPxRef.current = 0;
+          return;
+        }
+
+        const itemsSwiped = Math.round(currentOffset / ITEM_HEIGHT);
+        const snapTargetOffset = itemsSwiped * ITEM_HEIGHT;
+        animateOffsetTo(snapTargetOffset, () => {
+          flushSync(() => {
+            if (itemsSwiped !== 0) {
+              const nextBase = mod(baseActionIndexRef.current - itemsSwiped, actions.length);
+              setBaseActionIndex(nextBase);
+              baseActionIndexRef.current = nextBase;
+            }
+            offsetPxRef.current = 0;
+            setOffsetPx(0);
+            lastScrollEndTimeRef.current = performance.now();
+          });
+        });
+      };
+
+      window.addEventListener('mousemove', handleMouseMoveMouse);
+      window.addEventListener('mouseup', handleMouseUpMouse);
+    };
+
     drum.addEventListener('touchstart', handleTouchStart, { passive: false });
-    drum.addEventListener('touchmove', handleTouchMove, { passive: false });
-    drum.addEventListener('touchend', handleTouchEndLike, { passive: false });
-    drum.addEventListener('touchcancel', handleTouchEndLike, { passive: false });
+    drum.addEventListener('mousedown', handleMouseDownNative);
 
     return () => {
       stopAnim();
       drum.removeEventListener('touchstart', handleTouchStart);
-      drum.removeEventListener('touchmove', handleTouchMove);
-      drum.removeEventListener('touchend', handleTouchEndLike);
-      drum.removeEventListener('touchcancel', handleTouchEndLike);
+      drum.removeEventListener('mousedown', handleMouseDownNative);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEndLike);
+      window.removeEventListener('touchcancel', handleTouchEndLike);
     };
-  }, [isMobile, actions.length]);
+  }, [isMobile, node.id]);
 
   useEffect(() => {
     const currentProgress = computeProgress(node);
@@ -481,7 +549,7 @@ export function NodeCard({
             x: { duration: effectsEnabled ? 0.8 : 0, ease: "easeIn" },
             opacity: { duration: isMovingOut ? (effectsEnabled ? 0.4 : 0) : 0.3 },
           }}
-          className={`bg-white dark:bg-gray-800 rounded-lg border transition-all overflow-hidden relative ${
+          className={`bg-white dark:bg-gray-800 rounded-xl border transition-all overflow-visible relative flex flex-col min-h-[140px] hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:hover:shadow-[0_25px_50px_-12px_rgba(255,255,255,0.1)] ${
             node.priority 
               ? 'border-[3px]' 
               : 'border-gray-300 dark:border-gray-700'
@@ -489,19 +557,18 @@ export function NodeCard({
             isDragOver ? 'ring-2 ring-offset-2' : ''
           } ${
             draggedNode && draggedNode.id !== node.id ? 'opacity-60' : ''
-          }`}
+          } ${node.completed ? 'bg-accent/20 dark:bg-accent/30' : ''}`}
           style={{
             ...(node.priority ? { borderColor: 'var(--accent)' } : {}),
             ...(node.completed ? { 
-              opacity: 0.85, 
-              backgroundColor: 'rgba(var(--accent-rgb), 0.03)',
-              filter: 'grayscale(0.2)'
+              opacity: 1, 
+              backgroundColor: 'rgba(var(--accent-rgb), 0.2)',
             } : {}),
             boxShadow: node.priority 
-              ? '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)' 
-              : '0 1px 2px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.06)',
+              ? '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)' 
+              : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
             ...(isDragOver ? { 
-              boxShadow: `0 0 0 3px var(--accent), 0 4px 8px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.1)`, 
+              boxShadow: `0 0 0 3px var(--accent), 0 12px 24px rgba(0, 0, 0, 0.2), 0 8px 16px rgba(0, 0, 0, 0.1)`, 
               transition: 'all 0.3s ease'
             } : {}),
             ...(draggedNode && draggedNode.id !== node.id && (!currentNodeId || node.id !== currentNodeId) ? {
@@ -515,105 +582,126 @@ export function NodeCard({
           onMouseUp={handleCardMouseUp}
           onTouchEnd={handleCardTouchEnd}
         >
-          <div className="flex items-stretch gap-0">
+          <div className="flex flex-col flex-1 relative">
             <div
-              className="flex-1 min-w-0 p-4"
+              className={`flex-1 min-w-0 p-0 flex flex-col ${isMobile ? 'pr-16' : ''}`}
               onMouseDown={handleMouseDown}
               onTouchStart={handleTouchStart}
             >
-              <button
-                onClick={(e) => {
-                  if (justDragged) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return;
-                  }
-                  onNavigate(node.id);
-                }}
-                className="w-full text-left group"
-              >
-                <div className="w-full">
-                  {deadlineDisplay && (
-                    <div className="mb-1">
+              <div className="flex items-center justify-between p-4 pb-2">
+                <button
+                  onClick={(e) => {
+                    if (justDragged) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return;
+                    }
+                    onNavigate(node.id);
+                  }}
+                  className="flex-1 text-left group min-w-0"
+                >
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="font-bold text-lg text-gray-900 dark:text-gray-100 group-hover:opacity-75 transition-opacity line-clamp-2" style={{ color: 'var(--accent)' }}>
+                      {node.title}
+                    </span>
+                    {deadlineDisplay && (
                       <span
-                        className="text-[10px] px-2 py-0.5 rounded font-medium border uppercase tracking-wider"
+                        className="text-[10px] px-1.5 py-0.5 rounded font-bold border uppercase tracking-wider whitespace-nowrap"
                         style={{
-                          borderColor: node.completed ? 'var(--accent)' : getDeadlineColor(node),
-                          color: node.completed ? 'var(--accent)' : 'white',
-                          backgroundColor: node.completed ? 'transparent' : getDeadlineColor(node),
+                          borderColor: '#eab308',
+                          color: 'black',
+                          backgroundColor: '#eab308',
                         }}
                       >
                         {deadlineDisplay}
                       </span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-gray-900 dark:text-gray-100 group-hover:opacity-75 transition-opacity line-clamp-2" style={{ color: 'var(--accent)' }}>
-                      {node.title}
-                    </span>
+                    )}
                   </div>
-                  {node.children.length > 0 && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <div className="w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all duration-300 ${isBlinking ? 'animate-pulse' : ''}`}
-                          style={{
-                            width: `${progress}%`,
-                            backgroundColor: progress === 100 ? 'var(--accent)' : '#9ca3af',
-                            animation: isBlinking ? 'pulse 0.5s ease-in-out infinite' : undefined,
-                          }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-600 dark:text-gray-400">{progress}%</span>
+                </button>
+
+                {!isMobile && (
+                  <div className="flex-shrink-0 ml-2 relative z-10 pt-1">
+                    <div className="flex items-center gap-1.5">
+                      {actions.map((action) => (
+                        <Tooltip key={action.id} text={action.label}>
+                          <button onClick={(e) => { e.stopPropagation(); action.action(); }} className={`p-2.5 rounded-lg transition-all border hover:scale-110 shadow-sm ${action.active ? 'border-transparent' : 'border-current hover:bg-accent/10'}`} style={{ color: action.color, backgroundColor: action.active ? action.color : 'transparent' }}>
+                            {React.createElement(action.icon, { size: 20, style: { color: action.active ? 'white' : action.color } })}
+                          </button>
+                        </Tooltip>
+                      ))}
                     </div>
-                  )}
-                  {node.description && (
-                    <div className="mt-1 text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                      {node.description}
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => onNavigate(node.id)}
+                className="w-full text-left px-4 pb-10 flex-1 min-h-[40px]"
+              >
+                {node.description && (
+                  <div className="text-[12px] font-normal text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight">
+                    {node.description}
+                  </div>
+                )}
               </button>
             </div>
-            
-            <div className="flex items-stretch gap-0 flex-shrink-0">
-              {isMobile ? (
-                <div ref={drumRef} className="relative flex items-center justify-center w-20 touch-none border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800 overflow-hidden select-none min-h-[120px] max-h-[140px]">
-                  <div className="flex flex-col items-center justify-center h-full relative" style={{ transform: `translateY(${offsetPx}px)`, transition: 'none' }}>
-                    {Array.from({ length: 41 }, (_, i) => i - 20).map((offset) => {
-                      const actionIndex = ((baseActionIndex + offset) % actions.length + actions.length) % actions.length;
-                      const action = actions[actionIndex];
-                      const Icon = action.icon;
-                      const centerOffset = Math.round(-offsetPx / ITEM_HEIGHT);
-                      const isSelected = offset === centerOffset;
-                      const dist = Math.abs((offset * ITEM_HEIGHT) + offsetPx);
-                      const scale = Math.max(0.6, 1.2 - (dist / (ITEM_HEIGHT * 2))); 
-                      const opacity = isSelected ? 1 : Math.max(0, Math.min(0.5, (1 - (dist / (ITEM_HEIGHT * 3))) + 0.15));
-                      if (dist > 150) return null;
-                      return (
-                        <div key={offset} className="absolute flex items-center justify-center" style={{ top: '50%', marginTop: `${offset * ITEM_HEIGHT - (ITEM_HEIGHT / 2)}px`, height: `${ITEM_HEIGHT}px`, width: '100%', transform: `scale(${scale})`, opacity: isSelected ? 1 : opacity, color: action.color, zIndex: isSelected ? 10 : 1, transition: 'none' }}>
-                          <div className={`p-1.5 rounded-lg flex items-center justify-center ${isSelected ? 'border-2 shadow-sm' : ''}`} style={{ backgroundColor: isSelected && action.active ? action.color : 'transparent', borderColor: isSelected ? (action.active ? 'transparent' : 'currentColor') : 'transparent', color: isSelected && action.active ? 'white' : action.color, transition: 'none', ...(action.id === 'delete' && isSelected ? { borderColor: '#ef4444', color: '#ef4444' } : {}) }}>
-                            <Icon size={18} style={{ color: isSelected && action.active ? 'white' : undefined }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white via-transparent to-white dark:from-gray-800 dark:via-transparent dark:to-gray-800 opacity-90" style={{ maskImage: 'linear-gradient(to bottom, black 0%, transparent 20%, transparent 80%, black 100%)' }} />
-                </div>
-              ) : (
-                <div className="flex items-center gap-1 p-4">
-                  {actions.map((action) => (
-                    <Tooltip key={action.id} text={action.label}>
-                      <button onClick={(e) => { e.stopPropagation(); action.action(); }} className={`p-2 rounded-lg transition-all border hover:brightness-150 ${action.active ? 'border-transparent' : 'border-current hover:bg-accent/10'}`} style={{ color: action.color, backgroundColor: action.active ? action.color : 'transparent' }}>
-                        {React.createElement(action.icon, { size: 18, style: { color: action.active ? 'white' : action.color } })}
-                      </button>
-                    </Tooltip>
-                  ))}
-                </div>
-              )}
-            </div>
+
+            {/* Барабан для мобильных - центрирован по высоте контента без прогресс-бара */}
+            {isMobile && (
+              <div className="absolute right-2 top-0 bottom-7 flex items-center z-20 pointer-events-none">
+                    <div 
+                      ref={drumRef} 
+                      className="relative flex items-center justify-center w-14 h-full select-none rounded-lg overflow-hidden pointer-events-auto touch-none"
+                      style={{
+                        backgroundColor: 'transparent'
+                      }}
+                    >
+                      <div className="flex flex-col items-center justify-center h-full relative" style={{ transform: `translateY(${offsetPx}px)`, transition: 'none' }}>
+                        {Array.from({ length: 41 }, (_, i) => i - 20).map((offset) => {
+                          const actionIndex = ((baseActionIndex + offset) % actions.length + actions.length) % actions.length;
+                          const action = actions[actionIndex];
+                          const Icon = action.icon;
+                          const centerOffset = Math.round(-offsetPx / ITEM_HEIGHT);
+                          const isSelected = offset === centerOffset;
+                          const dist = Math.abs((offset * ITEM_HEIGHT) + offsetPx);
+                          const scale = Math.max(0.6, 1.2 - (dist / (ITEM_HEIGHT * 2))); 
+                          
+                          // Smooth opacity: 1.0 at center, 0.6 at neighbor (30px), 0.0 at next (60px)
+                          const opacity = isSelected ? 1 : Math.max(0, 0.6 - ((dist - ITEM_HEIGHT) / ITEM_HEIGHT) * 0.6);
+                          
+                          if (opacity <= 0) return null;
+                          
+                          return (
+                            <div key={offset} className="absolute flex items-center justify-center" style={{ top: '50%', marginTop: `${offset * ITEM_HEIGHT - (ITEM_HEIGHT / 2)}px`, height: `${ITEM_HEIGHT}px`, width: '100%', transform: `scale(${scale})`, opacity: opacity, color: action.color, zIndex: isSelected ? 10 : 1, transition: 'none' }}>
+                              <div className={`p-1 rounded-lg flex items-center justify-center ${isSelected ? 'border-2 shadow-sm' : ''}`} style={{ backgroundColor: isSelected && action.active ? action.color : 'transparent', borderColor: isSelected ? (action.active ? 'transparent' : 'currentColor') : 'transparent', color: isSelected && action.active ? 'white' : action.color, transition: 'none', ...(action.id === 'delete' && isSelected ? { borderColor: '#ef4444', color: '#ef4444' } : {}) }}>
+                                <Icon size={16} style={{ color: isSelected && action.active ? 'white' : undefined }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+              </div>
+            )}
           </div>
+
+          {/* Прогресс бар в самом низу */}
+          {node.children.length > 0 && (
+            <div className="absolute bottom-0 left-0 right-0 h-7 bg-gray-100 dark:bg-gray-700/50 overflow-hidden border-t border-gray-200 dark:border-gray-700 rounded-b-xl">
+              <div
+                className={`h-full transition-all duration-500 ${isBlinking ? 'animate-pulse' : ''}`}
+                style={{
+                  width: `${progress}%`,
+                  backgroundColor: progress === 100 ? 'var(--accent)' : 'rgba(var(--accent-rgb), 0.4)',
+                }}
+              />
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className={`text-xs font-normal opacity-40 ${progress > 50 ? 'text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                  {getProgressCounts(node).completed} / {getProgressCounts(node).total}
+                </span>
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {isBurning && effectsEnabled && (

@@ -28,7 +28,7 @@ export const i18n: Record<Language, Record<string, any>> = {
       progress: 'Progress',
       move: 'Move',
       moveTitle: 'Move task',
-      steps: 'Steps',
+      steps: 'Tasks',
       priority: 'Priority task',
     },
     move: {
@@ -51,14 +51,14 @@ export const i18n: Record<Language, Record<string, any>> = {
     },
     keyboard: {
       esc: 'ESC - Close modal / Go to parent',
-      addStep: 'T - Add step',
+      addStep: 'T - Add task',
       edit: 'E - Edit current map',
       move: 'M - Move',
       import: 'I - Import',
       delete: 'D - Delete',
       complete: 'Enter - Complete',
       crtlNumber: 'CTRL + Number - Go to breadcrumb',
-      number: 'Number - Go to step',
+      number: 'Number - Go to task',
     },
     importExport: {
       import: 'Import',
@@ -78,6 +78,7 @@ export const i18n: Record<Language, Record<string, any>> = {
       soon: 'Soon (≤3 days)',
       future: 'Future',
       noDeadlines: 'No deadlines',
+      noDeadlinesNested: 'No deadlines in nested tasks',
     },
     toast: {
       undo: 'Undo',
@@ -169,7 +170,7 @@ export const i18n: Record<Language, Record<string, any>> = {
       progress: 'Прогресс',
       move: 'Переместить',
       moveTitle: 'Переместить задачу',
-      steps: 'Шаги',
+      steps: 'Задачи',
       priority: 'Приоритетная задача',
     },
     move: {
@@ -192,14 +193,14 @@ export const i18n: Record<Language, Record<string, any>> = {
     },
     keyboard: {
       esc: 'ESC - Закрыть попап / Перейти к родителю',
-      addStep: 'T - Добавить шаг',
+      addStep: 'T - Добавить задачу',
       edit: 'E - Редактировать текущую мапу',
       move: 'M - Переместить',
       import: 'I - Импорт',
       delete: 'D - Удалить',
       complete: 'Enter - Выполнить',
       crtlNumber: 'CTRL + Цифра - Переход к крошке',
-      number: 'Цифра - Переход к шагу',
+      number: 'Цифра - Переход к задаче',
     },
     importExport: {
       import: 'Импорт',
@@ -219,6 +220,7 @@ export const i18n: Record<Language, Record<string, any>> = {
       soon: 'Скоро (≤3 дня)',
       future: 'Будущее',
       noDeadlines: 'Нет дедлайнов',
+      noDeadlinesNested: 'Нет дедлайнов во вложенных задачах',
     },
     toast: {
       undo: 'Отменить',

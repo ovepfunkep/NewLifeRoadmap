@@ -7,6 +7,7 @@ import { getNode } from '../db';
 import { FiList, FiCalendar } from 'react-icons/fi';
 import { CalendarView } from './CalendarView';
 import { DayTasksModal } from './DayTasksModal';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface DeadlineListProps {
   node: Node;
@@ -197,14 +198,13 @@ export function DeadlineList({ node, onNavigate, onCreateTask }: DeadlineListPro
   return (
     <>
       <div 
-        className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 p-5"
+        className="bg-white dark:bg-gray-800 rounded-xl border border-gray-300 dark:border-gray-700 p-5 min-h-[140px] flex flex-col transition-all"
         style={{
-          // Material Design elevation dp2 для контейнера дедлайнов
           boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)'
         }}
       >
         {/* Заголовок с тумблером */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {t('deadline.title')}
           </h2>
@@ -245,81 +245,92 @@ export function DeadlineList({ node, onNavigate, onCreateTask }: DeadlineListPro
         </div>
 
         {/* Контент в зависимости от вида */}
-        {!hasDeadlines ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {t('deadline.noDeadlines')}
-          </p>
-        ) : viewMode === 'list' ? (
-          <div className="space-y-3">
-            {deadlinesWithBreadcrumbs.map(({ node: dl, breadcrumbs }) => {
-              const dateStr = formatDeadline(dl.deadline);
-              const deadlineColor = getDeadlineColor(dl);
+        <div className="flex-1 relative min-h-0">
+          {!hasDeadlines ? (
+            <div className="flex flex-col items-center justify-center py-6 h-full text-center">
+              <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                {node.children.length > 0 ? t('deadline.noDeadlinesNested') : t('deadline.noDeadlines')}
+              </p>
+            </div>
+          ) : viewMode === 'list' ? (
+            <div className="relative h-full flex flex-col">
+              {/* Permanent top fade */}
+              <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-white dark:from-gray-800 to-transparent z-10 pointer-events-none" />
               
-              return (
-                <button
-                  key={dl.id}
-                  onClick={() => onNavigate(dl.id)}
-                  className="w-full text-left p-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 transition-all"
-                  style={{
-                    // Material Design elevation dp0 для элементов списка дедлайнов
-                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
-                  }}
-                  onMouseEnter={(e) => {
-                    // Увеличиваем elevation при hover
-                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)';
-                  }}
-                  onMouseLeave={(e) => {
-                    // Возвращаем обычный elevation
-                    e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
-                  }}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex-1 min-w-0 flex items-center gap-2">
-                      <div className="flex-1 min-w-0">
-                        {/* Breadcrumbs - мелким шрифтом, полупрозрачным, над названием */}
-                        {breadcrumbs.length > 0 && (
-                          <div className="text-[10px] text-gray-400 dark:text-gray-500 opacity-60 mb-0.5 truncate">
-                            {breadcrumbs.map((b, idx) => (
-                              <span key={b.id}>
-                                {b.title}
-                                {idx < breadcrumbs.length - 1 && ' / '}
+              <div className="space-y-3 max-h-[435px] overflow-y-auto py-4 px-1 custom-scrollbar">
+                <AnimatePresence mode="popLayout">
+                  {deadlinesWithBreadcrumbs.map(({ node: dl, breadcrumbs }) => {
+                    const dateStr = formatDeadline(dl.deadline);
+                    const deadlineColor = getDeadlineColor(dl);
+                    
+                    return (
+                      <motion.button
+                        key={dl.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        onClick={() => onNavigate(dl.id)}
+                        className="w-full text-left p-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 transition-all min-h-[64px] hover:shadow-md"
+                        style={{
+                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                        }}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex-1 min-w-0 flex items-center gap-2">
+                            <div className="flex-1 min-w-0">
+                              {/* Breadcrumbs - мелким шрифтом, полупрозрачным, над названием */}
+                              {breadcrumbs.length > 0 && (
+                                <div className="text-[10px] text-gray-400 dark:text-gray-500 opacity-60 mb-0.5 truncate font-normal">
+                                  {breadcrumbs.map((b, idx) => (
+                                    <span key={b.id}>
+                                      {b.title}
+                                      {idx < breadcrumbs.length - 1 && ' / '}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <span className="font-medium text-gray-900 dark:text-gray-100">
+                                {dl.title}
                               </span>
-                            ))}
+                            </div>
                           </div>
-                        )}
-                        <span className="font-medium text-gray-900 dark:text-gray-100">
-                          {dl.title}
-                        </span>
-                      </div>
-                    </div>
-                    <span
-                      className="text-xs px-2 py-1 rounded text-white flex-shrink-0 self-center"
-                      style={{ backgroundColor: deadlineColor }}
-                    >
-                      {dateStr}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div 
-            className={isCompact ? '' : 'max-h-[70vh] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]'}
-            style={isCompact ? {} : {
-              overflowAnchor: 'none'
-            }}
-          >
-            <CalendarView
-              node={node}
-              deadlines={allDeadlines}
-              onNavigate={onNavigate}
-              onDayClick={handleDayClick}
-              onCreateTask={onCreateTask}
-              compact={isCompact}
-            />
-          </div>
-        )}
+                          <span
+                            className="text-xs px-2 py-1 rounded flex-shrink-0 self-center font-normal"
+                            style={{ 
+                              backgroundColor: deadlineColor,
+                              color: deadlineColor === '#eab308' ? 'black' : 'white'
+                            }}
+                          >
+                            {dateStr}
+                          </span>
+                        </div>
+                      </motion.button>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+              
+              {/* Permanent bottom fade */}
+              <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-gray-800 to-transparent z-10 pointer-events-none" />
+            </div>
+          ) : (
+            <div 
+              className={isCompact ? '' : 'max-h-[70vh] overflow-y-auto custom-scrollbar'}
+              style={isCompact ? {} : {
+                overflowAnchor: 'none'
+              }}
+            >
+              <CalendarView
+                node={node}
+                deadlines={allDeadlines}
+                onNavigate={onNavigate}
+                onDayClick={handleDayClick}
+                onCreateTask={onCreateTask}
+                compact={isCompact}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Модалка со списком задач на день */}

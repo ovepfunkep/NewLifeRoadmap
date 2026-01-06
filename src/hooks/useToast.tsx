@@ -13,12 +13,13 @@ export interface Toast {
 }
 
 let toastIdCounter = 0;
-// Глобальный счетчик активных синхронизаций для предупреждения при перезагрузке
-let activeSyncCount = 0;
-
 // Глобальное состояние тостов
 let globalToasts: Toast[] = [];
 let globalListeners: Set<() => void> = new Set();
+
+function getActiveSyncCount() {
+  return globalToasts.filter(t => t.isLoading).length;
+}
 
 function notifyListeners() {
   globalListeners.forEach(listener => listener());
@@ -56,7 +57,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       
-      if (activeSyncCount > 0) {
+      if (getActiveSyncCount() > 0) {
         e.preventDefault();
         e.returnValue = ''; // Chrome требует установить returnValue
         return ''; // Для старых браузеров
@@ -93,11 +94,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     globalToasts = [...globalToasts, toast];
     notifyListeners();
     
-    // Увеличиваем счетчик активных синхронизаций
-    if (options?.isLoading) {
-      activeSyncCount++;
-    }
-    
     // Автоудаление только для не persistent тостов
     if (!options?.persistent) {
       // Автоудаление через 2.5 секунды для всех тостов
@@ -115,10 +111,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const updateToast = useCallback((id: string, updates: Partial<Toast>) => {
     globalToasts = globalToasts.map(toast => {
       if (toast.id === id) {
-        // Уменьшаем счетчик если синхронизация завершена
-        if (toast.isLoading && updates.isLoading === false) {
-          activeSyncCount = Math.max(0, activeSyncCount - 1);
-        }
         return { ...toast, ...updates };
       }
       return toast;
@@ -127,12 +119,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const removeToast = useCallback((id: string) => {
-    // Уменьшаем счетчик если удаляем тост с активной синхронизацией
-    const toast = globalToasts.find(t => t.id === id);
-    if (toast?.isLoading) {
-      activeSyncCount = Math.max(0, activeSyncCount - 1);
-    }
-    
     globalToasts = globalToasts.filter(t => t.id !== id);
     notifyListeners();
     

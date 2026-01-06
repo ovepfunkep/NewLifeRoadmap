@@ -5,9 +5,7 @@ import { generateTutorial } from './utils/tutorialData';
 const isDev = import.meta.env.DEV;
 
 function log(message: string, ...args: any[]) {
-  if (isDev) {
-    console.log(`[DB] ${message}`, ...args);
-  }
+  // Debug logging disabled
 }
 
 interface LifeRoadmapDB extends DBSchema {
@@ -234,11 +232,9 @@ export async function saveNode(node: Node): Promise<void> {
   
   // Сохраняем всех потомков рекурсивно
   const saveSubtree = async (n: Node) => {
-    const nodeWithUpdated = {
-      ...n,
-      updatedAt: new Date().toISOString(),
-    };
-    await dbInstance!.put(STORE_NAME, nodeWithUpdated);
+    // Сохраняем узел как есть, не обновляя updatedAt принудительно для всех потомков
+    // Если потомок был изменен, его updatedAt уже должен быть обновлен в памяти
+    await dbInstance!.put(STORE_NAME, n);
     for (const child of n.children) {
       await saveSubtree(child);
     }

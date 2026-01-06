@@ -9,9 +9,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 const isDev = import.meta.env.DEV;
 
 function log(message: string, ...args: any[]) {
-  if (isDev) {
-    console.log(`[SettingsSyncManager] ${message}`, ...args);
-  }
+  // Debug logging disabled
 }
 
 export function SettingsSyncManager() {

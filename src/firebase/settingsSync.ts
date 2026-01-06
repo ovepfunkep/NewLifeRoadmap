@@ -5,9 +5,7 @@ import { doc, setDoc, getDoc } from 'firebase/firestore';
 const isDev = import.meta.env.DEV;
 
 function log(message: string, ...args: any[]) {
-  if (isDev) {
-    console.log(`[SettingsSync] ${message}`, ...args);
-  }
+  // Debug logging disabled
 }
 
 export interface UserSettings {

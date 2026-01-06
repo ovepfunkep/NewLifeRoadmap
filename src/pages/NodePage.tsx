@@ -409,7 +409,6 @@ export function NodePage() {
   // Слушатель события обновления данных из облака
   useEffect(() => {
     const handleDataUpdated = () => {
-      console.log('[NodePage] Data updated event received, reloading current node...');
       loadNode(undefined, true);
     };
 
@@ -957,13 +956,10 @@ export function NodePage() {
 
   // Обработчик drag для перемещения внутрь другого шага
   const handleDragStart = (node: Node) => {
-    console.log('[NodePage] handleDragStart', { nodeId: node.id });
     // Предотвращаем перетаскивание корневого узла
     if (node.id === 'root-node') {
-      console.log('[NodePage] Blocked: root node cannot be dragged');
       return;
     }
-    console.log('[NodePage] Setting draggedNode', node.id);
     setDraggedNode(node);
   };
 
@@ -997,27 +993,12 @@ export function NodePage() {
           }
         }
         
-        console.log('[NodePage] handleDragEnd', { 
-          draggedNodeId: currentDraggedNode?.id, 
-          dragOverNodeId: currentDragOverNodeId,
-          finalDragOverNodeId,
-          lastTouchPosition: lastTouchPositionRef.current
-        });
-        
         if (currentDraggedNode && finalDragOverNodeId) {
-          console.log('[NodePage] Moving node', currentDraggedNode.id, 'to', finalDragOverNodeId);
           const nodeIdToMove = currentDraggedNode.id;
           const targetId = finalDragOverNodeId;
           setTimeout(() => {
             handleMoveNode(nodeIdToMove, targetId);
           }, 0);
-        } else {
-          console.log('[NodePage] No move: missing draggedNode or dragOverNodeId', {
-            hasDraggedNode: !!currentDraggedNode,
-            hasDragOverNodeId: !!finalDragOverNodeId,
-            draggedNodeId: currentDraggedNode?.id,
-            dragOverNodeId: finalDragOverNodeId
-          });
         }
         
         // Сбрасываем сохраненную позицию
@@ -1030,21 +1011,12 @@ export function NodePage() {
   }, [handleMoveNode, nodeId]);
 
   const handleDragOver = (nodeId: string) => {
-    console.log('[NodePage] handleDragOver', { 
-      nodeId, 
-      draggedNodeId: draggedNode?.id,
-      currentNodeId: nodeId 
-    });
     if (draggedNode && draggedNode.id !== nodeId) {
-      console.log('[NodePage] Setting dragOverNodeId', nodeId);
       setDragOverNodeId(nodeId);
-    } else {
-      console.log('[NodePage] No drag over: no draggedNode or same node');
     }
   };
 
   const handleDragLeave = () => {
-    console.log('[NodePage] handleDragLeave');
     // Сбрасываем подсветку только если мышь ушла с карточки
     setDragOverNodeId(null);
   };
@@ -1113,7 +1085,9 @@ export function NodePage() {
   }
 
       return (
-        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col overflow-x-hidden w-full" style={{ paddingTop: effectsEnabled ? '30px' : '0' }}>
+        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col w-full overflow-x-hidden">
+      {/* Конфетти эффект */}
+      <ConfettiEffect trigger={confettiTrigger} childCount={confettiChildCount} />
       <Header 
         node={currentNode} 
         breadcrumbs={breadcrumbs}
@@ -1224,9 +1198,6 @@ export function NodePage() {
       
       {/* Footer */}
       <Footer />
-      
-      {/* Конфетти эффект */}
-      <ConfettiEffect trigger={confettiTrigger} childCount={confettiChildCount} />
     </div>
   );
 }

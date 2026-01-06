@@ -347,16 +347,18 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
                 e.stopPropagation();
                 pos.action();
               }}
-              className={`absolute w-10 h-10 rounded-lg border-2 transition-all duration-[333ms] flex items-center justify-center group z-10 shadow-lg ${
+              className={`absolute w-10 h-10 rounded-lg border-2 transition-all duration-[333ms] flex items-center justify-center group z-10 shadow-lg backdrop-blur-md ${
                 isActive
-                  ? 'border-transparent bg-white dark:bg-gray-800'
-                  : 'border-current hover:bg-accent/10 hover:brightness-150 bg-white dark:bg-gray-800'
+                  ? 'border-transparent'
+                  : 'border-current hover:bg-accent/10 hover:brightness-150'
               }`}
               style={{
                 left: '50%',
                 top: '50%',
                 color: 'var(--accent)',
-                backgroundColor: isActive ? 'var(--accent)' : 'transparent',
+                backgroundColor: isActive 
+                  ? 'var(--accent)' 
+                  : (theme === 'light' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(31, 41, 55, 0.7)'),
                 transform,
                 opacity: isExpanded ? 1 : 0,
                 transition: 'transform 333ms ease-in-out, opacity 333ms ease-in-out, background-color 0.5s ease',

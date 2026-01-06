@@ -45,13 +45,14 @@ export function Garland() {
         height="30"
         style={{
           display: 'block',
-          maxWidth: '100vw',
+          maxWidth: '100%',
+          paddingTop: '8px'
         }}
       >
         {/* Провод гирлянды с провисанием */}
         {width > 0 && (
           <path
-            d={`M 0,8 Q ${width / 2},${isMobile ? 14 : 18} ${width},8`} // Меньше провисание на мобилках
+            d={`M 0,5 Q ${width / 2},${isMobile ? 10 : 14} ${width},5`} // Меньше провисание
             fill="none"
             stroke={wireColor}
             strokeWidth={isMobile ? "1" : "1.5"}
@@ -61,7 +62,7 @@ export function Garland() {
         {/* Лампочки */}
         {Array.from({ length: bulbCount }).map((_, index) => {
           const xPercent = bulbCount > 1 ? (index / (bulbCount - 1)) * 100 : 50;
-          const y = 8 + Math.sin((index / Math.max(1, bulbCount - 1)) * Math.PI) * (isMobile ? 4 : 6);
+          const y = 5 + Math.sin((index / Math.max(1, bulbCount - 1)) * Math.PI) * (isMobile ? 3 : 5);
           const color = colors[index % colors.length];
           const delay = index * 0.15;
 
@@ -70,9 +71,9 @@ export function Garland() {
               {/* Провод к лампочке */}
               <line
                 x1={`${xPercent}%`}
-                y1="8"
+                y1="5"
                 x2={`${xPercent}%`}
-                y2={y + 3}
+                y2={y + 2}
                 stroke={wireColor}
                 strokeWidth="1"
                 opacity="0.3"
@@ -80,8 +81,8 @@ export function Garland() {
               {/* Лампочка */}
               <circle
                 cx={`${xPercent}%`}
-                cy={y + 3}
-                r={isMobile ? "3" : "4"}
+                cy={y + 2}
+                r={isMobile ? "2.5" : "3.5"}
                 fill={color}
                 opacity="0.95"
               >
@@ -94,7 +95,7 @@ export function Garland() {
                 />
                 <animate
                   attributeName="r"
-                  values={isMobile ? "2.5;3.5;2.5" : "3.5;5;3.5"}
+                  values={isMobile ? "2;3;2" : "3;4.5;3"}
                   dur="1.5s"
                   begin={`${delay}s`}
                   repeatCount="indefinite"
@@ -103,8 +104,8 @@ export function Garland() {
               {/* Свечение вокруг лампочки */}
               <circle
                 cx={`${xPercent}%`}
-                cy={y + 3}
-                r={isMobile ? "6" : "8"}
+                cy={y + 2}
+                r={isMobile ? "5" : "7"}
                 fill={color}
                 opacity="0.4"
               >
@@ -117,7 +118,7 @@ export function Garland() {
                 />
                 <animate
                   attributeName="r"
-                  values={isMobile ? "4;8;4" : "6;10;6"}
+                  values={isMobile ? "3;7;3" : "5;9;5"}
                   dur="1.5s"
                   begin={`${delay}s`}
                   repeatCount="indefinite"

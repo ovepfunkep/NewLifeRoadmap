@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { NodePage } from './pages/NodePage';
 import { SyncManager } from './components/SyncManager';
 import { SettingsSyncManager } from './components/SettingsSyncManager';
-import { Garland } from './components/Garland';
 import { Snowfall } from './components/Snowfall';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { SettingsProvider } from './contexts/SettingsContext';
@@ -20,16 +19,15 @@ function AppContent() {
     document.documentElement.style.setProperty('--accent', accent);
   }, [accent]);
 
-  return (
-    <>
-      <SettingsSyncManager />
-      <Garland />
-      <Snowfall />
-      <NodePage />
-      <SyncManager />
-      <ToastList toasts={toasts} onRemove={removeToast} />
-    </>
-  );
+    return (
+      <>
+        <SettingsSyncManager />
+        <Snowfall />
+        <NodePage />
+        <SyncManager />
+        <ToastList toasts={toasts} onRemove={removeToast} />
+      </>
+    );
 }
 
 function App() {
