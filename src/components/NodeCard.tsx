@@ -81,9 +81,6 @@ export function NodeCard({
   const drumTouchIdRef = useRef<number | null>(null);
   const lastScrollEndTimeRef = useRef(0);
 
-  // Глобальный флаг для предотвращения конфликтов барабанов
-  const isAnyDrumDraggingRef = useRef(false);
-
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
@@ -280,7 +277,7 @@ export function NodeCard({
         setOffsetPx(next);
       };
 
-      const handleMouseUpMouse = (me: MouseEvent) => {
+      const handleMouseUpMouse = (_me: MouseEvent) => {
         drumIsDraggingRef.current = false;
         document.body.classList.remove('any-drum-dragging');
         window.removeEventListener('mousemove', handleMouseMoveMouse);
