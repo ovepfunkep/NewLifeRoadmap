@@ -10,7 +10,7 @@ import { openDB } from 'idb';
 import { User } from 'firebase/auth';
 import { initSecurity } from '../utils/securityManager';
 
-function log() {
+function log(..._args: any[]) {
   // Debug logging disabled
 }
 

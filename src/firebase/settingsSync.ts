@@ -2,7 +2,7 @@ import { getCurrentUser } from './auth';
 import { getFirebaseDB } from './config';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 
-function log() {
+function log(..._args: any[]) {
   // Debug logging disabled
 }
 

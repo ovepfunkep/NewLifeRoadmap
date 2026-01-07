@@ -6,7 +6,7 @@ import { useAccent } from '../hooks/useAccent';
 import { useEffects } from '../hooks/useEffects';
 import { useLanguage } from '../contexts/LanguageContext';
 
-function log() {
+function log(..._args: any[]) {
   // Debug logging disabled
 }
 

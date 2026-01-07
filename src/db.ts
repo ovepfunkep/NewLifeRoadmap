@@ -2,7 +2,7 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Node, ImportStrategy } from './types';
 import { generateTutorial } from './utils/tutorialData';
 
-function log() {
+function log(..._args: any[]) {
   // Debug logging disabled
 }
 

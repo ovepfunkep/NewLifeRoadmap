@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { useEffects } from '../hooks/useEffects';
 
-function log() {
+function log(..._args: any[]) {
   // Debug logging disabled
 }
 

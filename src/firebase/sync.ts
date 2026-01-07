@@ -5,7 +5,7 @@ import { Node } from '../types';
 import { getActiveSyncKey } from '../utils/securityManager';
 import { encryptData, decryptData } from '../utils/crypto';
 
-function log() {
+function log(..._args: any[]) {
   // Debug logging disabled
 }
 

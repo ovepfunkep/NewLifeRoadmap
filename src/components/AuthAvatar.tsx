@@ -6,7 +6,7 @@ import { t } from '../i18n';
 import { SecurityChoiceModal } from './SecurityChoiceModal';
 import { setupSecurity } from '../utils/securityManager';
 
-function log() {
+function log(..._args: any[]) {
   // Debug logging disabled
 }
 
