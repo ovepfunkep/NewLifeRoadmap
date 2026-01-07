@@ -2,9 +2,7 @@ import { getCurrentUser } from './auth';
 import { getFirebaseDB } from './config';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 
-const isDev = import.meta.env.DEV;
-
-function log(message: string, ...args: any[]) {
+function log() {
   // Debug logging disabled
 }
 

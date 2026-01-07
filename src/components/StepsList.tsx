@@ -250,7 +250,6 @@ export function StepsList({
                 currentNodeId={currentNodeId}
                 isBurning={animatingBurnId === child.id}
                 isMovingOut={animatingMoveId === child.id}
-                onCancelDelete={() => {}} // Временная заглушка, отмена в тосте
               />
             </motion.div>
           ))}

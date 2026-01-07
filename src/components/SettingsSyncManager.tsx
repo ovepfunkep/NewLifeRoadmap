@@ -6,9 +6,7 @@ import { useAccent } from '../hooks/useAccent';
 import { useEffects } from '../hooks/useEffects';
 import { useLanguage } from '../contexts/LanguageContext';
 
-const isDev = import.meta.env.DEV;
-
-function log(message: string, ...args: any[]) {
+function log() {
   // Debug logging disabled
 }
 

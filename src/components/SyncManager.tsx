@@ -10,9 +10,7 @@ import { openDB } from 'idb';
 import { User } from 'firebase/auth';
 import { initSecurity } from '../utils/securityManager';
 
-const isDev = import.meta.env.DEV;
-
-function log(message: string, ...args: any[]) {
+function log() {
   // Debug logging disabled
 }
 

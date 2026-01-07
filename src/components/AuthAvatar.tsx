@@ -6,9 +6,7 @@ import { t } from '../i18n';
 import { SecurityChoiceModal } from './SecurityChoiceModal';
 import { setupSecurity } from '../utils/securityManager';
 
-const isDev = import.meta.env.DEV;
-
-function log(message: string, ...args: any[]) {
+function log() {
   // Debug logging disabled
 }
 

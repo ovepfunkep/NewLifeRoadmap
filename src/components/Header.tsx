@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Node } from '../types';
 import { useTranslation } from '../i18n';
 import { useNodeNavigation } from '../hooks/useHashRoute';
-import { computeProgress, getDeadlineColor, getProgressCounts, formatDeadline } from '../utils';
+import { computeProgress, getProgressCounts, formatDeadline } from '../utils';
 import { useEffects } from '../hooks/useEffects';
 import { FiEdit2, FiDownload, FiMove, FiCheck, FiTrash2, FiArrowUp } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
@@ -47,16 +47,6 @@ export function Header({
   const progress = computeProgress(node);
   const { effectsEnabled } = useEffects();
   const [isBlinking, setIsBlinking] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  
-  // Track scroll for sticky header size reduction
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
   
   // Мигание прогресс-бара при 100% - пересчитывается при изменении node
   useEffect(() => {

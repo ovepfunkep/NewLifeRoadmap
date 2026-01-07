@@ -2,9 +2,7 @@ import { useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { useEffects } from '../hooks/useEffects';
 
-const isDev = import.meta.env.DEV;
-
-function log(message: string, ...args: any[]) {
+function log() {
   // Debug logging disabled
 }
 

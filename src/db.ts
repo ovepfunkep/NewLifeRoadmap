@@ -2,9 +2,7 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Node, ImportStrategy } from './types';
 import { generateTutorial } from './utils/tutorialData';
 
-const isDev = import.meta.env.DEV;
-
-function log(message: string, ...args: any[]) {
+function log() {
   // Debug logging disabled
 }
 

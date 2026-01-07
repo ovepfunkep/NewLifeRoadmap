@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import { Node } from '../types';
 import { useTranslation } from '../i18n';
-import { computeProgress, getDeadlineColor, getProgressCounts, formatDeadline } from '../utils';
+import { computeProgress, getProgressCounts, formatDeadline } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { useEffects } from '../hooks/useEffects';
 import { FiCheck, FiEdit2, FiTrash2, FiArrowUp, FiMove } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 interface NodeCardProps {
   node: Node;
@@ -262,7 +262,7 @@ export function NodeCard({
         setOffsetPx(next);
       };
 
-      const handleMouseUpMouse = (me: MouseEvent) => {
+      const handleMouseUpMouse = () => {
         drumIsDraggingRef.current = false;
         window.removeEventListener('mousemove', handleMouseMoveMouse);
         window.removeEventListener('mouseup', handleMouseUpMouse);

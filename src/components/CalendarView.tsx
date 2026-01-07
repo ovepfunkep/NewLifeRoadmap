@@ -1,8 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Node } from '../types';
 import { FiChevronLeft, FiChevronRight, FiRotateCw } from 'react-icons/fi';
-import { Tooltip } from './Tooltip';
-import { t } from '../i18n';
 
 interface CalendarViewProps {
   node: Node;
@@ -56,7 +54,7 @@ function generateMonthDays(viewDate: Date): Date[] {
   return days;
 }
 
-export function CalendarView({ deadlines, onDayClick, onCreateTask, compact = false }: CalendarViewProps) {
+export function CalendarView({ deadlines, onDayClick, onCreateTask }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);

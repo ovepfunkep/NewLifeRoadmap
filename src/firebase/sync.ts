@@ -5,9 +5,7 @@ import { Node } from '../types';
 import { getActiveSyncKey } from '../utils/securityManager';
 import { encryptData, decryptData } from '../utils/crypto';
 
-const isDev = import.meta.env.DEV;
-
-function log(message: string, ...args: any[]) {
+function log() {
   // Debug logging disabled
 }
 
