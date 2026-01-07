@@ -64,6 +64,7 @@ export function NodeCard({
   const isMovingOut = isMovingOutProp;
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressDelayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Состояние для барабана действий на мобильных (магнит + бесконечная лента)
   const [baseActionIndex, setBaseActionIndex] = useState(0);
@@ -79,6 +80,9 @@ export function NodeCard({
   const drumRafRef = useRef(0);
   const drumTouchIdRef = useRef<number | null>(null);
   const lastScrollEndTimeRef = useRef(0);
+
+  // Глобальный флаг для предотвращения конфликтов барабанов
+  const isAnyDrumDraggingRef = useRef(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -113,7 +117,7 @@ export function NodeCard({
     actionsRef.current = actions;
   }, [actions]);
 
-  const ITEM_HEIGHT = 30; // Reduced height for better visibility
+  const ITEM_HEIGHT = 38; // Increased from 30 (approx 20% larger buttons area)
 
   const mod = (n: number, m: number) => ((n % m) + m) % m;
 
@@ -187,6 +191,7 @@ export function NodeCard({
 
       drumIsDraggingRef.current = false;
       drumTouchIdRef.current = null;
+      document.body.classList.remove('any-drum-dragging');
       
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEndLike);
@@ -228,6 +233,11 @@ export function NodeCard({
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
       
+      // Если уже кто-то тянет барабан, игнорируем новое касание на другом барабане
+      if (document.body.classList.contains('any-drum-dragging')) {
+        return;
+      }
+
       const touch = e.touches[0];
       drumTouchIdRef.current = touch.identifier;
       
@@ -238,6 +248,9 @@ export function NodeCard({
       drumHasMovedRef.current = false; 
       drumDragStartYRef.current = touch.clientY;
       drumDragStartOffsetRef.current = offsetPxRef.current;
+      
+      // Помечаем, что барабан активен, чтобы другие игнорировали касания
+      document.body.classList.add('any-drum-dragging');
 
       window.addEventListener('touchmove', handleTouchMove, { passive: false });
       window.addEventListener('touchend', handleTouchEndLike, { passive: false });
@@ -246,12 +259,17 @@ export function NodeCard({
 
     const handleMouseDownNative = (e: MouseEvent) => {
       if (e.button !== 0) return;
+      
+      if (document.body.classList.contains('any-drum-dragging')) return;
+
       e.stopPropagation();
       stopAnim();
       drumIsDraggingRef.current = true;
       drumHasMovedRef.current = false;
       drumDragStartYRef.current = e.clientY;
       drumDragStartOffsetRef.current = offsetPxRef.current;
+      
+      document.body.classList.add('any-drum-dragging');
 
       const handleMouseMoveMouse = (me: MouseEvent) => {
         if (!drumIsDraggingRef.current) return;
@@ -262,8 +280,9 @@ export function NodeCard({
         setOffsetPx(next);
       };
 
-      const handleMouseUpMouse = () => {
+      const handleMouseUpMouse = (me: MouseEvent) => {
         drumIsDraggingRef.current = false;
+        document.body.classList.remove('any-drum-dragging');
         window.removeEventListener('mousemove', handleMouseMoveMouse);
         window.removeEventListener('mouseup', handleMouseUpMouse);
         
@@ -324,6 +343,9 @@ export function NodeCard({
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
+      }
+      if (longPressDelayTimeoutRef.current) {
+        clearTimeout(longPressDelayTimeoutRef.current);
       }
     };
   }, []);
@@ -451,9 +473,14 @@ export function NodeCard({
     const startX = touch.clientX;
     const startY = touch.clientY;
     
-    setLongPressPos({ x: startX, y: startY });
-    setIsLongPressing(true);
-    setLongPressProgress(0);
+    if (longPressDelayTimeoutRef.current) clearTimeout(longPressDelayTimeoutRef.current);
+    
+    // Задержка перед началом отображения прогресса долгого нажатия
+    longPressDelayTimeoutRef.current = setTimeout(() => {
+      setLongPressPos({ x: startX, y: startY });
+      setIsLongPressing(true);
+      setLongPressProgress(0);
+    }, 250); // Увеличено до 250мс, чтобы не мешать скроллу
 
     let hasStartedDrag = false;
     const LONG_PRESS_DURATION = 600;
@@ -475,6 +502,9 @@ export function NodeCard({
     };
 
     const updateProgress = (now: number) => {
+      // Начинаем анимацию только если isLongPressing уже true (прошло 250мс)
+      // Либо мы можем начать отсчет сразу, но кружок показывать позже.
+      // Реализуем вариант: отсчет идет с момента касания, но кружок появляется через 250мс.
       const elapsed = now - startTime;
       const progress = Math.min(1, elapsed / LONG_PRESS_DURATION);
       
@@ -496,8 +526,10 @@ export function NodeCard({
       const deltaY = Math.abs(touch.clientY - startY);
 
       if (!hasStartedDrag) {
+        // Если палец сдвинулся больше чем на 10px, отменяем долгое нажатие
         if (deltaX > 10 || deltaY > 10) {
           if (animFrame) cancelAnimationFrame(animFrame);
+          if (longPressDelayTimeoutRef.current) clearTimeout(longPressDelayTimeoutRef.current);
           setIsLongPressing(false);
           setLongPressProgress(0);
           window.removeEventListener('touchmove', handleTouchMove);
@@ -511,6 +543,7 @@ export function NodeCard({
     
     const handleTouchEnd = () => {
       if (animFrame) cancelAnimationFrame(animFrame);
+      if (longPressDelayTimeoutRef.current) clearTimeout(longPressDelayTimeoutRef.current);
       setIsLongPressing(false);
       setLongPressProgress(0);
       window.removeEventListener('touchmove', handleTouchMove);
@@ -651,7 +684,7 @@ export function NodeCard({
               <div className="absolute right-2 top-0 bottom-7 flex items-center z-20 pointer-events-none">
                     <div 
                       ref={drumRef} 
-                      className="relative flex items-center justify-center w-14 h-full select-none rounded-lg overflow-hidden pointer-events-auto touch-none"
+                      className="relative flex items-center justify-center w-14 h-full select-none rounded-lg overflow-hidden pointer-events-auto touch-none drum-container"
                       style={{
                         backgroundColor: 'transparent'
                       }}
@@ -664,7 +697,7 @@ export function NodeCard({
                           const centerOffset = Math.round(-offsetPx / ITEM_HEIGHT);
                           const isSelected = offset === centerOffset;
                           const dist = Math.abs((offset * ITEM_HEIGHT) + offsetPx);
-                          const scale = Math.max(0.6, 1.2 - (dist / (ITEM_HEIGHT * 2))); 
+                          const scale = Math.max(0.6, 1.3 - (dist / (ITEM_HEIGHT * 2))); // Increased base scale slightly
                           
                           // Smooth opacity: 1.0 at center, 0.6 at neighbor (30px), 0.0 at next (60px)
                           const opacity = isSelected ? 1 : Math.max(0, 0.6 - ((dist - ITEM_HEIGHT) / ITEM_HEIGHT) * 0.6);
@@ -673,8 +706,8 @@ export function NodeCard({
                           
                           return (
                             <div key={offset} className="absolute flex items-center justify-center" style={{ top: '50%', marginTop: `${offset * ITEM_HEIGHT - (ITEM_HEIGHT / 2)}px`, height: `${ITEM_HEIGHT}px`, width: '100%', transform: `scale(${scale})`, opacity: opacity, color: action.color, zIndex: isSelected ? 10 : 1, transition: 'none' }}>
-                              <div className={`p-1 rounded-lg flex items-center justify-center ${isSelected ? 'border-2 shadow-sm' : ''}`} style={{ backgroundColor: isSelected && action.active ? action.color : 'transparent', borderColor: isSelected ? (action.active ? 'transparent' : 'currentColor') : 'transparent', color: isSelected && action.active ? 'white' : action.color, transition: 'none', ...(action.id === 'delete' && isSelected ? { borderColor: '#ef4444', color: '#ef4444' } : {}) }}>
-                                <Icon size={16} style={{ color: isSelected && action.active ? 'white' : undefined }} />
+                              <div className={`p-1.5 rounded-lg flex items-center justify-center ${isSelected ? 'border-2 shadow-sm' : ''}`} style={{ backgroundColor: isSelected && action.active ? action.color : 'transparent', borderColor: isSelected ? (action.active ? 'transparent' : 'currentColor') : 'transparent', color: isSelected && action.active ? 'white' : action.color, transition: 'none', ...(action.id === 'delete' && isSelected ? { borderColor: '#ef4444', color: '#ef4444' } : {}) }}>
+                                <Icon size={20} style={{ color: isSelected && action.active ? 'white' : undefined }} />
                               </div>
                             </div>
                           );
