@@ -59,6 +59,7 @@ export function NodeCard({
   const [isLongPressing, setIsLongPressing] = useState(false);
   const [longPressProgress, setLongPressProgress] = useState(0);
   const [longPressPos, setLongPressPos] = useState({ x: 0, y: 0 });
+  const [isDrumActive, setIsDrumActive] = useState(false);
   
   const isBurning = isBurningProp;
   const isMovingOut = isMovingOutProp;
@@ -80,6 +81,12 @@ export function NodeCard({
   const drumRafRef = useRef(0);
   const drumTouchIdRef = useRef<number | null>(null);
   const lastScrollEndTimeRef = useRef(0);
+  const drumTrackingRafRef = useRef<number | null>(null);
+  const lastKnownTouchYRef = useRef<number | null>(null);
+
+  // Стабильные ссылки на обработчики для предотвращения утечек
+  const handleTouchMoveRef = useRef<(e: TouchEvent) => void>();
+  const handleTouchEndLikeRef = useRef<(e?: TouchEvent) => void>();
 
   useEffect(() => {
     const checkMobile = () => {
@@ -159,13 +166,34 @@ export function NodeCard({
     const drum = drumRef.current;
     if (!drum || !isMobile) return;
 
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!drumIsDraggingRef.current) return;
+    handleTouchMoveRef.current = (e: TouchEvent) => {
+      // Проверяем, активен ли барабан для этого конкретного компонента
+      if (!drumIsDraggingRef.current || drumTouchIdRef.current === null) {
+        return;
+      }
+      
+      // Агрессивно предотвращаем скролл страницы
+      if (e.cancelable) {
+        e.preventDefault();
+      }
       
       const touch = Array.from(e.touches).find(t => t.identifier === drumTouchIdRef.current);
-      if (!touch) return;
       
+      // #region agent log
+      if (Math.random() < 0.1) { // Log 10% of moves to avoid spam
+        fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NodeCard.tsx:175',message:'Drum touchmove debug',data:{nodeId:node.id,foundTouch:!!touch,touchId:drumTouchIdRef.current,allIds:e.touches.length > 0 ? Array.from(e.touches).map(t=>t.identifier) : [],delta:touch ? touch.clientY - drumDragStartYRef.current : null,phase:e.eventPhase === 1 ? 'capture' : e.eventPhase === 2 ? 'target' : 'bubble',target:e.target instanceof HTMLElement ? e.target.tagName : 'unknown',touchesCount:e.touches.length},timestamp:Date.now(),sessionId:'drum-conflict-debug',hypothesisId:'H11'})}).catch(()=>{});
+      }
+      // #endregion
+
+      if (!touch) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NodeCard.tsx:191',message:'Drum touchmove NO TOUCH - checking all touches',data:{nodeId:node.id,touchId:drumTouchIdRef.current,allIds:e.touches.length > 0 ? Array.from(e.touches).map(t=>t.identifier) : [],touchesCount:e.touches.length},timestamp:Date.now(),sessionId:'drum-conflict-debug',hypothesisId:'H19'})}).catch(()=>{});
+        // #endregion
+        return;
+      }
+
       const y = touch.clientY;
+      lastKnownTouchYRef.current = y; // Сохраняем последнюю известную позицию
       const delta = y - drumDragStartYRef.current;
       
       if (Math.abs(delta) > 5) {
@@ -175,10 +203,19 @@ export function NodeCard({
       const next = drumDragStartOffsetRef.current + delta;
       offsetPxRef.current = next;
       setOffsetPx(next);
-      if (e.cancelable) e.preventDefault();
+      
+      // #region agent log
+      if (Math.random() < 0.05) { // Log 5% of state updates
+        fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NodeCard.tsx:207',message:'Drum offset updated',data:{nodeId:node.id,next,delta},timestamp:Date.now(),sessionId:'drum-conflict-debug',hypothesisId:'H15'})}).catch(()=>{});
+      }
+      // #endregion
     };
 
-    const handleTouchEndLike = (e?: TouchEvent) => {
+    handleTouchEndLikeRef.current = (e?: TouchEvent) => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NodeCard.tsx:192',message:'Drum touchend/cancel debug',data:{nodeId:node.id,isDragging:drumIsDraggingRef.current,type:e?.type || 'manual',touchId:drumTouchIdRef.current},timestamp:Date.now(),sessionId:'drum-conflict-debug',hypothesisId:'H13'})}).catch(()=>{});
+      // #endregion
+
       if (!drumIsDraggingRef.current) return;
 
       if (e && e.changedTouches) {
@@ -188,11 +225,23 @@ export function NodeCard({
 
       drumIsDraggingRef.current = false;
       drumTouchIdRef.current = null;
+      setIsDrumActive(false);
       document.body.classList.remove('any-drum-dragging');
+      lastKnownTouchYRef.current = null;
       
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEndLike);
-      window.removeEventListener('touchcancel', handleTouchEndLike);
+      if (handleTouchMoveRef.current) {
+        document.body.removeEventListener('touchmove', handleTouchMoveRef.current, { capture: true });
+        document.removeEventListener('touchmove', handleTouchMoveRef.current, { capture: true });
+        window.removeEventListener('touchmove', handleTouchMoveRef.current);
+      }
+      if (handleTouchEndLikeRef.current) {
+        document.body.removeEventListener('touchend', handleTouchEndLikeRef.current, { capture: true });
+        document.body.removeEventListener('touchcancel', handleTouchEndLikeRef.current, { capture: true });
+        document.removeEventListener('touchend', handleTouchEndLikeRef.current, { capture: true });
+        document.removeEventListener('touchcancel', handleTouchEndLikeRef.current, { capture: true });
+        window.removeEventListener('touchend', handleTouchEndLikeRef.current);
+        window.removeEventListener('touchcancel', handleTouchEndLikeRef.current);
+      }
 
       const currentOffset = offsetPxRef.current;
       
@@ -227,11 +276,15 @@ export function NodeCard({
       });
     };
 
-    const handleTouchStart = (e: TouchEvent) => {
+    const handleTouchStartNative = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
       
-      // Если уже кто-то тянет барабан, игнорируем новое касание на другом барабане
-      if (document.body.classList.contains('any-drum-dragging')) {
+      const isBlocked = document.body.classList.contains('any-drum-dragging');
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NodeCard.tsx:251',message:'Drum touchstart native debug',data:{nodeId:node.id,isBlocked,touchId:e.touches[0].identifier},timestamp:Date.now(),sessionId:'drum-conflict-debug',hypothesisId:'H12'})}).catch(()=>{});
+      // #endregion
+
+      if (isBlocked) {
         return;
       }
 
@@ -239,32 +292,44 @@ export function NodeCard({
       drumTouchIdRef.current = touch.identifier;
       
       if (e.cancelable) e.preventDefault(); 
-      e.stopPropagation(); 
+      e.stopImmediatePropagation(); 
       stopAnim();
       drumIsDraggingRef.current = true;
       drumHasMovedRef.current = false; 
       drumDragStartYRef.current = touch.clientY;
       drumDragStartOffsetRef.current = offsetPxRef.current;
+      setIsDrumActive(true);
       
-      // Помечаем, что барабан активен, чтобы другие игнорировали касания
       document.body.classList.add('any-drum-dragging');
 
-      window.addEventListener('touchmove', handleTouchMove, { passive: false });
-      window.addEventListener('touchend', handleTouchEndLike, { passive: false });
-      window.addEventListener('touchcancel', handleTouchEndLike, { passive: false });
+      // Используем capture phase на document.body для гарантированного перехвата всех событий
+      // Добавляем обработчики на несколько уровней для максимального покрытия
+      if (handleTouchMoveRef.current) {
+        document.body.addEventListener('touchmove', handleTouchMoveRef.current, { passive: false, capture: true });
+        document.addEventListener('touchmove', handleTouchMoveRef.current, { passive: false, capture: true });
+        window.addEventListener('touchmove', handleTouchMoveRef.current, { passive: false });
+      }
+      if (handleTouchEndLikeRef.current) {
+        document.body.addEventListener('touchend', handleTouchEndLikeRef.current, { passive: false, capture: true });
+        document.body.addEventListener('touchcancel', handleTouchEndLikeRef.current, { passive: false, capture: true });
+        document.addEventListener('touchend', handleTouchEndLikeRef.current, { passive: false, capture: true });
+        document.addEventListener('touchcancel', handleTouchEndLikeRef.current, { passive: false, capture: true });
+        window.addEventListener('touchend', handleTouchEndLikeRef.current, { passive: false });
+        window.addEventListener('touchcancel', handleTouchEndLikeRef.current, { passive: false });
+      }
     };
 
     const handleMouseDownNative = (e: MouseEvent) => {
       if (e.button !== 0) return;
-      
       if (document.body.classList.contains('any-drum-dragging')) return;
 
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       stopAnim();
       drumIsDraggingRef.current = true;
       drumHasMovedRef.current = false;
       drumDragStartYRef.current = e.clientY;
       drumDragStartOffsetRef.current = offsetPxRef.current;
+      setIsDrumActive(true);
       
       document.body.classList.add('any-drum-dragging');
 
@@ -279,6 +344,7 @@ export function NodeCard({
 
       const handleMouseUpMouse = (_me: MouseEvent) => {
         drumIsDraggingRef.current = false;
+        setIsDrumActive(false);
         document.body.classList.remove('any-drum-dragging');
         window.removeEventListener('mousemove', handleMouseMoveMouse);
         window.removeEventListener('mouseup', handleMouseUpMouse);
@@ -314,16 +380,30 @@ export function NodeCard({
       window.addEventListener('mouseup', handleMouseUpMouse);
     };
 
-    drum.addEventListener('touchstart', handleTouchStart, { passive: false });
+    drum.addEventListener('touchstart', handleTouchStartNative, { passive: false });
     drum.addEventListener('mousedown', handleMouseDownNative);
 
     return () => {
       stopAnim();
-      drum.removeEventListener('touchstart', handleTouchStart);
+      if (drumTrackingRafRef.current) {
+        cancelAnimationFrame(drumTrackingRafRef.current);
+        drumTrackingRafRef.current = null;
+      }
+      drum.removeEventListener('touchstart', handleTouchStartNative);
       drum.removeEventListener('mousedown', handleMouseDownNative);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEndLike);
-      window.removeEventListener('touchcancel', handleTouchEndLike);
+      if (handleTouchMoveRef.current) {
+        document.body.removeEventListener('touchmove', handleTouchMoveRef.current, { capture: true });
+        document.removeEventListener('touchmove', handleTouchMoveRef.current, { capture: true });
+        window.removeEventListener('touchmove', handleTouchMoveRef.current);
+      }
+      if (handleTouchEndLikeRef.current) {
+        document.body.removeEventListener('touchend', handleTouchEndLikeRef.current, { capture: true });
+        document.body.removeEventListener('touchcancel', handleTouchEndLikeRef.current, { capture: true });
+        document.removeEventListener('touchend', handleTouchEndLikeRef.current, { capture: true });
+        document.removeEventListener('touchcancel', handleTouchEndLikeRef.current, { capture: true });
+        window.removeEventListener('touchend', handleTouchEndLikeRef.current);
+        window.removeEventListener('touchcancel', handleTouchEndLikeRef.current);
+      }
     };
   }, [isMobile, node.id]);
 
@@ -465,8 +545,23 @@ export function NodeCard({
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    // Если барабан активен, игнорируем события карточки
+    if (document.body.classList.contains('any-drum-dragging')) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NodeCard.tsx:540',message:'Card touchstart IGNORED (drum active)',data:{nodeId:node.id},timestamp:Date.now(),sessionId:'drum-conflict-debug',hypothesisId:'H14'})}).catch(()=>{});
+      // #endregion
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NodeCard.tsx:549',message:'Card touchstart React debug',data:{nodeId:node.id,touchId:e.touches[0].identifier,target:e.target instanceof HTMLElement ? e.target.className : 'unknown'},timestamp:Date.now(),sessionId:'drum-conflict-debug',hypothesisId:'H9'})}).catch(()=>{});
+    // #endregion
+
     if (e.touches.length !== 1) return;
     const touch = e.touches[0];
+    const touchId = touch.identifier;
     const startX = touch.clientX;
     const startY = touch.clientY;
     
@@ -477,7 +572,7 @@ export function NodeCard({
       setLongPressPos({ x: startX, y: startY });
       setIsLongPressing(true);
       setLongPressProgress(0);
-    }, 250); // Увеличено до 250мс, чтобы не мешать скроллу
+    }, 250); 
 
     let hasStartedDrag = false;
     const LONG_PRESS_DURATION = 600;
@@ -499,9 +594,6 @@ export function NodeCard({
     };
 
     const updateProgress = (now: number) => {
-      // Начинаем анимацию только если isLongPressing уже true (прошло 250мс)
-      // Либо мы можем начать отсчет сразу, но кружок показывать позже.
-      // Реализуем вариант: отсчет идет с момента касания, но кружок появляется через 250мс.
       const elapsed = now - startTime;
       const progress = Math.min(1, elapsed / LONG_PRESS_DURATION);
       
@@ -517,8 +609,22 @@ export function NodeCard({
     animFrame = requestAnimationFrame(updateProgress);
     
     const handleTouchMove = (moveEvent: TouchEvent) => {
-      if (moveEvent.touches.length !== 1) return;
-      const touch = moveEvent.touches[0];
+      // Если барабан активен, полностью блокируем события карточки
+      if (document.body.classList.contains('any-drum-dragging')) {
+        // #region agent log
+        if (Math.random() < 0.1) {
+          fetch('http://127.0.0.1:7242/ingest/0b4934ee-45fb-41c8-86b6-e263372fb854',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NodeCard.tsx:604',message:'Card touchmove BLOCKED (drum active)',data:{nodeId:node.id,touchId:touchId},timestamp:Date.now(),sessionId:'drum-conflict-debug',hypothesisId:'H18'})}).catch(()=>{});
+        }
+        // #endregion
+        if (moveEvent.cancelable) moveEvent.preventDefault();
+        moveEvent.stopPropagation();
+        moveEvent.stopImmediatePropagation();
+        return;
+      }
+
+      const touch = Array.from(moveEvent.touches).find(t => t.identifier === touchId);
+      if (!touch) return;
+
       const deltaX = Math.abs(touch.clientX - startX);
       const deltaY = Math.abs(touch.clientY - startY);
 
@@ -538,7 +644,10 @@ export function NodeCard({
       }
     };
     
-    const handleTouchEnd = () => {
+    const handleTouchEnd = (endEvent: TouchEvent) => {
+      const touch = Array.from(endEvent.changedTouches).find(t => t.identifier === touchId);
+      if (!touch && endEvent.type !== 'touchcancel') return;
+
       if (animFrame) cancelAnimationFrame(animFrame);
       if (longPressDelayTimeoutRef.current) clearTimeout(longPressDelayTimeoutRef.current);
       setIsLongPressing(false);
@@ -605,7 +714,8 @@ export function NodeCard({
               borderColor: 'var(--accent)',
               opacity: 0.7
             } : {}),
-            visibility: isBurning && effectsEnabled ? 'hidden' : 'visible'
+            visibility: isBurning && effectsEnabled ? 'hidden' : 'visible',
+            pointerEvents: isDrumActive ? 'none' : 'auto'
           }}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
@@ -678,10 +788,10 @@ export function NodeCard({
 
             {/* Барабан для мобильных - центрирован по высоте контента без прогресс-бара */}
             {isMobile && (
-              <div className="absolute right-2 top-0 bottom-7 flex items-center z-20 pointer-events-none">
+              <div className="absolute right-2 top-0 bottom-7 flex items-center z-20 pointer-events-none touch-none">
                     <div 
                       ref={drumRef} 
-                      className="relative flex items-center justify-center w-14 h-full select-none rounded-lg overflow-hidden pointer-events-auto touch-none drum-container"
+                      className="relative flex items-center justify-center w-16 h-full select-none rounded-lg overflow-hidden pointer-events-auto touch-none drum-container"
                       style={{
                         backgroundColor: 'transparent'
                       }}

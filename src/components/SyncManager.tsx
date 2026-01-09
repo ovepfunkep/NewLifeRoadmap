@@ -412,12 +412,47 @@ export function SyncManager() {
 
     window.addEventListener('security:initialized', handleSecurityInit as EventListener);
 
+    // Синхронизация при возвращении на вкладку
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        try {
+          const { getCurrentUser } = await import('../firebase/auth');
+          const user = getCurrentUser();
+          if (user && !silentLoadInProgressRef.current && navigator.onLine) {
+            log('[visibilityChange] Page visible, triggering sync');
+            loadCloudDataSilently();
+          }
+        } catch (error) {
+          log('[visibilityChange] Error checking user:', error);
+        }
+      }
+    };
+
+    // Синхронизация при фокусе окна
+    const handleWindowFocus = async () => {
+      try {
+        const { getCurrentUser } = await import('../firebase/auth');
+        const user = getCurrentUser();
+        if (user && !silentLoadInProgressRef.current && navigator.onLine) {
+          log('[windowFocus] Window focused, triggering sync');
+          loadCloudDataSilently();
+        }
+      } catch (error) {
+        log('[windowFocus] Error checking user:', error);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
+
     return () => {
       log('[useEffect] Cleaning up sync manager');
       unsubscribe();
       window.removeEventListener('security:initialized', handleSecurityInit as EventListener);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
     };
-  }, [handleFirstSync]);
+  }, [handleFirstSync, loadCloudDataSilently]);
 
   const handleChooseLocal = async () => {
     try {
