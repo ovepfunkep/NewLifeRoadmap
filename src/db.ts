@@ -172,6 +172,10 @@ export async function getNode(id: string): Promise<Node | null> {
     node.parentId = null;
     await dbInstance!.put(STORE_NAME, node);
   }
+  // Скрываем удаленные узлы (только для UI), но оставляем их в БД для синхронизации
+  if (node && node.deletedAt && node.id !== ROOT_ID) {
+    return null;
+  }
   return node;
 }
 
@@ -274,21 +278,34 @@ export async function deleteNode(id: string): Promise<void> {
   if (!dbInstance) await initDB();
   
   log(`Deleting node: ${id}`);
+  if (id === ROOT_ID) {
+    log('Root node deletion is blocked');
+    return;
+  }
   // Находим узел
-  const node = await getNode(id);
+  const node = await dbInstance!.get(STORE_NAME, id);
   if (!node) {
     log(`Node not found: ${id}`);
     return;
   }
   
-  // Удаляем узел из БД
-  await dbInstance!.delete(STORE_NAME, id);
-  log(`Node deleted: ${id}`);
+  const deletedAt = new Date().toISOString();
+  const markDeleted = async (n: Node): Promise<void> => {
+    const tombstone: Node = {
+      ...n,
+      deletedAt,
+      updatedAt: deletedAt,
+      children: n.children || [],
+    };
+    await dbInstance!.put(STORE_NAME, tombstone);
+    for (const child of n.children) {
+      await markDeleted(child);
+    }
+  };
   
-  // Удаляем всех потомков рекурсивно
-  for (const child of node.children) {
-    await deleteNode(child.id);
-  }
+  // Ставим tombstone для узла и всех потомков
+  await markDeleted(node);
+  log(`Node soft-deleted: ${id}`);
   
   // Удаляем узел из родителя
   if (node.parentId) {
@@ -298,7 +315,7 @@ export async function deleteNode(id: string): Promise<void> {
       const updatedParent: Node = {
         ...parent,
         children: updatedChildren,
-        updatedAt: new Date().toISOString(),
+        updatedAt: deletedAt,
       };
       await saveNode(updatedParent);
     }

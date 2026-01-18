@@ -94,6 +94,9 @@ export function compareNodes(localNodes: Node[], cloudNodes: Node[]): SyncDiff {
       if (localNode.order !== cloudNode.order) {
         differences.push(`order: ${localNode.order} vs ${cloudNode.order}`);
       }
+      if (localNode.deletedAt !== cloudNode.deletedAt) {
+        differences.push('deletedAt');
+      }
       
       // Сравниваем количество детей
       const localChildrenCount = localNode.children?.length || 0;

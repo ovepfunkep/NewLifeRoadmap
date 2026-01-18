@@ -106,44 +106,37 @@ export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
   try {
     log(`Starting bulk sync: ${allNodes.length} nodes`);
     
-    // Создаем Set из ID локальных узлов для быстрого поиска
-    const localNodeIds = new Set(allNodes.map(node => node.id));
-    
     // Загружаем все существующие узлы из Firestore
     const nodesRef = collection(db, getUserNodesPath(user.uid));
     const querySnapshot = await getDocs(query(nodesRef));
     
-    // Определяем узлы, которые нужно удалить (есть в облаке, но нет в локальных)
-    const nodesToDelete: string[] = [];
     const cloudNodeIds = new Set<string>();
+    const nodesToPurge: string[] = [];
+    const now = Date.now();
+    const PURGE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+    
     querySnapshot.forEach((docSnap) => {
       cloudNodeIds.add(docSnap.id);
-      if (!localNodeIds.has(docSnap.id)) {
-        nodesToDelete.push(docSnap.id);
-        log(`Node to delete: ${docSnap.id} (exists in cloud but not in local)`);
+      const data = docSnap.data() as Partial<Node>;
+      if (data.deletedAt) {
+        const deletedTime = new Date(data.deletedAt).getTime();
+        if (Number.isFinite(deletedTime) && now - deletedTime > PURGE_AFTER_MS) {
+          nodesToPurge.push(docSnap.id);
+        }
       }
     });
     
-    log(`Cloud nodes: ${cloudNodeIds.size}, Local nodes: ${localNodeIds.size}`);
-    log(`Found ${nodesToDelete.length} nodes to delete, ${allNodes.length} nodes to sync`);
-    
-    // Проверяем, есть ли локальные узлы, которых нет в облаке
-    const nodesToAdd: string[] = [];
-    allNodes.forEach(node => {
-      if (!cloudNodeIds.has(node.id)) {
-        nodesToAdd.push(node.id);
-      }
-    });
-    log(`Found ${nodesToAdd.length} nodes to add (exist in local but not in cloud)`);
+    log(`Cloud nodes: ${cloudNodeIds.size}, Local nodes: ${allNodes.length}`);
+    log(`Found ${nodesToPurge.length} nodes to purge (deleted > 30 days)`);
     
     // Firestore batch ограничен 500 операциями
     const BATCH_LIMIT = 500;
     
-    // СНАЧАЛА удаляем все старые узлы батчами
-    if (nodesToDelete.length > 0) {
-      for (let i = 0; i < nodesToDelete.length; i += BATCH_LIMIT) {
+    // СНАЧАЛА очищаем старые tombstone-узлы
+    if (nodesToPurge.length > 0) {
+      for (let i = 0; i < nodesToPurge.length; i += BATCH_LIMIT) {
         const batch = writeBatch(db);
-        const batchToDelete = nodesToDelete.slice(i, i + BATCH_LIMIT);
+        const batchToDelete = nodesToPurge.slice(i, i + BATCH_LIMIT);
         
         for (const nodeId of batchToDelete) {
           const nodeRef = doc(nodesRef, nodeId);
@@ -151,7 +144,7 @@ export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
         }
         
         await batch.commit();
-        log(`Delete batch ${Math.floor(i / BATCH_LIMIT) + 1} completed: ${batchToDelete.length} nodes deleted`);
+        log(`Purge batch ${Math.floor(i / BATCH_LIMIT) + 1} completed: ${batchToDelete.length} nodes deleted`);
       }
     }
     
@@ -189,7 +182,7 @@ export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
       }
     }
     
-    log(`Bulk sync completed: ${nodesToDelete.length} nodes deleted, ${allNodes.length} nodes synced`);
+    log(`Bulk sync completed: ${allNodes.length} nodes synced, ${nodesToPurge.length} purged`);
   } catch (error) {
     log(`Error in bulk sync:`, error);
     console.error('Error syncing all nodes to Firestore:', error);
@@ -283,8 +276,8 @@ export async function loadAllNodesFromFirestore(): Promise<Node[]> {
     let decryptionFailedCount = 0;
     
     // Оптимизация: дешифруем всё параллельно через Promise.all
-    const nodePromises = querySnapshot.docs.map(async (doc) => {
-      let data = doc.data();
+    const nodePromises = querySnapshot.docs.map(async (docSnap) => {
+      let data = docSnap.data();
       
       if (data.isEncrypted && data.encryptedData && syncKey) {
         try {
@@ -313,10 +306,25 @@ export async function loadAllNodesFromFirestore(): Promise<Node[]> {
         }
       }
 
-      return {
-        ...data,
-        children: [], 
-      } as unknown as Node;
+      const normalized: Node = {
+        id: data.id || docSnap.id,
+        parentId: data.parentId ?? null,
+        title: data.title ?? '',
+        description: data.description,
+        deadline: data.deadline ?? null,
+        completed: data.completed ?? false,
+        completedAt: data.completedAt ?? null,
+        priority: data.priority,
+        order: data.order,
+        createdAt: data.createdAt ?? data.updatedAt ?? new Date(0).toISOString(),
+        updatedAt: data.updatedAt ?? data.createdAt ?? new Date(0).toISOString(),
+        deletedAt: data.deletedAt ?? null,
+        reminders: data.reminders,
+        sentReminders: data.sentReminders,
+        children: [],
+      };
+
+      return normalized;
     });
 
     const nodes = await Promise.all(nodePromises);
@@ -327,15 +335,20 @@ export async function loadAllNodesFromFirestore(): Promise<Node[]> {
 
     log(`Loaded ${nodes.length} nodes from Firestore`);
 
-    // Восстанавливаем иерархию (дети)
+    // Восстанавливаем иерархию (дети) только для активных узлов
     const nodeMap = new Map<string, Node>();
+    const deletedNodes: Node[] = [];
     nodes.forEach(node => {
-      nodeMap.set(node.id, { ...node, children: [] });
+      if (node.deletedAt) {
+        deletedNodes.push({ ...node, children: [] });
+      } else {
+        nodeMap.set(node.id, { ...node, children: [] });
+      }
     });
 
     // Связываем детей с родителями
     const rootNodes: Node[] = [];
-    nodes.forEach(node => {
+    Array.from(nodeMap.values()).forEach(node => {
       const nodeWithChildren = nodeMap.get(node.id)!;
       
       // Исправляем корневой узел: если это root-node, parentId должен быть null
@@ -366,7 +379,7 @@ export async function loadAllNodesFromFirestore(): Promise<Node[]> {
 
     log(`Restored hierarchy: ${rootNodes.length} root nodes`);
     // Возвращаем все узлы (не только корневые)
-    return Array.from(nodeMap.values());
+    return [...Array.from(nodeMap.values()), ...deletedNodes];
   } catch (error) {
     log(`Error loading nodes:`, error);
     console.error('Error loading all nodes from Firestore:', error);
@@ -389,20 +402,21 @@ export async function deleteNodeFromFirestore(nodeId: string, childrenIds: strin
   try {
     const batch = writeBatch(db);
     const nodesRef = collection(db, getUserNodesPath(user.uid));
+    const deletedAt = new Date().toISOString();
     
-    // Удаляем сам узел
-    const nodeRef = doc(nodesRef, nodeId);
-    batch.delete(nodeRef);
+    const markDeleted = (id: string) => {
+      const nodeRef = doc(nodesRef, id);
+      batch.set(nodeRef, { deletedAt, updatedAt: deletedAt, syncedAt: deletedAt }, { merge: true });
+    };
     
-    // Удаляем всех детей
+    markDeleted(nodeId);
     for (const childId of childrenIds) {
-      const childRef = doc(nodesRef, childId);
-      batch.delete(childRef);
+      markDeleted(childId);
     }
     
     await batch.commit();
   } catch (error) {
-    console.error('Error deleting node from Firestore:', error);
+    console.error('Error soft-deleting node from Firestore:', error);
     throw error;
   }
 }

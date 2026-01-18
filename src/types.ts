@@ -11,6 +11,7 @@ export interface Node {
   order?: number; // Порядок отображения
   createdAt: string; // ISO
   updatedAt?: string; // ISO
+  deletedAt?: string | null; // ISO, soft-delete tombstone
   reminders?: number[]; // Интервалы напоминаний в секундах до дедлайна
   sentReminders?: string[]; // Список ID уже отправленных уведомлений (интервал + время)
   children: Node[]; // рекурсивная структура

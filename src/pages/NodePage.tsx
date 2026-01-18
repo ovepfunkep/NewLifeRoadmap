@@ -182,7 +182,7 @@ export function NodePage() {
   // Мемоизированный список детей (сортировка и фильтрация теперь в StepsList)
   const sortedChildren = useMemo(() => {
     if (!currentNode) return [];
-    return currentNode.children;
+    return currentNode.children.filter(child => !child.deletedAt);
   }, [currentNode?.children, currentNode?.id]);
 
   // Получаем отсортированные и отфильтрованные шаги для shortcuts
@@ -190,6 +190,7 @@ export function NodePage() {
     if (!currentNode) return [];
     // Фильтрация
     let filtered = currentNode.children.filter(child => {
+      if (child.deletedAt) return false;
       if (filterType === 'all') return true;
       if (filterType === 'completed') return child.completed;
       if (filterType === 'incomplete') return !child.completed;
