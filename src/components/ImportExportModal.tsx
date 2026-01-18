@@ -95,7 +95,7 @@ export function ImportExportModal({ currentNode, onImport, onClose }: ImportExpo
         className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md mx-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4" style={{ color: 'var(--accent)' }}>
           {t('importExport.importTitle')} / {t('importExport.exportTitle')}
         </h2>
         
@@ -129,25 +129,25 @@ export function ImportExportModal({ currentNode, onImport, onClose }: ImportExpo
             </p>
             
             <div className="space-y-2 mb-3">
-              <label className="flex items-center gap-2">
+              <label className="flex items-center gap-2 cursor-pointer group">
                 <input
                   type="radio"
                   checked={strategy === 'add'}
                   onChange={() => setStrategy('add')}
-                  className="text-accent"
+                  className="w-4 h-4 accent-[var(--accent)]"
                 />
-                <span className="text-sm text-gray-700 dark:text-gray-300">
+                <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-accent transition-colors">
                   {t('importExport.strategyAdd')}
                 </span>
               </label>
-              <label className="flex items-center gap-2">
+              <label className="flex items-center gap-2 cursor-pointer group">
                 <input
                   type="radio"
                   checked={strategy === 'replace'}
                   onChange={() => setStrategy('replace')}
-                  className="text-accent"
+                  className="w-4 h-4 accent-[var(--accent)]"
                 />
-                <span className="text-sm text-gray-700 dark:text-gray-300">
+                <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-accent transition-colors">
                   {t('importExport.strategyReplace')}
                 </span>
               </label>

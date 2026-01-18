@@ -2,27 +2,34 @@ import { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
 import { buildBreadcrumbs, getDeadlineColor, formatDeadline } from '../utils';
 import { getNode } from '../db';
-import { FiX, FiPlus } from 'react-icons/fi';
+import { FiX, FiPlus, FiCheck } from 'react-icons/fi';
 
 interface DayTasksModalProps {
   date: Date;
   tasks: Node[];
   currentNodeId: string;
   onNavigate: (id: string) => void;
+  onMarkCompleted: (id: string, completed: boolean) => void;
   onCreateTask?: (date: Date) => void; // Обработчик создания задачи с датой
   onClose: () => void;
 }
 
-export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onCreateTask, onClose }: DayTasksModalProps) {
+export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onMarkCompleted, onCreateTask, onClose }: DayTasksModalProps) {
   const [tasksWithBreadcrumbs, setTasksWithBreadcrumbs] = useState<Array<{ node: Node; breadcrumbs: Node[] }>>([]);
+  const [localTasks, setLocalTasks] = useState<Node[]>(tasks);
   const modalRef = useRef<HTMLDivElement>(null);
   const clickStartRef = useRef<{ target: EventTarget | null; inside: boolean } | null>(null);
+
+  // Синхронизируем локальные задачи с пропсами (если они изменятся извне)
+  useEffect(() => {
+    setLocalTasks(tasks);
+  }, [tasks]);
 
   useEffect(() => {
     const loadBreadcrumbs = async () => {
       const result: Array<{ node: Node; breadcrumbs: Node[] }> = [];
 
-      for (const task of tasks) {
+      for (const task of localTasks) {
         const breadcrumbs = await buildBreadcrumbs(task.id, getNode);
         // Исключаем сам текущий узел и саму задачу из breadcrumbs
         const currentIndex = breadcrumbs.findIndex(b => b.id === currentNodeId);
@@ -39,7 +46,14 @@ export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onCreate
     };
 
     loadBreadcrumbs();
-  }, [tasks, currentNodeId]);
+  }, [localTasks, currentNodeId]);
+
+  const handleToggleCompleted = (taskId: string, completed: boolean) => {
+    // Обновляем локально для мгновенной реакции
+    setLocalTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed } : t));
+    // Вызываем родительский обработчик
+    onMarkCompleted(taskId, completed);
+  };
 
   // Обработка ESC
   useEffect(() => {
@@ -97,8 +111,8 @@ export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onCreate
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Заголовок */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-300 dark:border-gray-700">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <div className="flex items-center justify-between p-4 border-b border-gray-300 dark:border-gray-700 bg-accent/5">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100" style={{ color: 'var(--accent)' }}>
             {dateStr}
           </h2>
           <button
@@ -183,12 +197,30 @@ export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onCreate
                       </div>
                       {dateStr && (
                         <span
-                          className="text-xs px-2 py-1 rounded text-white flex-shrink-0 self-center"
+                          className="text-xs px-2 py-1 rounded text-white flex-shrink-0 self-center font-normal"
                           style={{ backgroundColor: deadlineColor }}
                         >
                           {dateStr}
                         </span>
                       )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleCompleted(task.id, !task.completed);
+                        }}
+                        className={`p-3 sm:p-2 rounded-lg transition-all border hover:brightness-150 flex-shrink-0 ${
+                          task.completed
+                            ? 'border-transparent'
+                            : 'border-current hover:bg-accent/10'
+                        }`}
+                        style={{ 
+                          color: 'var(--accent)',
+                          backgroundColor: task.completed ? 'var(--accent)' : 'transparent'
+                        }}
+                        title={task.completed ? 'Отметить как невыполненную' : 'Отметить как выполненную'}
+                      >
+                        <FiCheck size={20} className="sm:w-4 sm:h-4" style={{ color: task.completed ? 'white' : 'var(--accent)' }} />
+                      </button>
                     </div>
                   </button>
                 );

@@ -914,7 +914,7 @@ export function NodeCard({
           <div className="absolute inset-0 z-[60] pointer-events-none overflow-visible">
             {/* Эффект разреза (белая линия) */}
             <motion.div
-              className="absolute inset-0 z-[70] bg-white shadow-[0_0_15px_white]"
+              className="absolute inset-0 z-[70] bg-white dark:bg-gray-200 shadow-[0_0_15px_white] dark:shadow-[0_0_15px_rgba(255,255,255,0.5)]"
               style={{ 
                 clipPath: 'polygon(45% 0%, 55% 0%, 40% 20%, 50% 40%, 35% 60%, 45% 80%, 35% 100%, 30% 100%, 40% 80%, 30% 60%, 45% 40%, 35% 20%, 45% 0%)',
                 width: '4px',

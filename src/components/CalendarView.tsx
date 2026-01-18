@@ -154,9 +154,9 @@ export function CalendarView({ deadlines, onDayClick, onCreateTask }: CalendarVi
       {/* Сетка календаря */}
       <div className="flex flex-col border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
         {/* Заголовки дней недели */}
-        <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
+        <div className="grid grid-cols-7 bg-gray-50/80 dark:bg-gray-900/80 border-b border-gray-200 dark:border-gray-700 backdrop-blur-sm">
           {weekdays.map(wd => (
-            <div key={wd} className="py-2 text-center text-[10px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <div key={wd} className="py-2.5 text-center text-[10px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider" style={{ color: 'var(--accent)', opacity: 0.8 }}>
               {wd}
             </div>
           ))}

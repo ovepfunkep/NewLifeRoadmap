@@ -59,7 +59,10 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
       }
       return formatTimeForInput(date);
     }
-    // Для новых задач не заполняем время по умолчанию (даже если есть initialDeadline)
+    // Если есть начальная дата (создание из расписания), ставим 12:00 по умолчанию
+    if (initialDeadline) {
+      return '12:00';
+    }
     return '';
   };
   
@@ -104,11 +107,11 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
         return { value: Math.round(seconds / 3600), unit: 'hours' };
       }) : []);
     } else {
-      // При создании новой задачи сбрасываем форму, сохраняем дату из initialDeadline, но время оставляем пустым
+      // При создании новой задачи сбрасываем форму
       setTitle('');
       setDescription('');
       setDeadlineDate(initialDeadline ? formatDateForInput(initialDeadline) : '');
-      setDeadlineTime('');
+      setDeadlineTime(initialDeadline ? '12:00' : '');
       setPriority(false);
       setReminders([]);
     }

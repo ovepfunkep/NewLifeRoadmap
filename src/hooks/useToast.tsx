@@ -96,12 +96,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     
     // Автоудаление только для не persistent тостов
     if (!options?.persistent) {
-      // Автоудаление через 2.5 секунды для всех тостов
+      // Автоудаление через 3.3 секунды (3с показ + 0.3с запас на анимацию выхода)
       const timeout = setTimeout(() => {
         globalToasts = globalToasts.filter(t => t.id !== id);
         notifyListeners();
         timeoutsRef.current.delete(id);
-      }, 2500);
+      }, 3300);
       
       timeoutsRef.current.set(id, timeout);
     }

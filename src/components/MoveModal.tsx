@@ -73,10 +73,11 @@ function TreeNode({ node, level, sourceNodeId, sourceNodeTree, onSelect }: TreeN
       >
         <button
           onClick={handleToggleExpand}
-          className="w-6 h-6 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-accent/10 transition-colors"
+          style={{ color: 'var(--accent)' }}
         >
           {children.length > 0 ? (
-            isExpanded ? '−' : '+'
+            <span className="font-bold">{isExpanded ? '−' : '+'}</span>
           ) : (
             <span className="w-4" />
           )}

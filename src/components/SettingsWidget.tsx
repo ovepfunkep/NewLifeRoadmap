@@ -189,20 +189,20 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
         height: isMobile ? '48px' : `${radius * 2}px`,
         right: '1.5rem',
         bottom: '1.5rem',
-        zIndex: 50,
+        zIndex: 40,
       }}
     >
       {/* Шестеренка (свернутое состояние) - отцентрирована внутри контейнера */}
       <div
-        className="absolute flex items-center justify-center transition-all duration-[333ms] ease-in-out"
+        className="absolute flex items-center justify-center transition-all duration-[333ms] ease-in-out backdrop-blur-md bg-white/30 dark:bg-gray-900/30 border border-gray-300/50 dark:border-gray-800/50 rounded-2xl shadow-lg hover:shadow-xl hover:bg-white/40 dark:hover:bg-gray-900/40"
         style={{
-          width: `${gearSize}px`,
-          height: `${gearSize}px`,
+          width: `${gearSize + 16}px`,
+          height: `${gearSize + 16}px`,
           left: '50%',
           top: '50%',
           transform: 'translate(-50%, -50%)',
           opacity: isExpanded ? 0 : 1,
-          pointerEvents: 'auto',
+          pointerEvents: isExpanded ? 'none' : 'auto',
           cursor: 'pointer',
           zIndex: 20,
         }}
@@ -384,7 +384,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
             onClick={() => setShowPalette(false)}
           />
           <div 
-            className="absolute z-50 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700"
+            className="absolute z-50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-lg shadow-xl border border-gray-200 dark:border-gray-700"
             onClick={(e) => e.stopPropagation()}
             onMouseEnter={() => {
               if (timeoutRef.current !== null && !isMobile) {

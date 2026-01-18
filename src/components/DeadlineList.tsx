@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface DeadlineListProps {
   node: Node;
   onNavigate: (id: string) => void;
+  onMarkCompleted: (id: string, completed: boolean) => void;
   onCreateTask?: (date: Date) => void; // Обработчик создания задачи с датой
 }
 
@@ -98,7 +99,7 @@ function groupDeadlines(node: Node): Node[] {
   });
 }
 
-export function DeadlineList({ node, onNavigate, onCreateTask }: DeadlineListProps) {
+export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }: DeadlineListProps) {
   useDeadlineTicker(); // подписка на тикер
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>(() => {
     if (typeof window !== 'undefined') {
@@ -205,7 +206,7 @@ export function DeadlineList({ node, onNavigate, onCreateTask }: DeadlineListPro
       >
         {/* Заголовок с тумблером */}
         <div className="flex items-center justify-between mb-4 flex-shrink-0">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
             {t('deadline.title')}
           </h2>
           {hasDeadlines && (
@@ -314,12 +315,7 @@ export function DeadlineList({ node, onNavigate, onCreateTask }: DeadlineListPro
               <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-gray-800 to-transparent z-10 pointer-events-none" />
             </div>
           ) : (
-            <div 
-              className={isCompact ? '' : 'max-h-[70vh] overflow-y-auto custom-scrollbar'}
-              style={isCompact ? {} : {
-                overflowAnchor: 'none'
-              }}
-            >
+            <div className="relative">
               <CalendarView
                 node={node}
                 deadlines={allDeadlines}
@@ -340,6 +336,7 @@ export function DeadlineList({ node, onNavigate, onCreateTask }: DeadlineListPro
           tasks={selectedDay.tasks}
           currentNodeId={node.id}
           onNavigate={onNavigate}
+          onMarkCompleted={onMarkCompleted}
           onCreateTask={onCreateTask}
           onClose={() => setSelectedDay(null)}
         />

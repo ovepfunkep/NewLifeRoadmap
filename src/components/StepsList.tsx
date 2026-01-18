@@ -99,7 +99,7 @@ export function StepsList({
         }}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
             {t('node.steps') || 'Задачи'}
           </h2>
           <Tooltip text={t('node.createChild')}>
@@ -129,7 +129,7 @@ export function StepsList({
     >
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
             {t('node.steps') || 'Задачи'}
           </h2>
           {/* Сортировки */}

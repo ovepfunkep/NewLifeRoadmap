@@ -432,7 +432,14 @@ export function NodePage() {
       return null;
     };
     
-    const nodeToUpdate = id === currentNode.id ? currentNode : findNode(currentNode);
+    let nodeToUpdate = id === currentNode.id ? currentNode : findNode(currentNode);
+    
+    // Если узел не найден в текущем поддереве (например, это дедлайн из другой ветки),
+    // пробуем загрузить его из базы данных для корректного запуска конфетти
+    if (!nodeToUpdate) {
+      nodeToUpdate = await getNode(id);
+    }
+    
     if (!nodeToUpdate) return;
     
     // Если задача завершена и эффекты включены, запускаем конфетти
@@ -452,11 +459,6 @@ export function NodePage() {
     
     await saveNode(updated);
     
-    // Показываем объединенный тост с иконкой загрузки
-    const syncToastId = showToast(t('toast.nodeSaved'), undefined, {
-      isLoading: true
-    });
-    
     // Синхронизируем с облаком асинхронно
     (async () => {
       try {
@@ -474,14 +476,8 @@ export function NodePage() {
             break;
           }
         }
-        
-        // Обновляем тост: заменяем иконку загрузки на галочку
-        updateToast(syncToastId, { isLoading: false, isSuccess: true });
       } catch (error) {
         console.error('[NodePage] Error syncing after mark completed:', error);
-        // При ошибке просто закрываем тост
-        removeToast(syncToastId);
-        showToast(t('toast.syncError'));
       }
     })();
     
@@ -522,11 +518,6 @@ export function NodePage() {
     
     await saveNode(updated);
     
-    // Показываем объединенный тост с иконкой загрузки
-    const syncToastId = showToast(t('toast.nodeSaved'), undefined, {
-      isLoading: true
-    });
-    
     // Синхронизируем с облаком асинхронно
     (async () => {
       try {
@@ -543,14 +534,8 @@ export function NodePage() {
             break;
           }
         }
-        
-        // Обновляем тост: заменяем иконку загрузки на галочку
-        updateToast(syncToastId, { isLoading: false, isSuccess: true });
       } catch (error) {
         console.error('[NodePage] Error syncing after toggle priority:', error);
-        // При ошибке просто закрываем тост
-        removeToast(syncToastId);
-        showToast(t('toast.syncError'));
       }
     })();
     
@@ -561,11 +546,49 @@ export function NodePage() {
   };
 
   const handleSave = async (node: Node) => {
+    // Сохраняем старое состояние для отмены
+    const oldNode = await getNode(node.id);
+    const isNew = !oldNode;
+    
     await saveNode(node);
     
+    const undoAction = async () => {
+      if (isNew) {
+        await deleteNode(node.id);
+        // Если это была новая задача, синхронизируем удаление
+        try {
+          const { deleteNodeFromFirestore } = await import('../firebase/sync');
+          await deleteNodeFromFirestore(node.id, []);
+        } catch (e) {
+          console.error('Error syncing undo delete:', e);
+        }
+      } else {
+        await saveNode(oldNode);
+        // Синхронизируем восстановление
+        try {
+          const { syncNodeNow } = await import('../db-sync');
+          await syncNodeNow(oldNode);
+        } catch (e) {
+          console.error('Error syncing undo save:', e);
+        }
+      }
+      
+      // Перезагружаем интерфейс
+      if (currentNode) {
+        const reloaded = await getNode(currentNode.id);
+        if (reloaded) {
+          setCurrentNode(reloaded);
+          const breadcrumbs = await buildBreadcrumbs(reloaded.id, getNode);
+          setBreadcrumbs(breadcrumbs);
+        }
+      }
+    };
+
     // Показываем объединенный тост с иконкой загрузки
-    const syncToastId = showToast(t('toast.nodeSaved'), undefined, {
-      isLoading: true
+    const syncToastId = showToast(isNew ? t('toast.nodeCreated') : t('toast.nodeSaved'), undoAction, {
+      isLoading: true,
+      persistent: true,
+      subtitle: t('toast.syncingCloud')
     });
     
     // Синхронизируем с облаком асинхронно
@@ -586,7 +609,7 @@ export function NodePage() {
         }
         
         // Обновляем тост: заменяем иконку загрузки на галочку
-        updateToast(syncToastId, { isLoading: false, isSuccess: true });
+        updateToast(syncToastId, { isLoading: false, isSuccess: true, persistent: false });
       } catch (error) {
         console.error('[NodePage] Error syncing after save:', error);
         // При ошибке просто закрываем тост
@@ -1114,6 +1137,7 @@ export function NodePage() {
                   <DeadlineList 
                     node={currentNode} 
                     onNavigate={navigateToNode}
+                    onMarkCompleted={handleMarkCompleted}
                     onCreateTask={handleCreateTaskWithDate}
                   />
                 </div>
