@@ -81,7 +81,6 @@ export function NodeCard({
   const drumRafRef = useRef(0);
   const drumTouchIdRef = useRef<number | null>(null);
   const lastScrollEndTimeRef = useRef(0);
-  const drumTrackingRafRef = useRef<number | null>(null);
   const lastKnownTouchYRef = useRef<number | null>(null);
   const prevBodyTouchActionRef = useRef<string | null>(null);
   const prevHtmlTouchActionRef = useRef<string | null>(null);
@@ -240,10 +239,6 @@ export function NodeCard({
         window.removeEventListener('touchend', handleTouchEndLikeRef.current);
         window.removeEventListener('touchcancel', handleTouchEndLikeRef.current);
       }
-      if (drumTrackingRafRef.current) {
-        cancelAnimationFrame(drumTrackingRafRef.current);
-        drumTrackingRafRef.current = null;
-      }
 
       const currentOffset = offsetPxRef.current;
       
@@ -340,7 +335,6 @@ export function NodeCard({
       if (e.cancelable) {
         e.preventDefault();
       }
-      lastMoveAtRef.current = performance.now();
       const y = e.clientY;
       lastKnownTouchYRef.current = y;
       const delta = y - drumDragStartYRef.current;
@@ -469,10 +463,6 @@ export function NodeCard({
 
     return () => {
       stopAnim();
-      if (drumTrackingRafRef.current) {
-        cancelAnimationFrame(drumTrackingRafRef.current);
-        drumTrackingRafRef.current = null;
-      }
       drum.removeEventListener('touchstart', handleTouchStartNative);
       drum.removeEventListener('mousedown', handleMouseDownNative);
       if (handleTouchMoveRef.current) {
