@@ -18,98 +18,58 @@ export function compareNodes(localNodes: Node[], cloudNodes: Node[]): SyncDiff {
   const localMap = new Map<string, Node>();
   const cloudMap = new Map<string, Node>();
 
-  // Создаём карты для быстрого поиска
-  const buildMap = (nodes: Node[], map: Map<string, Node>) => {
-    const processed = new Set<string>(); // Узлы, которые уже добавлены в карту
+  // Вспомогательная функция для построения плоской карты из любого списка (плоского или дерева)
+  const buildFlatMap = (nodes: Node[], map: Map<string, Node>) => {
+    const processed = new Set<string>();
+    const stack = [...nodes];
     
-    const processNode = (node: Node, path: Set<string> = new Set()) => {
-      // Защита от циклических ссылок - проверяем текущий путь
-      if (path.has(node.id)) {
-        console.warn(`Circular reference detected in node tree at node ${node.id}`);
-        return;
-      }
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      if (!node || processed.has(node.id)) continue;
       
-      // Добавляем узел в карту только если его еще нет
-      if (!processed.has(node.id)) {
-        map.set(node.id, node);
-        processed.add(node.id);
-      }
+      map.set(node.id, node);
+      processed.add(node.id);
       
-      // Обрабатываем детей только если они есть
       if (node.children && Array.isArray(node.children)) {
-        const newPath = new Set(path);
-        newPath.add(node.id);
-        node.children.forEach(child => processNode(child, newPath));
+        stack.push(...node.children);
       }
-    };
-    
-    nodes.forEach(node => processNode(node));
+    }
   };
 
-  buildMap(localNodes, localMap);
-  buildMap(cloudNodes, cloudMap);
+  buildFlatMap(localNodes, localMap);
+  buildFlatMap(cloudNodes, cloudMap);
 
   const localOnly: Node[] = [];
   const cloudOnly: Node[] = [];
   const different: SyncDiff['different'] = [];
 
-  // Находим узлы только в локальной БД
-  localMap.forEach((node, id) => {
-    if (!cloudMap.has(id)) {
-      localOnly.push(node);
-    }
-  });
+  const allIds = new Set([...localMap.keys(), ...cloudMap.keys()]);
 
-  // Находим узлы только в облачной БД
-  cloudMap.forEach((node, id) => {
-    if (!localMap.has(id)) {
-      cloudOnly.push(node);
-    }
-  });
+  allIds.forEach(id => {
+    const local = localMap.get(id);
+    const cloud = cloudMap.get(id);
 
-  // Находим различающиеся узлы
-  localMap.forEach((localNode, id) => {
-    const cloudNode = cloudMap.get(id);
-    if (cloudNode) {
+    if (local && !cloud) {
+      localOnly.push(local);
+    } else if (!local && cloud) {
+      cloudOnly.push(cloud);
+    } else if (local && cloud) {
       const differences: string[] = [];
       
-      if (localNode.title !== cloudNode.title) {
-        differences.push(`title: "${localNode.title}" vs "${cloudNode.title}"`);
-      }
-      if (localNode.description !== cloudNode.description) {
-        differences.push('description');
-      }
-      if (localNode.completed !== cloudNode.completed) {
-        differences.push(`completed: ${localNode.completed} vs ${cloudNode.completed}`);
-      }
-      if (localNode.deadline !== cloudNode.deadline) {
-        differences.push('deadline');
-      }
-      if (localNode.priority !== cloudNode.priority) {
-        differences.push(`priority: ${localNode.priority} vs ${cloudNode.priority}`);
-      }
-      if (localNode.parentId !== cloudNode.parentId) {
-        differences.push('parentId');
-      }
-      if (localNode.order !== cloudNode.order) {
-        differences.push(`order: ${localNode.order} vs ${cloudNode.order}`);
-      }
-      if (localNode.deletedAt !== cloudNode.deletedAt) {
-        differences.push('deletedAt');
-      }
-      
-      // Сравниваем количество детей
-      const localChildrenCount = localNode.children?.length || 0;
-      const cloudChildrenCount = cloudNode.children?.length || 0;
-      if (localChildrenCount !== cloudChildrenCount) {
-        differences.push(`children count: ${localChildrenCount} vs ${cloudChildrenCount}`);
-      }
+      if (local.title !== cloud.title) differences.push('title');
+      if (local.description !== cloud.description) differences.push('description');
+      if (local.completed !== cloud.completed) differences.push('completed');
+      if (local.deadline !== cloud.deadline) differences.push('deadline');
+      if (local.priority !== cloud.priority) differences.push('priority');
+      if (local.parentId !== cloud.parentId) differences.push('parentId');
+      if (local.order !== cloud.order) differences.push('order');
+      if (local.deletedAt !== cloud.deletedAt) differences.push('deletedAt');
 
       if (differences.length > 0) {
         different.push({
           nodeId: id,
-          local: localNode,
-          cloud: cloudNode,
+          local,
+          cloud,
           differences,
         });
       }
@@ -120,11 +80,42 @@ export function compareNodes(localNodes: Node[], cloudNodes: Node[]): SyncDiff {
 }
 
 /**
+ * Проверить, есть ли значимые различия между двумя версиями одного узла
+ */
+export function isSignificantNodeDiff(local: Node, cloud: Node): boolean {
+  const localDeleted = !!local.deletedAt;
+  const cloudDeleted = !!cloud.deletedAt;
+
+  // Если оба удалены - это НЕ значимое различие, даже если даты удаления разные
+  if (localDeleted && cloudDeleted) return false;
+
+  // Разный статус удаления - это значимо
+  if (localDeleted !== cloudDeleted) return true;
+
+  // Оба активны - проверяем основные поля
+  if (local.title !== cloud.title) return true;
+  if (local.description !== cloud.description) return true;
+  if (local.completed !== cloud.completed) return true;
+  if (local.deadline !== cloud.deadline) return true;
+  if (local.priority !== cloud.priority) return true;
+  if (local.parentId !== cloud.parentId) return true;
+  if (local.order !== cloud.order) return true;
+
+  return false;
+}
+
+/**
  * Проверить, есть ли различия между локальными и облачными данными
  */
 export function hasDifferences(localNodes: Node[], cloudNodes: Node[]): boolean {
   const diff = compareNodes(localNodes, cloudNodes);
-  return diff.localOnly.length > 0 || diff.cloudOnly.length > 0 || diff.different.length > 0;
+  
+  // 1. Узел есть только с одной стороны и он НЕ удален
+  if (diff.localOnly.some(n => !n.deletedAt)) return true;
+  if (diff.cloudOnly.some(n => !n.deletedAt)) return true;
+  
+  // 2. Узел есть с обеих сторон, но они значимо отличаются
+  return diff.different.some(d => isSignificantNodeDiff(d.local, d.cloud));
 }
 
 /**

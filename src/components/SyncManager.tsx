@@ -111,17 +111,17 @@ export function SyncManager() {
       // Исключаем зашифрованные данные из сравнения, если дешифровка не удалась
       const filteredCloud = cloud.filter(node => !node.isEncrypted || (node.isEncrypted && node.title));
       
-      const hasDiff = hasDifferences(localNodes, filteredCloud);
-      log(`[loadCloudDataSilently] Data differs: ${hasDiff} (filtered cloud: ${filteredCloud.length}/${cloud.length})`);
+      const rawDiff = compareNodes(localNodes, filteredCloud);
+      const hasAnyDiff = rawDiff.localOnly.length > 0 || rawDiff.cloudOnly.length > 0 || rawDiff.different.length > 0;
       
-      // Если данные совпадают или все новые данные битые, не загружаем и не перезагружаем
-      if (!hasDiff || filteredCloud.length === 0) {
-        log('[loadCloudDataSilently] No valid differences found, skipping reload');
+      // Если данные полностью идентичны, ничего не делаем
+      if (!hasAnyDiff || filteredCloud.length === 0) {
+        log('[loadCloudDataSilently] No differences found, skipping');
         silentLoadInProgressRef.current = false;
         return;
       }
       
-      log('[loadCloudDataSilently] Data differs, merging cloud data with local DB...');
+      log('[loadCloudDataSilently] Merging cloud data with local DB...');
       
       // Сливаем облачные данные с локальными на основе даты обновления
       let db: Awaited<ReturnType<typeof openDB>> | null = null;
@@ -252,82 +252,108 @@ export function SyncManager() {
         const cloud = await loadAllNodesFromFirestore();
         log(`[handleFirstSync] Loaded ${cloud.length} cloud nodes`);
         
-        // Сравниваем снимок локальных данных с облачными данными
-        log('[handleFirstSync] Comparing local and cloud data...');
-        const diff = compareNodes(localSnapshot, cloud);
-        log(`[handleFirstSync] Diff: localOnly=${diff.localOnly.length}, cloudOnly=${diff.cloudOnly.length}, different=${diff.different.length}`);
+        // ВАЖНО: Перед сравнением строим карту только достижимых узлов из обоих источников.
+        // Это предотвращает ложные конфликты из-за "осиротевших" узлов в БД.
+        const buildReachableNodes = (flatNodes: any[]) => {
+          const map = new Map<string, any>();
+          flatNodes.forEach(n => map.set(n.id, { ...n, children: [] }));
+          
+          const reachable = new Set<string>();
+          const traverse = (id: string) => {
+            if (reachable.has(id)) return;
+            reachable.add(id);
+            const node = map.get(id);
+            if (!node) return;
+            flatNodes.filter(n => n.parentId === id).forEach(child => traverse(child.id));
+          };
+          
+          if (map.has('root-node')) traverse('root-node');
+          // Также считаем "корневыми" все узлы без parentId (на всякий случай)
+          flatNodes.filter(n => !n.parentId).forEach(n => traverse(n.id));
+          
+          return flatNodes.filter(n => reachable.has(n.id));
+        };
+
+        const reachableLocal = buildReachableNodes(localSnapshot);
+        const reachableCloud = buildReachableNodes(cloud);
         
-        // Показываем конфликт ТОЛЬКО если локальных данных больше чем облачных
-        // И это новый логин
-        const hasLocalMore = diff.localOnly.length > 0 || diff.different.length > 0;
-        const hasCloudMore = diff.cloudOnly.length > 0;
+        log(`[handleFirstSync] Reachable nodes: local=${reachableLocal.length}/${localSnapshot.length}, cloud=${reachableCloud.length}/${cloud.length}`);
+
+        // Сравниваем только достижимые узлы
+        log('[handleFirstSync] Comparing reachable local and cloud data...');
+        const hasRealDiff = hasDifferences(reachableLocal, reachableCloud);
         
-        log(`[handleFirstSync] hasLocalMore: ${hasLocalMore}, hasCloudMore: ${hasCloudMore}`);
-        
-        // Если в облаке данных больше или равное количество - просто загружаем облачные данные
-        if (hasCloudMore && !hasLocalMore) {
-          log('[handleFirstSync] Cloud has more data and no local changes, loading cloud data');
-          // Закрываем тост проверки
+        // 1. Если реальных различий нет - ничего не показываем
+        if (!hasRealDiff) {
+          log('[handleFirstSync] No significant differences found, checking for technical updates...');
+          
+          const rawDiff = compareNodes(reachableLocal, reachableCloud);
+          const hasTechnicalDiff = rawDiff.localOnly.length > 0 || rawDiff.cloudOnly.length > 0 || rawDiff.different.length > 0;
+          
+          if (hasTechnicalDiff) {
+            log('[handleFirstSync] Performing silent merge for technical updates');
+            // ... (мерж ниже)
+          } else {
+            log('[handleFirstSync] Data is perfectly in sync');
+            if (checkToastIdRef.current) {
+              removeToast(checkToastIdRef.current);
+              checkToastIdRef.current = null;
+            }
+            isInitialLoadRef.current = false;
+            return;
+          }
+        } else {
+          // 2. Есть реальные различия - показываем диалог
+          log('[handleFirstSync] Real differences found, showing conflict dialog');
+          setLocalNodes(reachableLocal);
+          setCloudNodes(reachableCloud);
+          setShowConflictDialog(true);
+          
           if (checkToastIdRef.current) {
             removeToast(checkToastIdRef.current);
             checkToastIdRef.current = null;
-          }
-          
-          // Загружаем облачные данные
-          let db: Awaited<ReturnType<typeof openDB>> | null = null;
-          try {
-            log('[handleFirstSync] Clearing local nodes...');
-            await clearAllNodes();
-            
-            log('[handleFirstSync] Opening DB...');
-            db = await openDB('LifeRoadmapDB', 2);
-            const tx = db.transaction('nodes', 'readwrite');
-            
-            log(`[handleFirstSync] Saving ${cloud.length} nodes to local DB...`);
-            for (const node of cloud) {
-              await tx.store.put(node);
-            }
-            
-            await tx.done;
-            log(`[handleFirstSync] Successfully loaded ${cloud.length} nodes from cloud to local DB`);
-            // Уведомляем компоненты об обновлении данных вместо перезагрузки страницы
-            log('[handleFirstSync] Notifying components about data update...');
-            notifyDataUpdated();
-          } catch (error) {
-            log('[handleFirstSync] Error loading cloud data:', error);
-            console.error('[handleFirstSync] Error loading cloud data:', error);
-          } finally {
-            if (db) {
-              try {
-                await db.close();
-              } catch (closeError) {
-                console.error('Error closing DB:', closeError);
-              }
-            }
           }
           isInitialLoadRef.current = false;
           return;
         }
+
+        // 3. Выполняем тихий мерж (LWW)
+        const localMap = new Map(reachableLocal.map(n => [n.id, n]));
+        const cloudMap = new Map(reachableCloud.map(n => [n.id, n]));
+        const allIds = new Set([...localMap.keys(), ...cloudMap.keys()]);
+        const mergedNodes: any[] = [];
         
-        // Показываем конфликт только если локальных данных больше
-        if (hasLocalMore) {
-          log('[handleFirstSync] Local has more data, showing conflict dialog');
-          setLocalNodes(localSnapshot);
-          setCloudNodes(cloud);
-          setShowConflictDialog(true);
-          // Закрываем тост проверки при показе диалога конфликта
-          if (checkToastIdRef.current) {
-            removeToast(checkToastIdRef.current);
-            checkToastIdRef.current = null;
+        for (const id of allIds) {
+          const local = localMap.get(id);
+          const cloudNode = cloudMap.get(id);
+          if (!local) mergedNodes.push(cloudNode);
+          else if (!cloudNode) mergedNodes.push(local);
+          else {
+            const localTime = new Date(local.updatedAt || 0).getTime();
+            const cloudTime = new Date(cloudNode.updatedAt || 0).getTime();
+            mergedNodes.push(cloudTime > localTime ? cloudNode : local);
           }
-        } else {
-          log('[handleFirstSync] No differences or cloud has more data, data is in sync');
-          // Закрываем тост проверки, если конфликтов нет
+        }
+
+        let db: Awaited<ReturnType<typeof openDB>> | null = null;
+        try {
+          await clearAllNodes();
+          db = await openDB('LifeRoadmapDB', 2);
+          const tx = db.transaction('nodes', 'readwrite');
+          for (const node of mergedNodes) await tx.store.put(node);
+          await tx.done;
+          await syncAllNodesToFirestore(mergedNodes);
+          notifyDataUpdated();
+        } catch (error) {
+          console.error('[handleFirstSync] Silent merge error:', error);
+        } finally {
+          if (db) await db.close();
           if (checkToastIdRef.current) {
             removeToast(checkToastIdRef.current);
             checkToastIdRef.current = null;
           }
         }
+        
         isInitialLoadRef.current = false;
       } else {
         log('[handleFirstSync] No cloud data, skipping conflict check');
@@ -525,6 +551,64 @@ export function SyncManager() {
     setShowConflictDialog(false);
   };
 
+  const handleMerge = async () => {
+    let db: Awaited<ReturnType<typeof openDB>> | null = null;
+    try {
+      log('[handleMerge] Starting smart merge...');
+      
+      // Сливаем данные: для каждого узла берем тот, у которого новее updatedAt
+      const localMap = new Map(localNodes.map(n => [n.id, n]));
+      const cloudMap = new Map(cloudNodes.map(n => [n.id, n]));
+      
+      const allIds = new Set([...localMap.keys(), ...cloudMap.keys()]);
+      const mergedNodes: any[] = [];
+      
+      for (const id of allIds) {
+        const local = localMap.get(id);
+        const cloud = cloudMap.get(id);
+        
+        if (!local) {
+          mergedNodes.push(cloud);
+        } else if (!cloud) {
+          mergedNodes.push(local);
+        } else {
+          const localTime = new Date(local.updatedAt || 0).getTime();
+          const cloudTime = new Date(cloud.updatedAt || 0).getTime();
+          
+          if (cloudTime > localTime) {
+            mergedNodes.push(cloud);
+          } else {
+            mergedNodes.push(local);
+          }
+        }
+      }
+      
+      log(`[handleMerge] Merge result: ${mergedNodes.length} nodes`);
+      
+      // Сохраняем результат в локальную БД
+      await clearAllNodes();
+      db = await openDB('LifeRoadmapDB', 2);
+      const tx = db.transaction('nodes', 'readwrite');
+      for (const node of mergedNodes) {
+        await tx.store.put(node);
+      }
+      await tx.done;
+      
+      // Синхронизируем результат с облаком
+      await syncAllNodesToFirestore(mergedNodes);
+      
+      setShowConflictDialog(false);
+      showToast(t('toast.syncSuccess') || 'Данные объединены');
+      notifyDataUpdated();
+    } catch (error) {
+      log('[handleMerge] Error during merge:', error);
+      console.error('[handleMerge] Error during merge:', error);
+      showToast(t('toast.syncError') || 'Ошибка при объединении');
+    } finally {
+      if (db) await db.close();
+    }
+  };
+
   return (
     <>
       {showConflictDialog && (
@@ -533,6 +617,7 @@ export function SyncManager() {
           cloudNodes={cloudNodes}
           onChooseLocal={handleChooseLocal}
           onChooseCloud={handleChooseCloud}
+          onMerge={handleMerge}
           onCancel={handleCancel}
         />
       )}
