@@ -165,42 +165,68 @@ export async function getRoot(): Promise<Node> {
 // Получить узел по ID
 export async function getNode(id: string): Promise<Node | null> {
   if (!dbInstance) await initDB();
-  const node = await dbInstance!.get(STORE_NAME, id) || null;
+  const rawNode = await dbInstance!.get(STORE_NAME, id) || null;
+  
+  if (!rawNode) return null;
+
   // Исправляем корневой узел если нужно
-  if (node && node.id === ROOT_ID && node.parentId !== null) {
-    log(`Fixing root node parentId: ${node.parentId} -> null`);
-    node.parentId = null;
-    await dbInstance!.put(STORE_NAME, node);
+  if (rawNode.id === ROOT_ID && rawNode.parentId !== null) {
+    log(`Fixing root node parentId: ${rawNode.parentId} -> null`);
+    rawNode.parentId = null;
+    await dbInstance!.put(STORE_NAME, rawNode);
   }
+
   // Скрываем удаленные узлы (только для UI), но оставляем их в БД для синхронизации
-  if (node && node.deletedAt && node.id !== ROOT_ID) {
+  if (rawNode.deletedAt && rawNode.id !== ROOT_ID) {
     return null;
   }
-  return node;
+
+  // Находим детей этого узла (только активных)
+  const allNodes = await dbInstance!.getAll(STORE_NAME);
+  const children = allNodes
+    .filter(n => n.parentId === id && !n.deletedAt)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+  return {
+    ...rawNode,
+    children: children.map(c => ({ ...c, children: [] })) // Рекурсивно заполним если нужно, но обычно достаточно одного уровня для NodePage
+  };
 }
 
-// Получить все узлы из БД
+// Получить все узлы из БД и восстановить иерархию
 export async function getAllNodes(): Promise<Node[]> {
   if (!dbInstance) await initDB();
   const nodes = await dbInstance!.getAll(STORE_NAME);
   
-  // Исправляем корневой узел: если это root-node, parentId должен быть null
-  for (const node of nodes) {
+  const nodeMap = new Map<string, Node>();
+  nodes.forEach(node => {
+    // Исправляем корневой узел
     if (node.id === ROOT_ID && node.parentId !== null) {
-      log(`Fixing root node: parentId should be null, got ${node.parentId}`);
       node.parentId = null;
-      // Сохраняем исправленный узел
-      try {
-        await dbInstance!.put(STORE_NAME, node);
-        log('Root node fixed');
-      } catch (err) {
-        console.error('Error fixing root node:', err);
+    }
+    nodeMap.set(node.id, { ...node, children: [] });
+  });
+
+  // Связываем детей с родителями (только для активных узлов)
+  nodes.forEach(node => {
+    if (node.parentId && nodeMap.has(node.parentId)) {
+      const parent = nodeMap.get(node.parentId)!;
+      const current = nodeMap.get(node.id)!;
+      if (!node.deletedAt) {
+        if (!parent.children.some(c => c.id === node.id)) {
+          parent.children.push(current);
+        }
       }
     }
-  }
-  
-  log(`Retrieved ${nodes.length} nodes from DB`);
-  return nodes;
+  });
+
+  // Сортируем детей
+  nodeMap.forEach(node => {
+    node.children.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  });
+
+  log(`Retrieved and reconstructed ${nodes.length} nodes from DB`);
+  return Array.from(nodeMap.values());
 }
 
 // Очистить все узлы из БД (кроме корневого)
@@ -218,62 +244,47 @@ export async function clearAllNodes(): Promise<void> {
   log('All nodes cleared (except root)');
 }
 
-// Сохранить узел (и поддерево через denormalized структуру)
-// Сохраняем сам узел и всех потомков в БД отдельно
+// Сохранить узел (только плоскую структуру)
 export async function saveNode(node: Node): Promise<void> {
   if (!dbInstance) await initDB();
   log(`Saving node: ${node.id} (${node.title})`);
-  const nodeToSave: Node = {
-    ...node,
-    updatedAt: new Date().toISOString(),
+  
+  const now = new Date().toISOString();
+  
+  // КЛОНИРУЕМ узел и ОЧИЩАЕМ его от детей перед сохранением в БД.
+  // Это критически важно для предотвращения "воскрешения" удаленных задач
+  // из устаревших вложенных массивов children.
+  const { children, ...nodeToSave } = node;
+  const flatNode: Node = {
+    ...nodeToSave,
+    children: [], // В БД дети всегда должны быть пустыми
+    updatedAt: now,
   };
   
-  // Сохраняем сам узел (keyPath автоматически использует nodeToSave.id)
-  await dbInstance!.put(STORE_NAME, nodeToSave);
-  log(`Node saved: ${node.id}`);
+  await dbInstance!.put(STORE_NAME, flatNode);
+  log(`Node saved flat: ${node.id}`);
   
-  // Сохраняем всех потомков рекурсивно
-  const saveSubtree = async (n: Node) => {
-    // Сохраняем узел как есть, не обновляя updatedAt принудительно для всех потомков
-    // Если потомок был изменен, его updatedAt уже должен быть обновлен в памяти
-    await dbInstance!.put(STORE_NAME, n);
-    for (const child of n.children) {
-      await saveSubtree(child);
+  // Если у узла в памяти были дети, сохраняем их как отдельные плоские записи
+  if (children && children.length > 0) {
+    for (const child of children) {
+      // Сохраняем ребенка рекурсивно, чтобы он тоже очистился от своих детей
+      await saveNode(child);
     }
-  };
-  for (const child of node.children) {
-    await saveSubtree(child);
   }
   
-  // Обновляем родительский узел, чтобы включить изменения
+  // Обновляем родительский узел (его updatedAt), чтобы синхронизация видела изменения
   if (node.parentId) {
-    const parent = await getNode(node.parentId);
+    const parent = await dbInstance!.get(STORE_NAME, node.parentId);
     if (parent) {
-      // Находим и обновляем дочерний узел в родителе
-      const existingIndex = parent.children.findIndex(child => child.id === node.id);
-      let updatedChildren: Node[];
-      
-      if (existingIndex >= 0) {
-        // Обновляем существующий дочерний узел
-        updatedChildren = parent.children.map(child =>
-          child.id === node.id ? nodeToSave : child
-        );
-      } else {
-        // Добавляем новый дочерний узел
-        updatedChildren = [...parent.children, nodeToSave];
-      }
-      
-      const updatedParent: Node = {
+      await dbInstance!.put(STORE_NAME, {
         ...parent,
-        children: updatedChildren,
-        updatedAt: new Date().toISOString(),
-      };
-      await saveNode(updatedParent);
+        updatedAt: now
+      });
     }
   }
 }
 
-// Удалить узел и всех потомков
+// Удалить узел и всех потомков (soft-delete)
 export async function deleteNode(id: string): Promise<void> {
   if (!dbInstance) await initDB();
   
@@ -282,42 +293,44 @@ export async function deleteNode(id: string): Promise<void> {
     log('Root node deletion is blocked');
     return;
   }
-  // Находим узел
-  const node = await dbInstance!.get(STORE_NAME, id);
-  if (!node) {
-    log(`Node not found: ${id}`);
-    return;
-  }
-  
+
+  // Находим все узлы, чтобы найти потомков (так как в БД нет иерархии)
+  const allNodes = await dbInstance!.getAll(STORE_NAME);
   const deletedAt = new Date().toISOString();
-  const markDeleted = async (n: Node): Promise<void> => {
-    const tombstone: Node = {
-      ...n,
-      deletedAt,
-      updatedAt: deletedAt,
-      children: n.children || [],
-    };
-    await dbInstance!.put(STORE_NAME, tombstone);
-    for (const child of n.children) {
-      await markDeleted(child);
-    }
+  
+  const idsToDelete = new Set<string>();
+  const collectIds = (targetId: string) => {
+    idsToDelete.add(targetId);
+    allNodes.filter(n => n.parentId === targetId).forEach(child => collectIds(child.id));
   };
   
-  // Ставим tombstone для узла и всех потомков
-  await markDeleted(node);
-  log(`Node soft-deleted: ${id}`);
-  
-  // Удаляем узел из родителя
-  if (node.parentId) {
-    const parent = await getNode(node.parentId);
+  collectIds(id);
+  log(`Marking ${idsToDelete.size} nodes as deleted`);
+
+  const tx = dbInstance!.transaction(STORE_NAME, 'readwrite');
+  for (const nodeId of idsToDelete) {
+    const n = allNodes.find(item => item.id === nodeId);
+    if (n) {
+      await tx.store.put({
+        ...n,
+        children: [],
+        deletedAt,
+        updatedAt: deletedAt
+      });
+    }
+  }
+  await tx.done;
+
+  // Обновляем родителя (только его updatedAt)
+  const node = allNodes.find(n => n.id === id);
+  if (node && node.parentId) {
+    const parent = allNodes.find(n => n.id === node.parentId);
     if (parent) {
-      const updatedChildren = parent.children.filter(child => child.id !== id);
-      const updatedParent: Node = {
+      await dbInstance!.put(STORE_NAME, {
         ...parent,
-        children: updatedChildren,
-        updatedAt: deletedAt,
-      };
-      await saveNode(updatedParent);
+        children: [],
+        updatedAt: deletedAt
+      });
     }
   }
 }

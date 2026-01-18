@@ -144,8 +144,9 @@ export function SyncManager() {
           const localNode = localMap.get(cloudNode.id);
           
           if (!localNode) {
-            // Нового узла нет локально - сохраняем
-            await tx.store.put(cloudNode);
+            // Нового узла нет локально - сохраняем (без детей!)
+            const { children, ...nodeToSave } = cloudNode;
+            await tx.store.put({ ...nodeToSave, children: [] } as any);
             newCount++;
           } else {
             // Узел есть и там и там - сравниваем даты
@@ -153,8 +154,9 @@ export function SyncManager() {
             const localUpdated = localNode.updatedAt ? new Date(localNode.updatedAt).getTime() : 0;
             
             if (cloudUpdated > localUpdated) {
-              // Облачный узел свежее - обновляем локально
-              await tx.store.put(cloudNode);
+              // Облачный узел свежее - обновляем локально (без детей!)
+              const { children, ...nodeToSave } = cloudNode;
+              await tx.store.put({ ...nodeToSave, children: [] } as any);
               updateCount++;
             } else {
               // Локальный узел свежее или такой же - пропускаем
@@ -326,12 +328,20 @@ export function SyncManager() {
         for (const id of allIds) {
           const local = localMap.get(id);
           const cloudNode = cloudMap.get(id);
-          if (!local) mergedNodes.push(cloudNode);
-          else if (!cloudNode) mergedNodes.push(local);
+          if (!local) {
+            const { children, ...rest } = cloudNode;
+            mergedNodes.push({ ...rest, children: [] });
+          }
+          else if (!cloudNode) {
+            const { children, ...rest } = local;
+            mergedNodes.push({ ...rest, children: [] });
+          }
           else {
             const localTime = new Date(local.updatedAt || 0).getTime();
             const cloudTime = new Date(cloudNode.updatedAt || 0).getTime();
-            mergedNodes.push(cloudTime > localTime ? cloudNode : local);
+            const winner = cloudTime > localTime ? cloudNode : local;
+            const { children, ...rest } = winner;
+            mergedNodes.push({ ...rest, children: [] });
           }
         }
 
