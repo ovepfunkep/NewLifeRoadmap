@@ -10,8 +10,8 @@ import { openDB } from 'idb';
 import { User } from 'firebase/auth';
 import { initSecurity } from '../utils/securityManager';
 
-function log(..._args: any[]) {
-  // Debug logging disabled
+function log(...args: any[]) {
+  console.log('[SyncManager]', ...args);
 }
 
 // Событие для уведомления об обновлении данных
@@ -86,25 +86,13 @@ export function SyncManager() {
       const rawDiff = compareNodes(local, cloud);
       const hasAnyDiff = rawDiff.localOnly.length > 0 || rawDiff.cloudOnly.length > 0 || rawDiff.different.length > 0;
       
-      // Если есть значимые различия (title, completed и т.д.), НЕ делаем тихий мерж
-      // Тихий мерж только для технических различий (updatedAt) или новых узлов
-      const hasSignificantDiff = hasDifferences(local, cloud);
-      
       if (!hasAnyDiff) {
         log('[loadCloudDataSilently] No differences found');
         silentLoadInProgressRef.current = false;
         return;
       }
 
-      if (hasSignificantDiff) {
-        log('[loadCloudDataSilently] Significant differences found, skipping silent merge to prevent overwriting');
-        silentLoadInProgressRef.current = false;
-        // Мы не показываем диалог здесь, так как это тихая фоновая проверка.
-        // Диалог покажется при следующем входе или если пользователь сам инициирует.
-        return;
-      }
-      
-      log('[loadCloudDataSilently] Performing silent LWW merge for technical updates');
+      log('[loadCloudDataSilently] Differences found, performing silent LWW merge');
       
       const localMap = new Map(local.map(n => [n.id, n]));
       const cloudMap = new Map(cloud.map(n => [n.id, n]));
@@ -117,9 +105,11 @@ export function SyncManager() {
         const cNode = cloudMap.get(id);
         
         if (!lNode) {
+          log(`[loadCloudDataSilently] Node ${id} only in cloud, taking it`);
           mergedNodes.push({ ...cNode, children: [] });
           hasChanges = true;
         } else if (!cNode) {
+          log(`[loadCloudDataSilently] Node ${id} only local, keeping it`);
           mergedNodes.push({ ...lNode, children: [] });
           hasChanges = true; // Нужно выгрузить в облако
         } else {
@@ -127,11 +117,13 @@ export function SyncManager() {
           const cTime = new Date(cNode.updatedAt || 0).getTime();
           
           if (cTime > lTime) {
+            log(`[loadCloudDataSilently] Node ${id} cloud is newer (${cTime} > ${lTime}), updating local`);
             mergedNodes.push({ ...cNode, children: [] });
             hasChanges = true;
           } else if (lTime > cTime) {
+            log(`[loadCloudDataSilently] Node ${id} local is newer (${lTime} > ${cTime}), will update cloud`);
             mergedNodes.push({ ...lNode, children: [] });
-            hasChanges = true; // Нужно обновить в облаке
+            hasChanges = true; 
           } else {
             mergedNodes.push({ ...lNode, children: [] });
           }

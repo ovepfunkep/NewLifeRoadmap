@@ -2,8 +2,8 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Node, ImportStrategy } from './types';
 import { generateTutorial } from './utils/tutorialData';
 
-function log(..._args: any[]) {
-  // Debug logging disabled
+function log(...args: any[]) {
+  console.log('[DB]', ...args);
 }
 
 interface LifeRoadmapDB extends DBSchema {
@@ -259,36 +259,35 @@ export async function saveNode(node: Node): Promise<void> {
   if (!dbInstance) await initDB();
   log(`Saving node: ${node.id} (${node.title})`);
   
-  const now = new Date().toISOString();
+  // Используем дату из объекта, если она есть, иначе создаем новую
+  const updatedAt = node.updatedAt || new Date().toISOString();
   
   // КЛОНИРУЕМ узел и ОЧИЩАЕМ его от детей перед сохранением в БД.
-  // Это критически важно для предотвращения "воскрешения" удаленных задач
-  // из устаревших вложенных массивов children.
   const { children, ...nodeToSave } = node;
   const flatNode: Node = {
     ...nodeToSave,
     children: [], // В БД дети всегда должны быть пустыми
-    updatedAt: now,
+    updatedAt,
   };
   
   await dbInstance!.put(STORE_NAME, flatNode);
-  log(`Node saved flat: ${node.id}`);
+  log(`Node saved flat: ${node.id}, updatedAt: ${updatedAt}`);
   
   // Если у узла в памяти были дети, сохраняем их как отдельные плоские записи
   if (children && children.length > 0) {
     for (const child of children) {
-      // Сохраняем ребенка рекурсивно, чтобы он тоже очистился от своих детей
       await saveNode(child);
     }
   }
   
-  // Обновляем родительский узел (его updatedAt), чтобы синхронизация видела изменения
-  if (node.parentId) {
+  // Обновляем родительский узел (только если это не системный вызов сохранения из синхронизации)
+  // Мы проверяем parentId и то, что узел не является корнем
+  if (node.parentId && node.id !== ROOT_ID) {
     const parent = await dbInstance!.get(STORE_NAME, node.parentId);
     if (parent) {
       await dbInstance!.put(STORE_NAME, {
         ...parent,
-        updatedAt: now
+        updatedAt: new Date().toISOString()
       });
     }
   }
