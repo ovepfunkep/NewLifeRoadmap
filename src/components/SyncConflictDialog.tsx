@@ -16,20 +16,32 @@ interface SyncConflictDialogProps {
  */
 function buildTreeFromFlatList(nodes: Node[]): Node | null {
   const nodeMap = new Map<string, Node>();
-  nodes.forEach(node => nodeMap.set(node.id, { ...node, children: [] }));
+  
+  // Создаем плоскую карту всех узлов
+  nodes.forEach(node => {
+    nodeMap.set(node.id, { ...node, children: [] });
+  });
 
   let root: Node | null = null;
+  
+  // Собираем дерево
   nodes.forEach(node => {
     const nodeInMap = nodeMap.get(node.id)!;
-    if (!node.parentId || node.id === 'root-node') {
-      if (!root || node.id === 'root-node') root = nodeInMap;
+    
+    // Если это корень или у него нет родителя в списке - это корень дерева отображения
+    if (!node.parentId || node.id === 'root-node' || !nodeMap.has(node.parentId)) {
+      // Приоритет у root-node как главного корня
+      if (!root || node.id === 'root-node') {
+        root = nodeInMap;
+      }
     } else {
       const parent = nodeMap.get(node.parentId);
-      if (parent && !parent.children.some(c => c.id === node.id)) {
+      if (parent) {
         parent.children.push(nodeInMap);
       }
     }
   });
+  
   return root;
 }
 

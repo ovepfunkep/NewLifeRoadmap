@@ -35,7 +35,7 @@ export function SyncManager() {
   const silentLoadInProgressRef = useRef<boolean>(false); // Флаг, что тихая загрузка уже выполняется
   const lastSilentLoadHashRef = useRef<string | null>(null); // Хеш последних загруженных данных для предотвращения повторной загрузки
 
-  // Автоматическая загрузка данных из облака без проверки конфликтов
+  // Автоматическая загрузка данных из облака и синхронизация (бидирекциональная)
   const loadCloudDataSilently = useCallback(async () => {
     // Предотвращаем повторную загрузку, если она уже выполняется
     if (silentLoadInProgressRef.current) {
@@ -45,150 +45,121 @@ export function SyncManager() {
 
     try {
       silentLoadInProgressRef.current = true;
-      log('[loadCloudDataSilently] Starting silent load for already logged in user');
+      log('[loadCloudDataSilently] Starting silent bidirectional sync');
       
-      // Проверяем наличие интернета перед попыткой загрузки
-      log(`[loadCloudDataSilently] navigator.onLine: ${navigator.onLine}`);
       if (!navigator.onLine) {
         log('[loadCloudDataSilently] Device is offline, skipping');
         silentLoadInProgressRef.current = false;
         return;
       }
       
-      // Сначала проверяем локальные данные
-      log('[loadCloudDataSilently] Loading local nodes...');
-      const localNodes = await getAllNodesFlat();
-      log(`[loadCloudDataSilently] Loaded ${localNodes.length} local nodes`);
+      const local = await getAllNodesFlat();
       
-      // Проверяем наличие данных в облаке с обработкой ошибок сети
       let hasCloudData = false;
       try {
-        log('[loadCloudDataSilently] Checking for cloud data...');
         hasCloudData = await hasDataInFirestore();
-        log(`[loadCloudDataSilently] hasCloudData: ${hasCloudData}`);
       } catch (error: any) {
-        log(`[loadCloudDataSilently] Error checking cloud data:`, error);
-        // Если ошибка связана с сетью или офлайн режимом, пропускаем загрузку
-        if (error?.code === 'unavailable' || error?.message?.includes('offline') || !navigator.onLine) {
-          log('[loadCloudDataSilently] Network error or offline mode, skipping:', error?.message || error);
+        if (error?.code === 'unavailable' || error?.message?.includes('offline')) {
           silentLoadInProgressRef.current = false;
           return;
         }
-        throw error; // Пробрасываем другие ошибки
+        throw error;
       }
       
       if (!hasCloudData) {
-        log('[loadCloudDataSilently] No cloud data found, skipping');
-        silentLoadInProgressRef.current = false;
-        return;
-      }
-      
-      let cloud: any[] = [];
-      try {
-        log('[loadCloudDataSilently] Loading cloud nodes...');
-        cloud = await loadAllNodesFromFirestore();
-        log(`[loadCloudDataSilently] Loaded ${cloud.length} cloud nodes`);
-      } catch (error: any) {
-        log(`[loadCloudDataSilently] Error loading cloud nodes:`, error);
-        // Если ошибка связана с сетью или офлайн режимом, пропускаем загрузку
-        if (error?.code === 'unavailable' || error?.message?.includes('offline') || !navigator.onLine) {
-          log('[loadCloudDataSilently] Network error while loading, skipping:', error?.message || error);
-          silentLoadInProgressRef.current = false;
-          return;
+        // Если в облаке пусто, а локально есть данные - выгружаем их (первичная выгрузка)
+        if (local.length > 0) {
+          log('[loadCloudDataSilently] Cloud is empty, uploading local nodes');
+          await syncAllNodesToFirestore(local);
         }
-        throw error; // Пробрасываем другие ошибки
-      }
-      
-      if (cloud.length === 0) {
-        log('[loadCloudDataSilently] Cloud data is empty, skipping');
         silentLoadInProgressRef.current = false;
         return;
       }
       
-      // Сравниваем данные перед загрузкой
-      log('[loadCloudDataSilently] Comparing local and cloud data...');
+      const cloud = await loadAllNodesFromFirestore();
+      if (cloud.length === 0) {
+        silentLoadInProgressRef.current = false;
+        return;
+      }
       
-      // Исключаем зашифрованные данные из сравнения, если дешифровка не удалась
-      const filteredCloud = cloud.filter(node => !node.isEncrypted || (node.isEncrypted && node.title));
-      
-      const rawDiff = compareNodes(localNodes, filteredCloud);
+      // Сравниваем ВСЕ узлы без фильтрации по достижимости
+      const rawDiff = compareNodes(local, cloud);
       const hasAnyDiff = rawDiff.localOnly.length > 0 || rawDiff.cloudOnly.length > 0 || rawDiff.different.length > 0;
       
-      // Если данные полностью идентичны, ничего не делаем
-      if (!hasAnyDiff || filteredCloud.length === 0) {
-        log('[loadCloudDataSilently] No differences found, skipping');
+      // Если есть значимые различия (title, completed и т.д.), НЕ делаем тихий мерж
+      // Тихий мерж только для технических различий (updatedAt) или новых узлов
+      const hasSignificantDiff = hasDifferences(local, cloud);
+      
+      if (!hasAnyDiff) {
+        log('[loadCloudDataSilently] No differences found');
         silentLoadInProgressRef.current = false;
         return;
       }
+
+      if (hasSignificantDiff) {
+        log('[loadCloudDataSilently] Significant differences found, skipping silent merge to prevent overwriting');
+        silentLoadInProgressRef.current = false;
+        // Мы не показываем диалог здесь, так как это тихая фоновая проверка.
+        // Диалог покажется при следующем входе или если пользователь сам инициирует.
+        return;
+      }
       
-      log('[loadCloudDataSilently] Merging cloud data with local DB...');
+      log('[loadCloudDataSilently] Performing silent LWW merge for technical updates');
       
-      // Сливаем облачные данные с локальными на основе даты обновления
-      let db: Awaited<ReturnType<typeof openDB>> | null = null;
-      try {
-        log('[loadCloudDataSilently] Opening DB...');
-        db = await openDB('LifeRoadmapDB', 2);
+      const localMap = new Map(local.map(n => [n.id, n]));
+      const cloudMap = new Map(cloud.map(n => [n.id, n]));
+      const allIds = new Set([...localMap.keys(), ...cloudMap.keys()]);
+      const mergedNodes: any[] = [];
+      let hasChanges = false;
+      
+      for (const id of allIds) {
+        const lNode = localMap.get(id);
+        const cNode = cloudMap.get(id);
         
-        // Получаем все локальные узлы для сравнения
-        const localNodes = await getAllNodesFlat();
-        const localMap = new Map(localNodes.map(n => [n.id, n]));
-        
-        const tx = db.transaction('nodes', 'readwrite');
-        let updateCount = 0;
-        let skipCount = 0;
-        let newCount = 0;
-        
-        log(`[loadCloudDataSilently] Processing ${filteredCloud.length} nodes from cloud...`);
-        
-        for (const cloudNode of filteredCloud) {
-          const localNode = localMap.get(cloudNode.id);
+        if (!lNode) {
+          mergedNodes.push({ ...cNode, children: [] });
+          hasChanges = true;
+        } else if (!cNode) {
+          mergedNodes.push({ ...lNode, children: [] });
+          hasChanges = true; // Нужно выгрузить в облако
+        } else {
+          const lTime = new Date(lNode.updatedAt || 0).getTime();
+          const cTime = new Date(cNode.updatedAt || 0).getTime();
           
-          if (!localNode) {
-            // Нового узла нет локально - сохраняем (без детей!)
-            const { children, ...nodeToSave } = cloudNode;
-            await tx.store.put({ ...nodeToSave, children: [] } as any);
-            newCount++;
+          if (cTime > lTime) {
+            mergedNodes.push({ ...cNode, children: [] });
+            hasChanges = true;
+          } else if (lTime > cTime) {
+            mergedNodes.push({ ...lNode, children: [] });
+            hasChanges = true; // Нужно обновить в облаке
           } else {
-            // Узел есть и там и там - сравниваем даты
-            const cloudUpdated = cloudNode.updatedAt ? new Date(cloudNode.updatedAt).getTime() : 0;
-            const localUpdated = localNode.updatedAt ? new Date(localNode.updatedAt).getTime() : 0;
-            
-            if (cloudUpdated > localUpdated) {
-              // Облачный узел свежее - обновляем локально (без детей!)
-              const { children, ...nodeToSave } = cloudNode;
-              await tx.store.put({ ...nodeToSave, children: [] } as any);
-              updateCount++;
-            } else {
-              // Локальный узел свежее или такой же - пропускаем
-              skipCount++;
-            }
-          }
-        }
-        
-        await tx.done;
-        log(`[loadCloudDataSilently] Sync complete: ${newCount} new, ${updateCount} updated, ${skipCount} skipped (local was fresher)`);
-        
-        // Уведомляем компоненты об обновлении данных
-        log('[loadCloudDataSilently] Notifying components about data update...');
-        notifyDataUpdated();
-        silentLoadInProgressRef.current = false;
-      } catch (error) {
-        log('[loadCloudDataSilently] Error loading cloud data:', error);
-        console.error('[loadCloudDataSilently] Error loading cloud data:', error);
-        // При ошибке сбрасываем флаг, чтобы можно было повторить попытку
-        silentLoadInProgressRef.current = false;
-      } finally {
-        if (db) {
-          try {
-            await db.close();
-          } catch (closeError) {
-            console.error('Error closing DB:', closeError);
+            mergedNodes.push({ ...lNode, children: [] });
           }
         }
       }
+      
+      if (hasChanges) {
+        let db: Awaited<ReturnType<typeof openDB>> | null = null;
+        try {
+          db = await openDB('LifeRoadmapDB', 2);
+          const tx = db.transaction('nodes', 'readwrite');
+          for (const node of mergedNodes) {
+            await tx.store.put(node);
+          }
+          await tx.done;
+          
+          // Синхронизируем результат обратно в облако
+          await syncAllNodesToFirestore(mergedNodes);
+          notifyDataUpdated();
+          log('[loadCloudDataSilently] Silent merge complete and synced to cloud');
+        } finally {
+          if (db) await db.close();
+        }
+      }
+      
+      silentLoadInProgressRef.current = false;
     } catch (error: any) {
-      log('[loadCloudDataSilently] Error in silent cloud load:', error);
-      console.error('[loadCloudDataSilently] Error in silent cloud load:', error);
+      log('[loadCloudDataSilently] Error:', error);
       silentLoadInProgressRef.current = false;
     }
   }, []);
@@ -223,125 +194,56 @@ export function SyncManager() {
     try {
       log(`[handleFirstSync] Starting sync, isNewLogin: ${isNewLogin}`);
       
-      // Если пользователь уже был залогинен (не новый логин), просто загружаем данные из облака
       if (!isNewLogin) {
-        log('[handleFirstSync] User already logged in, loading cloud data silently');
         await loadCloudDataSilently();
         return;
       }
       
-      log('[handleFirstSync] New login detected, checking for conflicts');
-      
-      // Показываем тост о проверке синхронизации только при новом логине
       const checkToastId = showToast(t('toast.syncChecking'), undefined, {
         isLoading: true,
         persistent: true
       });
       checkToastIdRef.current = checkToastId;
       
-      // Делаем снимок локальных данных СРАЗУ, до любых изменений
-      log('[handleFirstSync] Loading local nodes snapshot...');
-      const localSnapshot = await getAllNodesFlat();
-      log(`[handleFirstSync] Loaded ${localSnapshot.length} local nodes`);
-      
-      // Проверяем наличие данных в облаке
-      log('[handleFirstSync] Checking for cloud data...');
+      const local = await getAllNodesFlat();
       const hasCloudData = await hasDataInFirestore();
-      log(`[handleFirstSync] hasCloudData: ${hasCloudData}`);
       
       if (hasCloudData) {
-        log('[handleFirstSync] Cloud data exists, loading...');
         const cloud = await loadAllNodesFromFirestore();
-        log(`[handleFirstSync] Loaded ${cloud.length} cloud nodes`);
         
-        // ВАЖНО: Перед сравнением строим карту только достижимых узлов из обоих источников.
-        // Это предотвращает ложные конфликты из-за "осиротевших" узлов в БД.
-        const buildReachableNodes = (flatNodes: any[]) => {
-          const map = new Map<string, any>();
-          flatNodes.forEach(n => map.set(n.id, { ...n, children: [] }));
-          
-          const reachable = new Set<string>();
-          const traverse = (id: string) => {
-            if (reachable.has(id)) return;
-            reachable.add(id);
-            const node = map.get(id);
-            if (!node) return;
-            flatNodes.filter(n => n.parentId === id).forEach(child => traverse(child.id));
-          };
-          
-          if (map.has('root-node')) traverse('root-node');
-          // Также считаем "корневыми" все узлы без parentId (на всякий случай)
-          flatNodes.filter(n => !n.parentId).forEach(n => traverse(n.id));
-          
-          return flatNodes.filter(n => reachable.has(n.id));
-        };
-
-        const reachableLocal = buildReachableNodes(localSnapshot);
-        const reachableCloud = buildReachableNodes(cloud);
+        // Сравниваем ВСЕ узлы (без фильтра buildReachableNodes, который мог скрывать данные)
+        const hasRealDiff = hasDifferences(local, cloud);
         
-        log(`[handleFirstSync] Reachable nodes: local=${reachableLocal.length}/${localSnapshot.length}, cloud=${reachableCloud.length}/${cloud.length}`);
-
-        // Сравниваем только достижимые узлы
-        log('[handleFirstSync] Comparing reachable local and cloud data...');
-        const hasRealDiff = hasDifferences(reachableLocal, reachableCloud);
-        
-        // 1. Если реальных различий нет - ничего не показываем
-        if (!hasRealDiff) {
-          log('[handleFirstSync] No significant differences found, checking for technical updates...');
-          
-          const rawDiff = compareNodes(reachableLocal, reachableCloud);
-          const hasTechnicalDiff = rawDiff.localOnly.length > 0 || rawDiff.cloudOnly.length > 0 || rawDiff.different.length > 0;
-          
-          if (hasTechnicalDiff) {
-            log('[handleFirstSync] Performing silent merge for technical updates');
-            // ... (мерж ниже)
-          } else {
-            log('[handleFirstSync] Data is perfectly in sync');
-            if (checkToastIdRef.current) {
-              removeToast(checkToastIdRef.current);
-              checkToastIdRef.current = null;
-            }
-            isInitialLoadRef.current = false;
-            return;
-          }
-        } else {
-          // 2. Есть реальные различия - показываем диалог
+        if (hasRealDiff) {
           log('[handleFirstSync] Real differences found, showing conflict dialog');
-          setLocalNodes(reachableLocal);
-          setCloudNodes(reachableCloud);
+          setLocalNodes(local);
+          setCloudNodes(cloud);
           setShowConflictDialog(true);
           
           if (checkToastIdRef.current) {
             removeToast(checkToastIdRef.current);
             checkToastIdRef.current = null;
           }
-          isInitialLoadRef.current = false;
           return;
         }
 
-        // 3. Выполняем тихий мерж (LWW)
-        const localMap = new Map(reachableLocal.map(n => [n.id, n]));
-        const cloudMap = new Map(reachableCloud.map(n => [n.id, n]));
+        // Если значимых различий нет, делаем тихий мерж (LWW) для всех узлов
+        log('[handleFirstSync] No significant differences, performing silent merge');
+        const localMap = new Map(local.map(n => [n.id, n]));
+        const cloudMap = new Map(cloud.map(n => [n.id, n]));
         const allIds = new Set([...localMap.keys(), ...cloudMap.keys()]);
         const mergedNodes: any[] = [];
         
         for (const id of allIds) {
-          const local = localMap.get(id);
-          const cloudNode = cloudMap.get(id);
-          if (!local) {
-            const { children, ...rest } = cloudNode;
-            mergedNodes.push({ ...rest, children: [] });
-          }
-          else if (!cloudNode) {
-            const { children, ...rest } = local;
-            mergedNodes.push({ ...rest, children: [] });
-          }
+          const lNode = localMap.get(id);
+          const cNode = cloudMap.get(id);
+          if (!lNode) mergedNodes.push({ ...cNode, children: [] });
+          else if (!cNode) mergedNodes.push({ ...lNode, children: [] });
           else {
-            const localTime = new Date(local.updatedAt || 0).getTime();
-            const cloudTime = new Date(cloudNode.updatedAt || 0).getTime();
-            const winner = cloudTime > localTime ? cloudNode : local;
-            const { children, ...rest } = winner;
-            mergedNodes.push({ ...rest, children: [] });
+            const lTime = new Date(lNode.updatedAt || 0).getTime();
+            const cTime = new Date(cNode.updatedAt || 0).getTime();
+            const winner = cTime > lTime ? cNode : lNode;
+            mergedNodes.push({ ...winner, children: [] });
           }
         }
 
@@ -352,10 +254,10 @@ export function SyncManager() {
           const tx = db.transaction('nodes', 'readwrite');
           for (const node of mergedNodes) await tx.store.put(node);
           await tx.done;
+          
+          // Гарантируем, что облако тоже получит финальное состояние
           await syncAllNodesToFirestore(mergedNodes);
           notifyDataUpdated();
-        } catch (error) {
-          console.error('[handleFirstSync] Silent merge error:', error);
         } finally {
           if (db) await db.close();
           if (checkToastIdRef.current) {
@@ -363,25 +265,23 @@ export function SyncManager() {
             checkToastIdRef.current = null;
           }
         }
-        
-        isInitialLoadRef.current = false;
       } else {
-        log('[handleFirstSync] No cloud data, skipping conflict check');
-        // Закрываем тост проверки, если данных в облаке нет
+        // Если в облаке пусто - выгружаем локальные данные
+        if (local.length > 0) {
+          await syncAllNodesToFirestore(local);
+        }
         if (checkToastIdRef.current) {
           removeToast(checkToastIdRef.current);
           checkToastIdRef.current = null;
         }
-        isInitialLoadRef.current = false;
       }
     } catch (error) {
-      log('[handleFirstSync] Error in first sync:', error);
       console.error('[handleFirstSync] Sync error:', error);
-      // Закрываем тост проверки при ошибке
       if (checkToastIdRef.current) {
         removeToast(checkToastIdRef.current);
         checkToastIdRef.current = null;
       }
+    } finally {
       isInitialLoadRef.current = false;
     }
   }, [showToast, removeToast, loadCloudDataSilently]);
