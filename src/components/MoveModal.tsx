@@ -27,21 +27,33 @@ function isDescendant(sourceNode: Node, targetId: string): boolean {
 }
 
 function TreeNode({ node, level, sourceNodeId, sourceNodeTree, onSelect }: TreeNodeProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(level === 0);
   // Фильтруем детей сразу при инициализации и при обновлении пропсов
   const [children, setChildren] = useState<Node[]>(() => 
     (node.children || []).filter(c => !c.deletedAt)
   );
 
   useEffect(() => {
-    setChildren((node.children || []).filter(c => !c.deletedAt));
-  }, [node.children]);
+    const activeChildren = (node.children || []).filter(c => !c.deletedAt);
+    setChildren(activeChildren);
+    
+    // Принудительно подгружаем дерево для корня, если оно пришло плоским
+    if (node.id === 'root-node' && activeChildren.length === 0) {
+      getNode(node.id).then(fullNode => {
+        if (fullNode) {
+          setChildren(fullNode.children.filter(c => !c.deletedAt));
+        }
+      });
+    }
+  }, [node.children, node.id]);
 
-  // Нельзя переместить в себя, в корневой узел, или в свой подшаг
-  const canSelect = node.id !== sourceNodeId && 
-                    node.id !== 'root-node' && 
-                    !node.deletedAt &&
-                    !(sourceNodeTree && isDescendant(sourceNodeTree, node.id));
+  // Можно выбрать корень (для перемещения в общий список) 
+  // или любую другую задачу, которая не является самой задачей, её родителем или её потомком
+  const isSourceNode = node.id === sourceNodeId;
+  const isDirectParent = sourceNodeTree && node.id === sourceNodeTree.parentId;
+  const isDescendantOfSource = sourceNodeTree && isDescendant(sourceNodeTree, node.id);
+  
+  const canSelect = !isSourceNode && !isDirectParent && !isDescendantOfSource;
 
   const handleSelect = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -62,13 +74,6 @@ function TreeNode({ node, level, sourceNodeId, sourceNodeTree, onSelect }: TreeN
     setIsExpanded(!isExpanded);
   };
 
-  // Авто-раскрытие корня
-  useEffect(() => {
-    if (level === 0) {
-      setIsExpanded(true);
-    }
-  }, [level]);
-
   return (
     <div>
       <div
@@ -79,9 +84,9 @@ function TreeNode({ node, level, sourceNodeId, sourceNodeTree, onSelect }: TreeN
         }`}
         onClick={handleSelect}
       >
-        <button
+        <div
           onClick={handleToggleExpand}
-          className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-accent/10 transition-colors"
+          className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-accent/10 transition-colors cursor-pointer"
           style={{ color: 'var(--accent)' }}
         >
           {children.length > 0 ? (
@@ -89,21 +94,26 @@ function TreeNode({ node, level, sourceNodeId, sourceNodeTree, onSelect }: TreeN
           ) : (
             <span className="w-4" />
           )}
-        </button>
+        </div>
         <span className="flex-1 text-sm text-gray-900 dark:text-gray-100 truncate">
           {node.title}
         </span>
         {!canSelect && (
           <span className="text-xs text-gray-400">
-            {node.id === 'root-node' 
-              ? '(корневая задача)' 
-              : node.id === sourceNodeId 
+            {isSourceNode 
               ? '(текущая задача)' 
-              : '(свой подшаг)'}
+              : isDirectParent 
+              ? '(уже здесь)' 
+              : '(подшаг текущей)'}
+          </span>
+        )}
+        {node.id === 'root-node' && !isDirectParent && (
+          <span className="text-xs text-accent opacity-70 font-medium">
+            (в общий список)
           </span>
         )}
       </div>
-      {isExpanded && (
+      {isExpanded && children.length > 0 && (
         <div className="ml-6 border-l border-gray-200 dark:border-gray-700">
           {children.map((child) => (
             <TreeNode
