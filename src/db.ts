@@ -155,15 +155,9 @@ export async function recreateTutorial(): Promise<void> {
 // Получить корневой узел
 export async function getRoot(): Promise<Node> {
   if (!dbInstance) await initDB();
-  const node = await dbInstance!.get(STORE_NAME, ROOT_ID);
+  const node = await getNode(ROOT_ID);
   if (!node) {
     throw new Error('Root node not found');
-  }
-  // Исправляем parentId если он неправильный
-  if (node.parentId !== null) {
-    log(`Fixing root node parentId: ${node.parentId} -> null`);
-    node.parentId = null;
-    await dbInstance!.put(STORE_NAME, node);
   }
   return node;
 }

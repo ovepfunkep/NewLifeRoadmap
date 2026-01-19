@@ -28,11 +28,19 @@ function isDescendant(sourceNode: Node, targetId: string): boolean {
 
 function TreeNode({ node, level, sourceNodeId, sourceNodeTree, onSelect }: TreeNodeProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [children, setChildren] = useState<Node[]>(node.children);
+  // Фильтруем детей сразу при инициализации и при обновлении пропсов
+  const [children, setChildren] = useState<Node[]>(() => 
+    (node.children || []).filter(c => !c.deletedAt)
+  );
+
+  useEffect(() => {
+    setChildren((node.children || []).filter(c => !c.deletedAt));
+  }, [node.children]);
 
   // Нельзя переместить в себя, в корневой узел, или в свой подшаг
   const canSelect = node.id !== sourceNodeId && 
                     node.id !== 'root-node' && 
+                    !node.deletedAt &&
                     !(sourceNodeTree && isDescendant(sourceNodeTree, node.id));
 
   const handleSelect = (e: React.MouseEvent) => {
@@ -44,11 +52,11 @@ function TreeNode({ node, level, sourceNodeId, sourceNodeTree, onSelect }: TreeN
 
   const handleToggleExpand = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isExpanded && node.children.length === 0) {
+    if (!isExpanded && children.length === 0) {
       // Загружаем полный узел для получения актуальных детей
       const fullNode = await getNode(node.id);
       if (fullNode) {
-        setChildren(fullNode.children);
+        setChildren(fullNode.children.filter(c => !c.deletedAt));
       }
     }
     setIsExpanded(!isExpanded);
