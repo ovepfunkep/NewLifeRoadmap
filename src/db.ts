@@ -86,14 +86,17 @@ async function injectTutorialIfEmpty(): Promise<void> {
   const tutorialRoots = [...ru, ...en];
 
   const saveSubtree = async (node: Node) => {
-    await dbInstance!.put(STORE_NAME, node);
-    for (const child of node.children) await saveSubtree(child);
+    const { children, ...rest } = node;
+    await dbInstance!.put(STORE_NAME, { ...rest, children: [] });
+    if (children) {
+      for (const child of children) await saveSubtree(child);
+    }
   };
   for (const node of tutorialRoots) await saveSubtree(node);
 
   const updatedRoot: Node = {
     ...root,
-    children: [...root.children, ...tutorialRoots],
+    children: [], // В БД всегда пустые
     updatedAt: new Date().toISOString(),
   };
   await dbInstance.put(STORE_NAME, updatedRoot);
@@ -133,14 +136,17 @@ export async function recreateTutorial(): Promise<void> {
   };
 
   const saveSubtree = async (node: Node) => {
-    await dbInstance!.put(STORE_NAME, node);
-    for (const child of node.children) await saveSubtree(child);
+    const { children, ...rest } = node;
+    await dbInstance!.put(STORE_NAME, { ...rest, children: [] });
+    if (children) {
+      for (const child of children) await saveSubtree(child);
+    }
   };
   await saveSubtree(wrapper);
 
   const updatedRoot: Node = {
     ...root,
-    children: [...root.children, wrapper],
+    children: [], // В БД корень тоже без детей
     updatedAt: new Date().toISOString(),
   };
   await dbInstance!.put(STORE_NAME, updatedRoot);
@@ -162,35 +168,45 @@ export async function getRoot(): Promise<Node> {
   return node;
 }
 
-// Получить узел по ID
+// Получить узел по ID со всей иерархией потомков
 export async function getNode(id: string): Promise<Node | null> {
   if (!dbInstance) await initDB();
-  const rawNode = await dbInstance!.get(STORE_NAME, id) || null;
+  
+  const allNodes = await dbInstance!.getAll(STORE_NAME);
+  const rawNode = allNodes.find(n => n.id === id);
   
   if (!rawNode) return null;
 
-  // Исправляем корневой узел если нужно
-  if (rawNode.id === ROOT_ID && rawNode.parentId !== null) {
-    log(`Fixing root node parentId: ${rawNode.parentId} -> null`);
-    rawNode.parentId = null;
-    await dbInstance!.put(STORE_NAME, rawNode);
-  }
+  // Индексируем узлы по parentId для быстрого построения дерева
+  const childrenMap = new Map<string, Node[]>();
+  allNodes.forEach(node => {
+    if (node.parentId && !node.deletedAt) {
+      if (!childrenMap.has(node.parentId)) {
+        childrenMap.set(node.parentId, []);
+      }
+      childrenMap.get(node.parentId)!.push(node);
+    }
+  });
 
-  // Скрываем удаленные узлы (только для UI), но оставляем их в БД для синхронизации
-  if (rawNode.deletedAt && rawNode.id !== ROOT_ID) {
-    return null;
-  }
-
-  // Находим детей этого узла (только активных)
-  const allNodes = await dbInstance!.getAll(STORE_NAME);
-  const children = allNodes
-    .filter(n => n.parentId === id && !n.deletedAt)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-  return {
-    ...rawNode,
-    children: children.map(c => ({ ...c, children: [] })) // Рекурсивно заполним если нужно, но обычно достаточно одного уровня для NodePage
+  // Рекурсивно собираем дерево
+  const buildTree = (node: Node): Node => {
+    const children = (childrenMap.get(node.id) || [])
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    
+    return {
+      ...node,
+      children: children.map(c => buildTree(c))
+    };
   };
+
+  return buildTree(rawNode);
+}
+
+// Получить все узлы из БД в плоском виде (для синхронизации)
+export async function getAllNodesFlat(): Promise<Node[]> {
+  if (!dbInstance) await initDB();
+  const nodes = await dbInstance!.getAll(STORE_NAME);
+  return nodes.map(n => ({ ...n, children: [] }));
 }
 
 // Получить все узлы из БД и восстановить иерархию
@@ -382,13 +398,17 @@ export async function bulkImport(
   
   // Сохраняем всё поддерево
   const saveSubtree = async (n: Node) => {
-    const nodeWithUpdated = {
-      ...n,
+    const { children, ...rest } = n;
+    const nodeToSave = {
+      ...rest,
+      children: [], // В БД всегда пустые дети
       updatedAt: new Date().toISOString(),
     };
-    await dbInstance!.put(STORE_NAME, nodeWithUpdated);
-    for (const child of n.children) {
-      await saveSubtree(child);
+    await dbInstance!.put(STORE_NAME, nodeToSave);
+    if (children) {
+      for (const child of children) {
+        await saveSubtree(child);
+      }
     }
   };
   await saveSubtree(remappedPayload);

@@ -1076,9 +1076,9 @@ export function NodePage() {
           return;
         }
         
-        const { getAllNodes } = await import('../db');
+        const { getAllNodesFlat } = await import('../db');
         const { syncAllNodesToFirestore } = await import('../firebase/sync');
-        const allNodes = await getAllNodes();
+        const allNodes = await getAllNodesFlat();
         await syncAllNodesToFirestore(allNodes);
         
         // Обновляем тост: заменяем иконку загрузки на галочку

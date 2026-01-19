@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { onAuthChange } from '../firebase/auth';
 import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore } from '../firebase/sync';
-import { getAllNodes, clearAllNodes } from '../db';
+import { getAllNodesFlat, clearAllNodes } from '../db';
 import { SyncConflictDialog } from './SyncConflictDialog';
 import { hasDifferences, compareNodes } from '../utils/syncCompare';
 import { useToast } from '../hooks/useToast';
@@ -57,7 +57,7 @@ export function SyncManager() {
       
       // Сначала проверяем локальные данные
       log('[loadCloudDataSilently] Loading local nodes...');
-      const localNodes = await getAllNodes();
+      const localNodes = await getAllNodesFlat();
       log(`[loadCloudDataSilently] Loaded ${localNodes.length} local nodes`);
       
       // Проверяем наличие данных в облаке с обработкой ошибок сети
@@ -130,7 +130,7 @@ export function SyncManager() {
         db = await openDB('LifeRoadmapDB', 2);
         
         // Получаем все локальные узлы для сравнения
-        const localNodes = await getAllNodes();
+        const localNodes = await getAllNodesFlat();
         const localMap = new Map(localNodes.map(n => [n.id, n]));
         
         const tx = db.transaction('nodes', 'readwrite');
@@ -241,7 +241,7 @@ export function SyncManager() {
       
       // Делаем снимок локальных данных СРАЗУ, до любых изменений
       log('[handleFirstSync] Loading local nodes snapshot...');
-      const localSnapshot = await getAllNodes();
+      const localSnapshot = await getAllNodesFlat();
       log(`[handleFirstSync] Loaded ${localSnapshot.length} local nodes`);
       
       // Проверяем наличие данных в облаке
