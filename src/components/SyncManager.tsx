@@ -3,15 +3,15 @@ import { onAuthChange } from '../firebase/auth';
 import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore, getSyncMeta, loadChangedNodesFromFirestore } from '../firebase/sync';
 import { getAllNodesFlat, clearAllNodes } from '../db';
 import { SyncConflictDialog } from './SyncConflictDialog';
-import { hasDifferences, compareNodes } from '../utils/syncCompare';
+import { hasDifferences } from '../utils/syncCompare';
 import { useToast } from '../hooks/useToast';
 import { t } from '../i18n';
 import { openDB } from 'idb';
 import { User } from 'firebase/auth';
 import { initSecurity } from '../utils/securityManager';
 
-function log(...args: any[]) {
-  // console.log('[SyncManager]', ...args);
+function log(..._args: any[]) {
+  // console.log('[SyncManager]', ..._args);
 }
 
 // Событие для уведомления об обновлении данных
@@ -248,7 +248,7 @@ export function SyncManager() {
           await tx.done;
           
           // Гарантируем, что облако тоже получит финальное состояние
-          await syncAllNodesToFirestore(mergedNodes);
+          await syncAllNodesToFirestore(mergedNodes, cloud);
           notifyDataUpdated();
         } finally {
           if (db) await db.close();
@@ -299,6 +299,11 @@ export function SyncManager() {
       log(`[onAuthChange] previousUserRef.current: ${previousUserRef.current ? 'exists' : 'null'}`);
       
       if (user) {
+        // Определяем, это новый логин или пользователь уже был залогинен
+        const isNewLogin = isFirstAuthCheckRef.current 
+          ? false 
+          : previousUserRef.current === null;
+        
         // Сохраняем пользователя сразу
         previousUserRef.current = user;
 
@@ -307,16 +312,12 @@ export function SyncManager() {
         try {
           const { initialized } = await initSecurity(user.uid);
           
-          // Обновляем часовой пояс пользователя при каждом входе, если безопасность инициализирована
           if (initialized) {
             const { saveUserSecurityConfig } = await import('../firebase/security');
             const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
             await saveUserSecurityConfig(user.uid, { timezone });
           }
 
-          // Если по какой-то причине не инициализировано (например, закрыли вкладку после логина, но до выбора)
-          // то можно было бы показать модал, но сейчас мы перенесли выбор в AuthAvatar.
-          // Если initialized === false, значит выбор еще не сделан.
           if (!initialized) {
             log('[onAuthChange] Security not initialized, waiting for choice');
             isFirstAuthCheckRef.current = false;
@@ -327,13 +328,6 @@ export function SyncManager() {
           return;
         }
 
-        // Определяем, это новый логин или пользователь уже был залогинен
-        // Если это первый вызов и пользователь уже залогинен - это не новый логин
-        // Если предыдущего пользователя не было (null) - это новый логин
-        const isNewLogin = isFirstAuthCheckRef.current 
-          ? false // При первой проверке пользователь уже был залогинен при загрузке страницы
-          : previousUserRef.current === null; // Если предыдущего пользователя не было - это новый логин
-        
         log(`[onAuthChange] User signed in, isNewLogin: ${isNewLogin}`);
         isFirstAuthCheckRef.current = false;
         
@@ -497,7 +491,7 @@ export function SyncManager() {
       await tx.done;
       
       // Синхронизируем результат с облаком
-      await syncAllNodesToFirestore(mergedNodes);
+      await syncAllNodesToFirestore(mergedNodes, cloudNodes);
       
       setShowConflictDialog(false);
       showToast(t('toast.syncSuccess') || 'Данные объединены');

@@ -2,8 +2,8 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Node, ImportStrategy } from './types';
 import { generateTutorial } from './utils/tutorialData';
 
-function log(...args: any[]) {
-  // console.log('[DB]', ...args);
+function log(..._args: any[]) {
+  // console.log('[DB]', ..._args);
 }
 
 interface LifeRoadmapDB extends DBSchema {

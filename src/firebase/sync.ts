@@ -1,12 +1,12 @@
-import { collection, doc, getDoc, setDoc, getDocs, query, writeBatch, getDocsFromServer, getDocsFromCache, where } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, getDocs, query, writeBatch, getDocsFromServer, where, limit } from 'firebase/firestore';
 import { getFirebaseDB } from './config';
 import { getCurrentUser } from './auth';
 import { Node } from '../types';
 import { getActiveSyncKey } from '../utils/securityManager';
 import { encryptData, decryptData } from '../utils/crypto';
 
-function log(...args: any[]) {
-  // console.log('[FirebaseSync]', ...args);
+function log(..._args: any[]) {
+  // console.log('[FirebaseSync]', ..._args);
 }
 
 /**
@@ -158,9 +158,9 @@ export async function syncNodeToFirestore(node: Node): Promise<void> {
 }
 
 /**
- * Сохранить все узлы в Firestore (первая синхронизация)
+ * Сохранить все узлы в Firestore (первая синхронизация или массовое обновление)
  */
-export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
+export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Node[]): Promise<void> {
   const user = getCurrentUser();
   if (!user) {
     log('User not authenticated, skipping sync');
@@ -178,31 +178,38 @@ export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
   try {
     log(`Starting bulk sync: ${allNodes.length} nodes`);
     
-    // Загружаем все существующие узлы из Firestore
-    const nodesRef = collection(db, getUserNodesPath(user.uid));
-    const querySnapshot = await withTimeout(getDocs(query(nodesRef)), 15000, 'syncAllNodes:getDocs');
-    
-    const cloudNodeIds = new Set<string>();
-    const nodesToPurge: string[] = [];
-    const now = Date.now();
-    const PURGE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
-    
-    querySnapshot.forEach((docSnap) => {
-      cloudNodeIds.add(docSnap.id);
-      const data = docSnap.data() as Partial<Node>;
-      if (data.deletedAt) {
-        const deletedTime = new Date(data.deletedAt).getTime();
-        if (Number.isFinite(deletedTime) && now - deletedTime > PURGE_AFTER_MS) {
-          nodesToPurge.push(docSnap.id);
+    let cloudMap = new Map<string, any>();
+    let nodesToPurge: string[] = [];
+
+    if (cloudNodes) {
+      log('Using provided cloud nodes for diff check');
+      cloudMap = new Map(cloudNodes.map(n => [n.id, n]));
+    } else {
+      log('Fetching all nodes from Firestore for diff check (expensive)');
+      // Загружаем все существующие узлы из Firestore только если они не переданы
+      const nodesRef = collection(db, getUserNodesPath(user.uid));
+      const querySnapshot = await withTimeout(getDocs(query(nodesRef)), 15000, 'syncAllNodes:getDocs');
+      
+      const now = Date.now();
+      const PURGE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+      
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data() as any;
+        cloudMap.set(docSnap.id, data);
+        if (data.deletedAt) {
+          const deletedTime = new Date(data.deletedAt).getTime();
+          if (Number.isFinite(deletedTime) && now - deletedTime > PURGE_AFTER_MS) {
+            nodesToPurge.push(docSnap.id);
+          }
         }
-      }
-    });
+      });
+    }
     
-    log(`Cloud nodes: ${cloudNodeIds.size}, Local nodes: ${allNodes.length}`);
-    log(`Found ${nodesToPurge.length} nodes to purge (deleted > 30 days)`);
+    log(`Cloud nodes: ${cloudMap.size}, Local nodes: ${allNodes.length}`);
     
     // Firestore batch ограничен 500 операциями
     const BATCH_LIMIT = 500;
+    const nodesRef = collection(db, getUserNodesPath(user.uid));
     
     // СНАЧАЛА очищаем старые tombstone-узлы
     if (nodesToPurge.length > 0) {
@@ -221,16 +228,13 @@ export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
     }
     
     // ЗАТЕМ сохраняем только ИЗМЕНЕННЫЕ узлы батчами
-    const cloudMap = new Map(querySnapshot.docs.map(d => [d.id, d.data() as any]));
     const nodesToSave = allNodes.filter(local => {
       const cloud = cloudMap.get(local.id);
       if (!cloud) return true; // Новое
       
-      // Сравниваем updatedAt. Если локальный узел не новее облачного, не пишем.
-      const localTime = new Date(local.updatedAt).getTime();
+      const localTime = new Date(local.updatedAt || 0).getTime();
       const cloudTime = new Date(cloud.updatedAt || 0).getTime();
       
-      // Также проверяем, не совпадает ли статус удаления
       if (local.deletedAt && cloud.deletedAt && localTime <= cloudTime) {
         return false;
       }
@@ -245,7 +249,6 @@ export async function syncAllNodesToFirestore(allNodes: Node[]): Promise<void> {
         const batch = writeBatch(db);
         const chunk = nodesToSave.slice(i, i + BATCH_LIMIT);
         
-        // Шифруем данные в текущем батче параллельно для скорости
         await Promise.all(chunk.map(async (node) => {
           const { children, ...nodeData } = node;
           const nodeRef = doc(nodesRef, node.id);
@@ -601,9 +604,10 @@ export async function hasDataInFirestore(): Promise<boolean> {
   try {
     log('Checking if data exists in Firestore');
     const nodesRef = collection(db, getUserNodesPath(user.uid));
-    const querySnapshot = await withTimeout(getDocs(query(nodesRef)), 10000, 'hasDataInFirestore');
+    const q = query(nodesRef, limit(1));
+    const querySnapshot = await withTimeout(getDocs(q), 10000, 'hasDataInFirestore');
     const hasData = !querySnapshot.empty;
-    log(`Firestore has data: ${hasData} (${querySnapshot.size} documents)`);
+    log(`Firestore has data: ${hasData}`);
     return hasData;
   } catch (error) {
     log(`Error checking Firestore data:`, error);
