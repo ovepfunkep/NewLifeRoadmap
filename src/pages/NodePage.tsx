@@ -459,6 +459,9 @@ export function NodePage() {
     
     await saveNode(updated);
     
+    // Уведомляем другие компоненты и вкладки об изменении
+    window.dispatchEvent(new CustomEvent('syncManager:dataUpdated'));
+    
     // Синхронизируем с облаком асинхронно
     (async () => {
       try {
@@ -517,6 +520,9 @@ export function NodePage() {
     };
     
     await saveNode(updated);
+    
+    // Уведомляем другие компоненты и вкладки об изменении
+    window.dispatchEvent(new CustomEvent('syncManager:dataUpdated'));
     
     // Синхронизируем с облаком асинхронно
     (async () => {
@@ -1083,11 +1089,17 @@ export function NodePage() {
         
         // Обновляем тост: заменяем иконку загрузки на галочку
         updateToast(syncToastId, { isLoading: false, isSuccess: true, persistent: false });
-      } catch (error) {
+      } catch (error: any) {
         console.error('[NodePage] Error syncing after import:', error);
-        // При ошибке просто закрываем тост
+        
+        // Закрываем индикатор загрузки и показываем ошибку
         removeToast(syncToastId);
-        showToast(t('toast.syncError'));
+        
+        if (error?.code === 'resource-exhausted' || error?.message?.includes('TIMEOUT_SYNC')) {
+          showToast('Облако временно недоступно (превышена квота)', undefined, { type: 'error' });
+        } else {
+          showToast(t('toast.syncError'));
+        }
       }
     })();
   };

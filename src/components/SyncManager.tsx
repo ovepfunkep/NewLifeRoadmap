@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { onAuthChange } from '../firebase/auth';
-import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore } from '../firebase/sync';
+import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore, getSyncMeta, loadChangedNodesFromFirestore } from '../firebase/sync';
 import { getAllNodesFlat, clearAllNodes } from '../db';
 import { SyncConflictDialog } from './SyncConflictDialog';
 import { hasDifferences, compareNodes } from '../utils/syncCompare';
@@ -11,15 +11,33 @@ import { User } from 'firebase/auth';
 import { initSecurity } from '../utils/securityManager';
 
 function log(...args: any[]) {
-  console.log('[SyncManager]', ...args);
+  // console.log('[SyncManager]', ...args);
 }
 
 // Событие для уведомления об обновлении данных
 const DATA_UPDATED_EVENT = 'syncManager:dataUpdated';
 
-// Функция для отправки события об обновлении данных
+const syncChannel = typeof window !== 'undefined' ? new BroadcastChannel('sync_updates') : null;
+
+if (syncChannel) {
+  syncChannel.onmessage = (event) => {
+    if (event.data === 'dataUpdated') {
+      window.dispatchEvent(new CustomEvent(DATA_UPDATED_EVENT, { detail: { fromBroadcast: true } }));
+    }
+  };
+}
+
+// Слушаем локальные обновления, чтобы переслать их в другие вкладки
+if (typeof window !== 'undefined') {
+  window.addEventListener(DATA_UPDATED_EVENT, (event: any) => {
+    // Если событие пришло не из броадкаста, значит оно локальное — рассылаем остальным
+    if (syncChannel && !event.detail?.fromBroadcast) {
+      syncChannel.postMessage('dataUpdated');
+    }
+  });
+}
+
 function notifyDataUpdated() {
-  log('Notifying components about data update');
   window.dispatchEvent(new CustomEvent(DATA_UPDATED_EVENT));
 }
 
@@ -34,6 +52,12 @@ export function SyncManager() {
   const isFirstAuthCheckRef = useRef<boolean>(true); // Флаг первого вызова onAuthChange
   const silentLoadInProgressRef = useRef<boolean>(false); // Флаг, что тихая загрузка уже выполняется
   const lastSilentLoadHashRef = useRef<string | null>(null); // Хеш последних загруженных данных для предотвращения повторной загрузки
+  
+  // Ключ для хранения времени последней синхронизации в localStorage
+  const LAST_SYNC_TIME_KEY = 'last_local_sync_time';
+  
+  // Время последнего изменения в облаке, о котором мы знаем
+  const lastCloudChangeRef = useRef<string | null>(localStorage.getItem(LAST_SYNC_TIME_KEY));
 
   // Автоматическая загрузка данных из облака и синхронизация (бидирекциональная)
   const loadCloudDataSilently = useCallback(async () => {
@@ -45,113 +69,81 @@ export function SyncManager() {
 
     try {
       silentLoadInProgressRef.current = true;
-      log('[loadCloudDataSilently] Starting silent bidirectional sync');
+      log('[loadCloudDataSilently] Starting silent incremental sync');
       
       if (!navigator.onLine) {
         log('[loadCloudDataSilently] Device is offline, skipping');
         silentLoadInProgressRef.current = false;
         return;
       }
-      
-      const local = await getAllNodesFlat();
-      
-      let hasCloudData = false;
-      try {
-        hasCloudData = await hasDataInFirestore();
-      } catch (error: any) {
-        if (error?.code === 'unavailable' || error?.message?.includes('offline')) {
-          silentLoadInProgressRef.current = false;
-          return;
-        }
-        throw error;
-      }
-      
-      if (!hasCloudData) {
-        // Если в облаке пусто, а локально есть данные - выгружаем их (первичная выгрузка)
-        if (local.length > 0) {
-          log('[loadCloudDataSilently] Cloud is empty, uploading local nodes');
-          await syncAllNodesToFirestore(local);
-        }
-        silentLoadInProgressRef.current = false;
-        return;
-      }
-      
-      const cloud = await loadAllNodesFromFirestore();
-      if (cloud.length === 0) {
-        silentLoadInProgressRef.current = false;
-        return;
-      }
-      
-      // Сравниваем ВСЕ узлы без фильтрации по достижимости
-      const rawDiff = compareNodes(local, cloud);
-      const hasAnyDiff = rawDiff.localOnly.length > 0 || rawDiff.cloudOnly.length > 0 || rawDiff.different.length > 0;
-      
-      if (!hasAnyDiff) {
-        log('[loadCloudDataSilently] No differences found');
+
+      // Проверка метаданных для экономии квот
+      const meta = await getSyncMeta();
+      if (!meta) {
+        log('[loadCloudDataSilently] No cloud metadata found');
         silentLoadInProgressRef.current = false;
         return;
       }
 
-      log('[loadCloudDataSilently] Differences found, performing silent LWW merge');
+      const lastLocalSyncTime = lastCloudChangeRef.current;
       
-      const localMap = new Map(local.map(n => [n.id, n]));
-      const cloudMap = new Map(cloud.map(n => [n.id, n]));
-      const allIds = new Set([...localMap.keys(), ...cloudMap.keys()]);
-      const mergedNodes: any[] = [];
-      let hasChanges = false;
-      
-      for (const id of allIds) {
-        const lNode = localMap.get(id);
-        const cNode = cloudMap.get(id);
-        
-        if (!lNode) {
-          log(`[loadCloudDataSilently] Node ${id} only in cloud, taking it`);
-          mergedNodes.push({ ...cNode, children: [] });
-          hasChanges = true;
-        } else if (!cNode) {
-          log(`[loadCloudDataSilently] Node ${id} only local, keeping it`);
-          mergedNodes.push({ ...lNode, children: [] });
-          hasChanges = true; // Нужно выгрузить в облако
-        } else {
-          const lTime = new Date(lNode.updatedAt || 0).getTime();
-          const cTime = new Date(cNode.updatedAt || 0).getTime();
-          
-          if (cTime > lTime) {
-            log(`[loadCloudDataSilently] Node ${id} cloud is newer (${cTime} > ${lTime}), updating local`);
-            mergedNodes.push({ ...cNode, children: [] });
-            hasChanges = true;
-          } else if (lTime > cTime) {
-            log(`[loadCloudDataSilently] Node ${id} local is newer (${lTime} > ${cTime}), will update cloud`);
-            mergedNodes.push({ ...lNode, children: [] });
-            hasChanges = true; 
-          } else {
-            mergedNodes.push({ ...lNode, children: [] });
-          }
-        }
+      if (lastLocalSyncTime === meta.lastChangedAt) {
+        log('[loadCloudDataSilently] Cloud data unchanged (meta check), skipping fetch');
+        silentLoadInProgressRef.current = false;
+        return;
       }
       
+      let changedNodes: any[] = [];
+      let hasChanges = false;
+
+      if (!lastLocalSyncTime) {
+        log('[loadCloudDataSilently] No last sync time, performing full fetch');
+        changedNodes = await loadAllNodesFromFirestore(true);
+        hasChanges = changedNodes.length > 0;
+      } else {
+        log(`[loadCloudDataSilently] Fetching changes since ${lastLocalSyncTime}`);
+        changedNodes = await loadChangedNodesFromFirestore(lastLocalSyncTime);
+        hasChanges = changedNodes.length > 0;
+      }
+
       if (hasChanges) {
         let db: Awaited<ReturnType<typeof openDB>> | null = null;
         try {
           db = await openDB('LifeRoadmapDB', 2);
           const tx = db.transaction('nodes', 'readwrite');
-          for (const node of mergedNodes) {
+          
+          // При инкрементальной загрузке мы просто обновляем полученные узлы.
+          // LWW логика здесь упрощена: облако всегда выигрывает для входящих изменений, 
+          // так как мы запрашиваем только то, что новее нашего lastLocalSyncTime.
+          for (const node of changedNodes) {
             await tx.store.put(node);
           }
           await tx.done;
           
-          // Синхронизируем результат обратно в облако
-          await syncAllNodesToFirestore(mergedNodes);
+          log(`[loadCloudDataSilently] Local DB updated with ${changedNodes.length} nodes, notifying components`);
           notifyDataUpdated();
-          log('[loadCloudDataSilently] Silent merge complete and synced to cloud');
         } finally {
           if (db) await db.close();
         }
+      } else {
+        log('[loadCloudDataSilently] No changed nodes returned from cloud');
       }
+
+      // Обновляем локальный маркер времени в любом случае, если проверка прошла успешно
+      lastCloudChangeRef.current = meta.lastChangedAt;
+      localStorage.setItem(LAST_SYNC_TIME_KEY, meta.lastChangedAt);
       
       silentLoadInProgressRef.current = false;
     } catch (error: any) {
       log('[loadCloudDataSilently] Error:', error);
+      
+      // Обработка превышения квоты или таймаута
+      if (error?.code === 'resource-exhausted' || error?.message?.includes('TIMEOUT_SYNC')) {
+        showToast(t('toast.syncError') || 'Облако временно недоступно (превышена квота)', undefined, { type: 'error' });
+      }
+      
+      silentLoadInProgressRef.current = false;
+    } finally {
       silentLoadInProgressRef.current = false;
     }
   }, []);
@@ -176,9 +168,17 @@ export function SyncManager() {
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('focus', handleFocus);
 
+    // Периодическая проверка раз в 30 секунд для обновления при открытом окне
+    const intervalId = setInterval(() => {
+      if (!document.hidden) {
+        void handleActivate();
+      }
+    }, 30000);
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('focus', handleFocus);
+      clearInterval(intervalId);
     };
   }, [loadCloudDataSilently]);
 
@@ -201,7 +201,7 @@ export function SyncManager() {
       const hasCloudData = await hasDataInFirestore();
       
       if (hasCloudData) {
-        const cloud = await loadAllNodesFromFirestore();
+        const cloud = await loadAllNodesFromFirestore(true);
         
         // Сравниваем ВСЕ узлы (без фильтра buildReachableNodes, который мог скрывать данные)
         const hasRealDiff = hasDifferences(local, cloud);

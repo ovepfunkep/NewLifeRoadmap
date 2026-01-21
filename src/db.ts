@@ -3,7 +3,7 @@ import { Node, ImportStrategy } from './types';
 import { generateTutorial } from './utils/tutorialData';
 
 function log(...args: any[]) {
-  console.log('[DB]', ...args);
+  // console.log('[DB]', ...args);
 }
 
 interface LifeRoadmapDB extends DBSchema {
@@ -45,6 +45,19 @@ export async function initDB(): Promise<void> {
   
   log('DB initialized');
   
+  // Проверяем и исправляем возможные циклы (например, если узел является своим родителем)
+  const allNodes = await dbInstance.getAll(STORE_NAME);
+  let fixedCount = 0;
+  for (const node of allNodes) {
+    if (node.parentId === node.id) {
+      log(`Fixing cycle: node ${node.id} was its own parent. Resetting parentId to ROOT_ID.`);
+      node.parentId = (node.id === ROOT_ID) ? null : ROOT_ID;
+      await dbInstance.put(STORE_NAME, node);
+      fixedCount++;
+    }
+  }
+  if (fixedCount > 0) log(`Fixed ${fixedCount} cyclical nodes`);
+
   // Создаём корневой узел, если его нет
   const existingRoot = await dbInstance.get(STORE_NAME, ROOT_ID);
   if (!existingRoot) {
@@ -183,13 +196,19 @@ export async function getNode(id: string): Promise<Node | null> {
   });
 
   // Рекурсивно собираем дерево
-  const buildTree = (node: Node): Node => {
+  const buildTree = (node: Node, visited: Set<string> = new Set()): Node => {
+    if (visited.has(node.id)) {
+      log(`Cycle detected at node ${node.id}, breaking it.`);
+      return { ...node, children: [] };
+    }
+    visited.add(node.id);
+    
     const children = (childrenMap.get(node.id) || [])
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     
     return {
       ...node,
-      children: children.map(c => buildTree(c))
+      children: children.map(c => buildTree(c, new Set(visited)))
     };
   };
 
@@ -271,7 +290,6 @@ export async function saveNode(node: Node): Promise<void> {
   };
   
   await dbInstance!.put(STORE_NAME, flatNode);
-  log(`Node saved flat: ${node.id}, updatedAt: ${updatedAt}`);
   
   // Если у узла в памяти были дети, сохраняем их как отдельные плоские записи
   if (children && children.length > 0) {
@@ -345,16 +363,29 @@ export async function deleteNode(id: string): Promise<void> {
 }
 
 // Вспомогательная функция для перегенерации ID
-function remapIds(node: Node, existingIds: Set<string>): Node {
+function remapIds(node: Node, existingIds: Set<string>, newParentId: string | null = null, visited: Set<Node> = new Set()): Node {
+  if (visited.has(node)) {
+    return { ...node, children: [] };
+  }
+  visited.add(node);
+
   const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  const newId = existingIds.has(node.id) ? generateId() : node.id;
+  const isDuplicate = node.id === ROOT_ID ? false : existingIds.has(node.id);
+  const newId = (node.id === ROOT_ID) ? ROOT_ID : (isDuplicate ? generateId() : node.id);
   existingIds.add(newId);
   
-  return {
+  const remappedNode: Node = {
     ...node,
     id: newId,
-    children: node.children.map(child => remapIds(child, existingIds)),
+    parentId: newParentId,
+    children: [], // Будут заполнены ниже рекурсивно
   };
+
+  if (node.children && node.children.length > 0) {
+    remappedNode.children = node.children.map(child => remapIds(child, existingIds, newId, visited));
+  }
+
+  return remappedNode;
 }
 
 // Массовый импорт
@@ -365,60 +396,48 @@ export async function bulkImport(
 ): Promise<void> {
   if (!dbInstance) await initDB();
   
-  const parent = await getNode(parentId);
-  if (!parent) {
-    throw new Error(`Parent node ${parentId} not found`);
+  // Собираем все существующие узлы для анализа
+  const allNodes = await dbInstance!.getAll(STORE_NAME);
+  
+  // Если стратегия "заменить", помечаем текущих детей как удаленные
+  if (strategy === 'replace') {
+    log(`Replacing children of ${parentId}`);
+    // Ищем всех детей, у которых parentId совпадает с целевым, и они не удалены
+    const childrenToDelete = allNodes.filter(n => n.parentId === parentId && !n.deletedAt);
+    for (const child of childrenToDelete) {
+      await deleteNode(child.id);
+    }
   }
-  
-  // Собираем все существующие ID в поддереве родителя
-  const existingIds = new Set<string>();
-  const collectIds = (node: Node) => {
-    existingIds.add(node.id);
-    node.children.forEach(collectIds);
-  };
-  parent.children.forEach(collectIds);
-  
-  // Перегенерируем ID при конфликтах
-  const remappedPayload = remapIds(payload, existingIds);
-  remappedPayload.parentId = parentId;
-  
-  // Обновляем parentId у всех потомков
-  const updateParentIds = (node: Node, newParentId: string) => {
-    node.parentId = newParentId;
-    node.children.forEach(child => updateParentIds(child, node.id));
-  };
-  updateParentIds(remappedPayload, parentId);
-  
-  // Сохраняем всё поддерево
-  const saveSubtree = async (n: Node) => {
-    const { children, ...rest } = n;
-    const nodeToSave = {
-      ...rest,
-      children: [], // В БД всегда пустые дети
-      updatedAt: new Date().toISOString(),
-    };
-    await dbInstance!.put(STORE_NAME, nodeToSave);
-    if (children) {
-      for (const child of children) {
-        await saveSubtree(child);
+
+  // Обновляем список ID после удаления, чтобы remapIds видел актуальную картину
+  // Включаем даже удаленные узлы, чтобы не создавать конфликтов с tombstones
+  const allNodesAfterDelete = await dbInstance!.getAll(STORE_NAME);
+  const existingIds = new Set(allNodesAfterDelete.map(n => n.id));
+
+  // Если мы импортируем узел, ID которого совпадает с целевым родителем (например, импорт корня в корень),
+  // то мы импортируем только его детей, чтобы не создавать цикл.
+  if (payload.id === parentId) {
+    log(`Importing payload with same ID as parent (${parentId}). Importing children directly.`);
+    if (payload.children && payload.children.length > 0) {
+      for (const child of payload.children) {
+        const remappedChild = remapIds(child, existingIds, parentId);
+        await saveNode(remappedChild);
       }
     }
-  };
-  await saveSubtree(remappedPayload);
-  
-  // Обновляем родителя
-  let updatedChildren: Node[];
-  if (strategy === 'replace') {
-    updatedChildren = [remappedPayload];
   } else {
-    updatedChildren = [...parent.children, remappedPayload];
+    // Обычный импорт: узел становится ребенком родителя
+    const remappedPayload = remapIds(payload, existingIds, parentId);
+    await saveNode(remappedPayload);
   }
-  
-  const updatedParent: Node = {
-    ...parent,
-    children: updatedChildren,
-    updatedAt: new Date().toISOString(),
-  };
-  await saveNode(updatedParent);
+
+  // Обновляем дату родителя (обязательно через put, чтобы не пересобирать дерево)
+  const parentRecord = allNodes.find(n => n.id === parentId);
+  if (parentRecord) {
+    await dbInstance!.put(STORE_NAME, {
+      ...parentRecord,
+      children: [], // В БД всегда пустые
+      updatedAt: new Date().toISOString()
+    });
+  }
 }
 
