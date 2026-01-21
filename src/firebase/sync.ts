@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, setDoc, getDocs, query, writeBatch, getDocsFromServer, where, limit } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, getDocs, query, writeBatch, getDocsFromServer, where, limit, onSnapshot, orderBy, Unsubscribe } from 'firebase/firestore';
 import { getFirebaseDB } from './config';
 import { getCurrentUser } from './auth';
 import { Node } from '../types';
@@ -41,6 +41,148 @@ function getUserSyncMetaPath(userId: string): string {
 }
 
 /**
+ * Получить путь к change log пользователя
+ */
+function getUserChangesPath(userId: string): string {
+  // Переносим изменения в основную коллекцию security, так как на подколлекции правила не распространяются
+  return `users/${userId}/security`;
+}
+
+/**
+ * Локальный clientId для фильтрации собственных изменений
+ */
+export function getClientId(): string {
+  if (typeof window === 'undefined') return 'server';
+  const key = 'client_id';
+  const existing = localStorage.getItem(key);
+  if (existing) return existing;
+  const created = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  localStorage.setItem(key, created);
+  return created;
+}
+
+async function encryptNodeFields(node: Node, syncKey: string): Promise<Record<string, any>> {
+  const { children, ...nodeData } = node;
+  const encryptedTitle = await encryptData(node.title, syncKey);
+  let encryptedDescription = node.description;
+  if (node.description) {
+    encryptedDescription = await encryptData(node.description, syncKey);
+  }
+
+  const updatedAt = node.updatedAt || new Date().toISOString();
+
+  return cleanForFirestore({
+    ...nodeData,
+    updatedAt,
+    title: encryptedTitle,
+    description: encryptedDescription,
+    isFieldsEncrypted: true,
+    syncedAt: new Date().toISOString(),
+  });
+}
+
+async function decryptNodeFields(data: any, syncKey: string | null): Promise<any> {
+  if (!syncKey) return data;
+  let result = { ...data };
+  if (result.isEncrypted && result.encryptedData) {
+    try {
+      const decrypted = await decryptData(result.encryptedData, syncKey);
+      result = { ...result, ...decrypted };
+    } catch (e) {}
+  } else if (result.isTitleEncrypted) {
+    try {
+      const decryptedTitle = await decryptData(result.title, syncKey);
+      result.title = decryptedTitle;
+    } catch (e) {}
+  } else if (result.isFieldsEncrypted) {
+    try {
+      const decryptedTitle = await decryptData(result.title, syncKey);
+      result.title = decryptedTitle;
+      if (result.description) {
+        const decryptedDesc = await decryptData(result.description, syncKey);
+        result.description = decryptedDesc;
+      }
+    } catch (e) {}
+  }
+  return result;
+}
+
+export async function normalizeNodeFromPayload(payload: any, nodeIdOverride?: string): Promise<Node> {
+  const syncKey = getActiveSyncKey();
+  const data = await decryptNodeFields(payload, syncKey);
+  const id = data.id || nodeIdOverride || '';
+  return {
+    id,
+    parentId: data.parentId ?? null,
+    title: data.title ?? '',
+    description: data.description,
+    deadline: data.deadline ?? null,
+    completed: data.completed ?? false,
+    completedAt: data.completedAt ?? null,
+    priority: data.priority,
+    order: data.order,
+    createdAt: data.createdAt ?? data.updatedAt ?? new Date(0).toISOString(),
+    updatedAt: data.updatedAt ?? data.createdAt ?? new Date(0).toISOString(),
+    deletedAt: data.deletedAt ?? null,
+    reminders: data.reminders,
+    sentReminders: data.sentReminders,
+    children: [],
+  };
+}
+
+async function writeChangeLog(payload: Record<string, any>, userId: string, type: 'node' | 'bulk'): Promise<void> {
+  const db = getFirebaseDB();
+  const changesRef = collection(db, getUserChangesPath(userId));
+  const changeDoc = doc(changesRef);
+  const clientId = getClientId();
+  const updatedAt = payload.updatedAt || new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  await setDoc(changeDoc, cleanForFirestore({
+    type,
+    nodeId: payload.id,
+    updatedAt,
+    payload,
+    updatedBy: clientId,
+    expiresAt,
+  }));
+}
+
+export function subscribeToChangeLog(
+  userId: string,
+  since: string | null,
+  onChange: (changes: any[]) => void,
+  onError?: (error: any) => void
+): Unsubscribe {
+  const db = getFirebaseDB();
+  const changesRef = collection(db, getUserChangesPath(userId));
+  const q = since
+    ? query(changesRef, where('updatedAt', '>', since), orderBy('updatedAt', 'asc'))
+    : query(changesRef, orderBy('updatedAt', 'asc'));
+
+  return onSnapshot(q, (snapshot) => {
+    const added = snapshot.docChanges()
+      .filter(change => change.type === 'added')
+      .map(change => ({ id: change.doc.id, ...change.doc.data() }));
+    if (added.length > 0) onChange(added);
+  }, (error) => {
+    if (onError) onError(error);
+  });
+}
+
+export async function cleanupChangeLog(userId: string, maxBatch = 100): Promise<void> {
+  const db = getFirebaseDB();
+  const changesRef = collection(db, getUserChangesPath(userId));
+  const nowIso = new Date().toISOString();
+  const q = query(changesRef, where('expiresAt', '<', nowIso), orderBy('expiresAt', 'asc'), limit(maxBatch));
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return;
+  const batch = writeBatch(db);
+  snapshot.forEach(docSnap => batch.delete(docSnap.ref));
+  await batch.commit();
+}
+
+/**
  * Получить метаданные синхронизации из Firestore
  */
 export async function getSyncMeta(): Promise<{ lastChangedAt: string } | null> {
@@ -71,9 +213,10 @@ export async function updateSyncMeta(): Promise<void> {
   const db = getFirebaseDB();
   try {
     const metaRef = doc(db, getUserSyncMetaPath(user.uid));
+    const clientId = getClientId();
     await setDoc(metaRef, { 
       lastChangedAt: new Date().toISOString(),
-      updatedBy: 'web-client' 
+      updatedBy: clientId 
     }, { merge: true });
   } catch (error) {
     console.error('Error updating sync meta:', error);
@@ -127,27 +270,9 @@ export async function syncNodeToFirestore(node: Node): Promise<void> {
   try {
     log(`Syncing node to Firestore: ${node.id} (${node.title})`);
     const nodeRef = doc(db, getUserNodesPath(user.uid), node.id);
-    // Сохраняем узел без детей (дети хранятся отдельно)
-    const { children, ...nodeData } = node;
-    
-    log(`Encrypting title and description for node ${node.id}`);
-    const encryptedTitle = await encryptData(node.title, syncKey);
-    let encryptedDescription = node.description;
-    if (node.description) {
-      encryptedDescription = await encryptData(node.description, syncKey);
-    }
-    
-    const dataToSave = {
-      ...nodeData,
-      title: encryptedTitle,
-      description: encryptedDescription,
-      isFieldsEncrypted: true, // Новый флаг для шифрования полей
-      syncedAt: new Date().toISOString(),
-    };
-
-    // Очищаем от undefined значений перед сохранением
-    const cleanedData = cleanForFirestore(dataToSave);
+    const cleanedData = await encryptNodeFields(node, syncKey);
     await setDoc(nodeRef, cleanedData);
+    await writeChangeLog(cleanedData, user.uid, 'node');
     await updateSyncMeta();
     log(`Node synced successfully: ${node.id}`);
   } catch (error) {
@@ -250,23 +375,8 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
         const chunk = nodesToSave.slice(i, i + BATCH_LIMIT);
         
         await Promise.all(chunk.map(async (node) => {
-          const { children, ...nodeData } = node;
           const nodeRef = doc(nodesRef, node.id);
-          
-          const encryptedTitle = await encryptData(node.title, syncKey);
-          let encryptedDescription = node.description;
-          if (node.description) {
-            encryptedDescription = await encryptData(node.description, syncKey);
-          }
-
-          const dataToSave = cleanForFirestore({
-            ...nodeData,
-            title: encryptedTitle,
-            description: encryptedDescription,
-            isFieldsEncrypted: true,
-            syncedAt: new Date().toISOString(),
-          });
-          
+          const dataToSave = await encryptNodeFields(node, syncKey);
           batch.set(nodeRef, dataToSave);
         }));
         
@@ -275,6 +385,9 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
       }
     }
     
+    if (nodesToSave.length > 0) {
+      await writeChangeLog({ id: 'bulk', updatedAt: new Date().toISOString(), fullSyncRequired: true }, user.uid, 'bulk');
+    }
     await updateSyncMeta();
     log(`Bulk sync completed: ${allNodes.length} nodes synced, ${nodesToPurge.length} purged`);
   } catch (error) {
@@ -352,7 +465,6 @@ export async function loadChangedNodesFromFirestore(since: string): Promise<Node
   const user = getCurrentUser();
   if (!user) return [];
 
-  const syncKey = getActiveSyncKey();
   const db = getFirebaseDB();
   if (!db) return [];
 
@@ -363,50 +475,7 @@ export async function loadChangedNodesFromFirestore(since: string): Promise<Node
     const querySnapshot = await withTimeout(getDocsFromServer(q), 15000, 'loadChangedNodesFromFirestore');
     
     const nodePromises = querySnapshot.docs.map(async (docSnap) => {
-      let data = docSnap.data();
-      
-      if (syncKey) {
-        if (data.isEncrypted && data.encryptedData) {
-          try {
-            const decrypted = await decryptData(data.encryptedData, syncKey);
-            data = { ...data, ...decrypted };
-          } catch (e) {}
-        } else if (data.isTitleEncrypted) {
-          try {
-            const decryptedTitle = await decryptData(data.title, syncKey);
-            data.title = decryptedTitle;
-          } catch (e) {}
-        } else if (data.isFieldsEncrypted) {
-          try {
-            const decryptedTitle = await decryptData(data.title, syncKey);
-            data.title = decryptedTitle;
-            if (data.description) {
-              const decryptedDesc = await decryptData(data.description, syncKey);
-              data.description = decryptedDesc;
-            }
-          } catch (e) {}
-        }
-      }
-
-      const normalized: Node = {
-        id: data.id || docSnap.id,
-        parentId: data.parentId ?? null,
-        title: data.title ?? '',
-        description: data.description,
-        deadline: data.deadline ?? null,
-        completed: data.completed ?? false,
-        completedAt: data.completedAt ?? null,
-        priority: data.priority,
-        order: data.order,
-        createdAt: data.createdAt ?? data.updatedAt ?? new Date(0).toISOString(),
-        updatedAt: data.updatedAt ?? data.createdAt ?? new Date(0).toISOString(),
-        deletedAt: data.deletedAt ?? null,
-        reminders: data.reminders,
-        sentReminders: data.sentReminders,
-        children: [],
-      };
-
-      return normalized;
+      return normalizeNodeFromPayload(docSnap.data(), docSnap.id);
     });
 
     const nodes = await Promise.all(nodePromises);

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { onAuthChange } from '../firebase/auth';
-import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore, getSyncMeta, loadChangedNodesFromFirestore } from '../firebase/sync';
+import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore, getSyncMeta, loadChangedNodesFromFirestore, subscribeToChangeLog, normalizeNodeFromPayload, getClientId, cleanupChangeLog } from '../firebase/sync';
 import { getAllNodesFlat, clearAllNodes } from '../db';
 import { SyncConflictDialog } from './SyncConflictDialog';
 import { hasDifferences } from '../utils/syncCompare';
@@ -52,12 +52,17 @@ export function SyncManager() {
   const isFirstAuthCheckRef = useRef<boolean>(true); // Флаг первого вызова onAuthChange
   const silentLoadInProgressRef = useRef<boolean>(false); // Флаг, что тихая загрузка уже выполняется
   const lastSilentLoadHashRef = useRef<string | null>(null); // Хеш последних загруженных данных для предотвращения повторной загрузки
+  const changeUnsubRef = useRef<null | (() => void)>(null);
+  const currentUserIdRef = useRef<string | null>(null);
+  const clientIdRef = useRef<string>(getClientId());
   
   // Ключ для хранения времени последней синхронизации в localStorage
   const LAST_SYNC_TIME_KEY = 'last_local_sync_time';
   
   // Время последнего изменения в облаке, о котором мы знаем
   const lastCloudChangeRef = useRef<string | null>(localStorage.getItem(LAST_SYNC_TIME_KEY));
+  const lastChangeSeenRef = useRef<string | null>(null);
+  const getChangeKey = (userId: string) => `last_seen_change_${userId}`;
 
   // Автоматическая загрузка данных из облака и синхронизация (бидирекциональная)
   const loadCloudDataSilently = useCallback(async () => {
@@ -97,9 +102,11 @@ export function SyncManager() {
       let hasChanges = false;
 
       if (!lastLocalSyncTime) {
-        log('[loadCloudDataSilently] No last sync time, performing full fetch');
-        changedNodes = await loadAllNodesFromFirestore(true);
-        hasChanges = changedNodes.length > 0;
+        log('[loadCloudDataSilently] No last sync time, skipping full fetch (change log will handle)');
+        lastCloudChangeRef.current = meta.lastChangedAt;
+        localStorage.setItem(LAST_SYNC_TIME_KEY, meta.lastChangedAt);
+        silentLoadInProgressRef.current = false;
+        return;
       } else {
         log(`[loadCloudDataSilently] Fetching changes since ${lastLocalSyncTime}`);
         changedNodes = await loadChangedNodesFromFirestore(lastLocalSyncTime);
@@ -148,13 +155,102 @@ export function SyncManager() {
     }
   }, []);
 
+  const applyFullCloudSnapshot = useCallback(async () => {
+    const cloud = await loadAllNodesFromFirestore(true);
+    let db: Awaited<ReturnType<typeof openDB>> | null = null;
+    try {
+      await clearAllNodes();
+      db = await openDB('LifeRoadmapDB', 2);
+      const tx = db.transaction('nodes', 'readwrite');
+      for (const node of cloud) {
+        await tx.store.put(node);
+      }
+      await tx.done;
+      notifyDataUpdated();
+    } finally {
+      if (db) await db.close();
+    }
+  }, []);
+
+  const startChangeListener = useCallback(async (userId: string) => {
+    if (changeUnsubRef.current) {
+      changeUnsubRef.current();
+      changeUnsubRef.current = null;
+    }
+
+    const cleanupKey = `last_change_cleanup_${userId}`;
+    const lastCleanup = localStorage.getItem(cleanupKey);
+    if (!lastCleanup || Date.now() - new Date(lastCleanup).getTime() > 24 * 60 * 60 * 1000) {
+      try {
+        await cleanupChangeLog(userId);
+      } finally {
+        localStorage.setItem(cleanupKey, new Date().toISOString());
+      }
+    }
+
+    const key = getChangeKey(userId);
+    let since = localStorage.getItem(key);
+    if (!since) {
+      const meta = await getSyncMeta();
+      since = meta?.lastChangedAt || new Date().toISOString();
+      localStorage.setItem(key, since);
+    }
+    lastChangeSeenRef.current = since;
+
+    changeUnsubRef.current = subscribeToChangeLog(userId, since, async (changes) => {
+      let maxUpdatedAt = lastChangeSeenRef.current || '';
+      let fullSyncRequired = false;
+      const nodesToUpsert: any[] = [];
+
+      for (const change of changes) {
+        if (change.updatedAt && change.updatedAt > maxUpdatedAt) {
+          maxUpdatedAt = change.updatedAt;
+        }
+        if (change.updatedBy && change.updatedBy === clientIdRef.current) {
+          continue;
+        }
+        if (change.type === 'bulk' || change.fullSyncRequired) {
+          fullSyncRequired = true;
+          continue;
+        }
+        if (change.payload) {
+          const node = await normalizeNodeFromPayload(change.payload, change.nodeId);
+          nodesToUpsert.push(node);
+        }
+      }
+
+      if (fullSyncRequired) {
+        await applyFullCloudSnapshot();
+      } else if (nodesToUpsert.length > 0) {
+        let db: Awaited<ReturnType<typeof openDB>> | null = null;
+        try {
+          db = await openDB('LifeRoadmapDB', 2);
+          const tx = db.transaction('nodes', 'readwrite');
+          for (const node of nodesToUpsert) {
+            await tx.store.put(node);
+          }
+          await tx.done;
+          notifyDataUpdated();
+        } finally {
+          if (db) await db.close();
+        }
+      }
+
+      if (maxUpdatedAt) {
+        lastChangeSeenRef.current = maxUpdatedAt;
+        localStorage.setItem(key, maxUpdatedAt);
+      }
+    }, (error) => {
+      console.error('[SyncManager] Change log subscription error:', error);
+    });
+  }, [applyFullCloudSnapshot]);
+
   useEffect(() => {
     const handleActivate = async () => {
       if (document.hidden) return;
-      const { getCurrentUser } = await import('../firebase/auth');
-      const { getActiveSyncKey } = await import('../utils/securityManager');
-      if (!getCurrentUser() || !getActiveSyncKey()) return;
-      await loadCloudDataSilently();
+      if (currentUserIdRef.current) {
+        await startChangeListener(currentUserIdRef.current);
+      }
     };
 
     const handleVisibility = () => {
@@ -168,19 +264,11 @@ export function SyncManager() {
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('focus', handleFocus);
 
-    // Периодическая проверка раз в 30 секунд для обновления при открытом окне
-    const intervalId = setInterval(() => {
-      if (!document.hidden) {
-        void handleActivate();
-      }
-    }, 30000);
-
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('focus', handleFocus);
-      clearInterval(intervalId);
     };
-  }, [loadCloudDataSilently]);
+  }, [startChangeListener]);
 
   const handleFirstSync = useCallback(async (isNewLogin: boolean) => {
     try {
@@ -306,6 +394,7 @@ export function SyncManager() {
         
         // Сохраняем пользователя сразу
         previousUserRef.current = user;
+        currentUserIdRef.current = user.uid;
 
         // Инициализируем систему безопасности (проверяем кэш/конфиг)
         log('[onAuthChange] Initializing security for user', user.uid);
@@ -332,6 +421,7 @@ export function SyncManager() {
         isFirstAuthCheckRef.current = false;
         
         await handleFirstSync(isNewLogin);
+        await startChangeListener(user.uid);
       } else {
         log('[onAuthChange] User signed out or not logged in');
         // При первом вызове, если пользователь не залогинен, устанавливаем previousUserRef в null
@@ -345,6 +435,11 @@ export function SyncManager() {
         silentLoadInProgressRef.current = false;
         lastSilentLoadHashRef.current = null;
         setShowConflictDialog(false);
+        currentUserIdRef.current = null;
+        if (changeUnsubRef.current) {
+          changeUnsubRef.current();
+          changeUnsubRef.current = null;
+        }
       }
     });
 
@@ -355,6 +450,7 @@ export function SyncManager() {
       // Если это тот же пользователь, запускаем синхронизацию
       if (previousUserRef.current && previousUserRef.current.uid === userId) {
         await handleFirstSync(true); // Считаем это новым логином
+        await startChangeListener(userId);
       }
     };
 
@@ -365,7 +461,7 @@ export function SyncManager() {
       unsubscribe();
       window.removeEventListener('security:initialized', handleSecurityInit as EventListener);
     };
-  }, [handleFirstSync]);
+  }, [handleFirstSync, startChangeListener]);
 
   const handleChooseLocal = async () => {
     try {
