@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { initDB, getNode, getRoot, saveNode, deleteNode } from '../db';
+import { syncNodeNow } from '../db-sync';
 import { buildBreadcrumbs, getTotalChildCount } from '../utils';
 import { useNodeNavigation } from '../hooks/useHashRoute';
 import { useToast } from '../hooks/useToast';
@@ -465,7 +466,6 @@ export function NodePage() {
     // Синхронизируем с облаком асинхронно
     (async () => {
       try {
-        const { syncNodeNow } = await import('../db-sync');
         await syncNodeNow(updated);
         
         // Синхронизируем всех родителей вверх по иерархии до корня
@@ -527,7 +527,6 @@ export function NodePage() {
     // Синхронизируем с облаком асинхронно
     (async () => {
       try {
-        const { syncNodeNow } = await import('../db-sync');
         await syncNodeNow(updated);
         // Также синхронизируем всех родителей вверх по иерархии до корня
         let currentParentId = updated.parentId;
@@ -572,7 +571,6 @@ export function NodePage() {
         await saveNode(oldNode);
         // Синхронизируем восстановление
         try {
-          const { syncNodeNow } = await import('../db-sync');
           await syncNodeNow(oldNode);
         } catch (e) {
           console.error('Error syncing undo save:', e);
@@ -600,7 +598,6 @@ export function NodePage() {
     // Синхронизируем с облаком асинхронно
     (async () => {
       try {
-        const { syncNodeNow } = await import('../db-sync');
         await syncNodeNow(node);
         // Также синхронизируем всех родителей вверх по иерархии до корня
         let currentParentId = node.parentId;
@@ -697,7 +694,6 @@ export function NodePage() {
         if (deletedParentId) {
           const parent = await getNode(deletedParentId);
           if (parent) {
-            const { syncNodeNow } = await import('../db-sync');
             await syncNodeNow(parent);
             
             // Синхронизируем всех родителей вверх по иерархии до корня
@@ -877,8 +873,6 @@ export function NodePage() {
       // Синхронизируем изменения (в фоне)
       (async () => {
         try {
-          const { syncNodeNow } = await import('../db-sync');
-          
           // Получаем финальные версии узлов для синхронизации
           const finalTarget = await getNode(targetNodeId);
           const finalSource = await getNode(sourceNodeId);
@@ -933,8 +927,6 @@ export function NodePage() {
     // Синхронизируем изменения с Firestore (в фоне, не блокируем UI)
     (async () => {
       try {
-        const { syncNodeNow } = await import('../db-sync');
-        
         // Синхронизируем только критически важные узлы параллельно
         const syncPromises: Promise<void>[] = [];
         if (oldParent) {

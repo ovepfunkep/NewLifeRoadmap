@@ -45,6 +45,54 @@ function buildTreeFromFlatList(nodes: Node[]): Node | null {
   return root;
 }
 
+/**
+ * Оставить только узлы, которые реально могут отображаться в UI:
+ * - все активные
+ * - удаленные, если они есть только на одной стороне
+ * - удаленные/активные узлы с расхождением статуса удаления
+ * - плюс их предки (чтобы ветка была видимой)
+ */
+function filterVisibleNodes(nodes: Node[], diff: SyncDiff, source: 'local' | 'cloud'): Node[] {
+  const nodeMap = new Map<string, Node>(nodes.map(n => [n.id, { ...n, children: [] }]));
+  const keepIds = new Set<string>();
+
+  const isLocalOnly = (id: string) => diff.localOnly.some(n => n.id === id);
+  const isCloudOnly = (id: string) => diff.cloudOnly.some(n => n.id === id);
+  const isDeleteMismatch = (id: string) => diff.different.some(d => d.nodeId === id && d.differences.includes('deletedAt'));
+
+  nodes.forEach(node => {
+    if (!node.deletedAt) {
+      keepIds.add(node.id);
+      return;
+    }
+    if (source === 'local' && isLocalOnly(node.id)) {
+      keepIds.add(node.id);
+      return;
+    }
+    if (source === 'cloud' && isCloudOnly(node.id)) {
+      keepIds.add(node.id);
+      return;
+    }
+    if (isDeleteMismatch(node.id)) {
+      keepIds.add(node.id);
+    }
+  });
+
+  // Добавляем родителей, чтобы отобразить путь к важным узлам
+  const addParents = (id: string) => {
+    let curr = nodeMap.get(id)?.parentId || null;
+    while (curr) {
+      if (keepIds.has(curr)) break;
+      keepIds.add(curr);
+      curr = nodeMap.get(curr)?.parentId || null;
+    }
+  };
+  Array.from(keepIds).forEach(addParents);
+
+  const keptNodes = Array.from(keepIds).map(id => nodeMap.get(id)!).filter(Boolean);
+  return keptNodes;
+}
+
 interface TreeNodeProps {
   node: Node;
   level: number;
@@ -149,15 +197,17 @@ export function SyncConflictDialog({
       const comparison = compareNodes(localFlat, cloudFlat);
       setDiff(comparison);
 
-      setLocalRoot(buildTreeFromFlatList(localNodes));
-      setCloudRoot(buildTreeFromFlatList(cloudNodes));
+      const visibleLocal = filterVisibleNodes(localNodes, comparison, 'local');
+      const visibleCloud = filterVisibleNodes(cloudNodes, comparison, 'cloud');
+      setLocalRoot(buildTreeFromFlatList(visibleLocal));
+      setCloudRoot(buildTreeFromFlatList(visibleCloud));
       
       const autoExpand = new Set<string>(['root-node']);
       const findAndExpandParents = (nodeId: string | null) => {
         let curr = nodeId;
         while (curr) {
           autoExpand.add(curr);
-          const p = localNodes.find(x => x.id === curr) || cloudNodes.find(x => x.id === curr);
+          const p = visibleLocal.find(x => x.id === curr) || visibleCloud.find(x => x.id === curr);
           curr = p?.parentId || null;
         }
       };

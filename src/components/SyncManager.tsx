@@ -55,6 +55,8 @@ export function SyncManager() {
   const changeUnsubRef = useRef<null | (() => void)>(null);
   const currentUserIdRef = useRef<string | null>(null);
   const clientIdRef = useRef<string>(getClientId());
+  const firstSyncInProgressRef = useRef<boolean>(false);
+  const lastFirstSyncUserIdRef = useRef<string | null>(null);
   
   // Ключ для хранения времени последней синхронизации в localStorage
   const LAST_SYNC_TIME_KEY = 'last_local_sync_time';
@@ -273,12 +275,23 @@ export function SyncManager() {
   const handleFirstSync = useCallback(async (isNewLogin: boolean) => {
     try {
       log(`[handleFirstSync] Starting sync, isNewLogin: ${isNewLogin}`);
-      
+
+      if (isNewLogin) {
+        const userId = currentUserIdRef.current;
+        if (firstSyncInProgressRef.current) return;
+        if (userId && lastFirstSyncUserIdRef.current === userId) return;
+        firstSyncInProgressRef.current = true;
+      }
+
       if (!isNewLogin) {
         await loadCloudDataSilently();
         return;
       }
       
+      if (checkToastIdRef.current) {
+        removeToast(checkToastIdRef.current);
+        checkToastIdRef.current = null;
+      }
       const checkToastId = showToast(t('toast.syncChecking'), undefined, {
         isLoading: true,
         persistent: true
@@ -363,6 +376,12 @@ export function SyncManager() {
       }
     } finally {
       isInitialLoadRef.current = false;
+      if (isNewLogin) {
+        firstSyncInProgressRef.current = false;
+        if (currentUserIdRef.current) {
+          lastFirstSyncUserIdRef.current = currentUserIdRef.current;
+        }
+      }
     }
   }, [showToast, removeToast, loadCloudDataSilently]);
 
@@ -436,6 +455,7 @@ export function SyncManager() {
         lastSilentLoadHashRef.current = null;
         setShowConflictDialog(false);
         currentUserIdRef.current = null;
+        lastFirstSyncUserIdRef.current = null;
         if (changeUnsubRef.current) {
           changeUnsubRef.current();
           changeUnsubRef.current = null;
