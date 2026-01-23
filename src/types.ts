@@ -14,6 +14,7 @@ export interface Node {
   deletedAt?: string | null; // ISO, soft-delete tombstone
   reminders?: number[]; // Интервалы напоминаний в секундах до дедлайна
   sentReminders?: string[]; // Список ID уже отправленных уведомлений (интервал + время)
+  nextReminderAt?: number | null; // Следующее напоминание (epoch ms)
   children: Node[]; // рекурсивная структура
 }
 

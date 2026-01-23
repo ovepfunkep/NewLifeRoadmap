@@ -140,6 +140,36 @@ export function deadlineStatus(node: Node): DeadlineStatus {
   return 'future';
 }
 
+export type ReminderSource = Pick<Node, 'deadline' | 'reminders' | 'sentReminders' | 'completed'>;
+
+// Compute the next reminder time in epoch ms for a node.
+export function computeNextReminderAt(node: ReminderSource): number | null {
+  if (node.completed) return null;
+  if (!node.deadline) return null;
+  if (!node.reminders || node.reminders.length === 0) return null;
+
+  const deadlineMs = new Date(node.deadline).getTime();
+  if (!Number.isFinite(deadlineMs)) return null;
+
+  const sent = new Set(node.sentReminders || []);
+  let nextReminderMs: number | null = null;
+
+  for (const intervalSeconds of node.reminders) {
+    if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) continue;
+    const reminderId = `${intervalSeconds}_${node.deadline}`;
+    if (sent.has(reminderId)) continue;
+
+    const reminderMs = deadlineMs - intervalSeconds * 1000;
+    if (!Number.isFinite(reminderMs)) continue;
+
+    if (nextReminderMs === null || reminderMs < nextReminderMs) {
+      nextReminderMs = reminderMs;
+    }
+  }
+
+  return nextReminderMs;
+}
+
 // Цвет дедлайна: красный < недели, жёлтый < месяца, иначе акцентный
 export function getDeadlineColor(node: Node): string {
   if (!node.deadline) {

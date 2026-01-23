@@ -1,6 +1,7 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { webcrypto } from 'node:crypto';
+import { computeNextReminderAt } from '../src/utils';
 
 const crypto = webcrypto as unknown as Crypto;
 
@@ -143,9 +144,13 @@ async function run() {
 
   // 2. Scan for upcoming deadlines
   const now = new Date();
+  const sendWindowMs = 10 * 60 * 1000; // 10 minutes
+  const scanUntilMs = now.getTime() + sendWindowMs;
+
   const nodesSnapshot = await db.collectionGroup('nodes')
     .where('completed', '==', false)
-    .where('deadline', '!=', null)
+    .where('nextReminderAt', '>', 0)
+    .where('nextReminderAt', '<=', scanUntilMs)
     .get();
 
   console.log(`Found ${nodesSnapshot.docs.length} incomplete tasks with deadlines.`);
@@ -167,15 +172,18 @@ async function run() {
     const mode = userConfig.mode; // 'gdrive' or 'firestore'
     const syncKey = userConfig.syncKey; // May be null if using GDrive mode
     const userTimezone = userConfig.timezone || 'UTC'; // NEW: Get user timezone
-    const sentReminders = node.sentReminders || [];
+    const sentReminders = Array.isArray(node.sentReminders)
+      ? node.sentReminders.filter((item: unknown): item is string => typeof item === 'string')
+      : [];
+    const sentSet = new Set(sentReminders);
+    const newlySent: string[] = [];
 
     for (const intervalSeconds of node.reminders) {
       const reminderTime = new Date(deadline.getTime() - intervalSeconds * 1000);
       const reminderId = `${intervalSeconds}_${node.deadline}`;
 
       // Отправляем, если до времени напоминания осталось 10 минут или оно уже прошло
-      const sendWindowMs = 10 * 60 * 1000; // 10 минут упреждения
-      if (now.getTime() >= (reminderTime.getTime() - sendWindowMs) && !sentReminders.includes(reminderId)) {
+      if (now.getTime() >= (reminderTime.getTime() - sendWindowMs) && !sentSet.has(reminderId)) {
         console.log(`Sending reminder for node ${doc.id} to user ${userId}`);
 
         let title = 'Задача без названия';
@@ -214,11 +222,27 @@ async function run() {
         
         await sendTelegramMessage(chatId, text);
 
-        // Update node to mark reminder as sent
-        await doc.ref.update({
-          sentReminders: FieldValue.arrayUnion(reminderId)
-        });
+        sentSet.add(reminderId);
+        newlySent.push(reminderId);
       }
+    }
+
+    const nextReminderAt = computeNextReminderAt({
+      deadline: node.deadline,
+      reminders: node.reminders,
+      sentReminders: Array.from(sentSet),
+      completed: node.completed,
+    });
+
+    const currentNextReminderAt = node.nextReminderAt ?? null;
+    if (newlySent.length > 0 || nextReminderAt !== currentNextReminderAt) {
+      const updatePayload: Record<string, any> = {
+        nextReminderAt: nextReminderAt ?? null,
+      };
+      if (newlySent.length > 0) {
+        updatePayload.sentReminders = FieldValue.arrayUnion(...newlySent);
+      }
+      await doc.ref.update(updatePayload);
     }
   }
 

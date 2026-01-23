@@ -4,6 +4,7 @@ import { getCurrentUser } from './auth';
 import { Node } from '../types';
 import { getActiveSyncKey } from '../utils/securityManager';
 import { encryptData, decryptData } from '../utils/crypto';
+import { computeNextReminderAt } from '../utils';
 
 function log(..._args: any[]) {
   // console.log('[FirebaseSync]', ..._args);
@@ -126,6 +127,7 @@ export async function normalizeNodeFromPayload(payload: any, nodeIdOverride?: st
     deletedAt: data.deletedAt ?? null,
     reminders: data.reminders,
     sentReminders: data.sentReminders,
+    nextReminderAt: data.nextReminderAt ?? null,
     children: [],
   };
 }
@@ -270,7 +272,8 @@ export async function syncNodeToFirestore(node: Node): Promise<void> {
   try {
     log(`Syncing node to Firestore: ${node.id} (${node.title})`);
     const nodeRef = doc(db, getUserNodesPath(user.uid), node.id);
-    const cleanedData = await encryptNodeFields(node, syncKey);
+    const nodeWithReminder = { ...node, nextReminderAt: computeNextReminderAt(node) };
+    const cleanedData = await encryptNodeFields(nodeWithReminder, syncKey);
     await setDoc(nodeRef, cleanedData);
     await writeChangeLog(cleanedData, user.uid, 'node');
     await updateSyncMeta();
@@ -376,7 +379,8 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
         
         await Promise.all(chunk.map(async (node) => {
           const nodeRef = doc(nodesRef, node.id);
-          const dataToSave = await encryptNodeFields(node, syncKey);
+          const nodeWithReminder = { ...node, nextReminderAt: computeNextReminderAt(node) };
+          const dataToSave = await encryptNodeFields(nodeWithReminder, syncKey);
           batch.set(nodeRef, dataToSave);
         }));
         
@@ -558,6 +562,7 @@ export async function loadAllNodesFromFirestore(forceServer = false): Promise<No
         deletedAt: data.deletedAt ?? null,
         reminders: data.reminders,
         sentReminders: data.sentReminders,
+        nextReminderAt: data.nextReminderAt ?? null,
         children: [],
       };
 
