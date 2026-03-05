@@ -209,51 +209,43 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
             {t('deadline.title')}
           </h2>
-          {hasDeadlines && (
-            <div className="flex items-center gap-1 p-1 rounded-lg bg-gray-100 dark:bg-gray-700">
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-md transition-all ${
-                  viewMode === 'list'
-                    ? 'shadow-sm'
-                    : 'opacity-60 hover:opacity-100'
-                }`}
-                aria-label="Вид списка"
-                style={{
-                  backgroundColor: viewMode === 'list' ? 'var(--accent)' : 'transparent',
-                  color: viewMode === 'list' ? 'white' : 'var(--accent)'
-                }}
-              >
-                <FiList className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('calendar')}
-                className={`p-2 rounded-md transition-all ${
-                  viewMode === 'calendar'
-                    ? 'shadow-sm'
-                    : 'opacity-60 hover:opacity-100'
-                }`}
-                aria-label="Вид календаря"
-                style={{
-                  backgroundColor: viewMode === 'calendar' ? 'var(--accent)' : 'transparent',
-                  color: viewMode === 'calendar' ? 'white' : 'var(--accent)'
-                }}
-              >
-                <FiCalendar className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-gray-100 dark:bg-gray-700">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-md transition-all ${
+                viewMode === 'list'
+                  ? 'shadow-sm'
+                  : 'opacity-60 hover:opacity-100'
+              }`}
+              aria-label="Вид списка"
+              style={{
+                backgroundColor: viewMode === 'list' ? 'var(--accent)' : 'transparent',
+                color: viewMode === 'list' ? 'white' : 'var(--accent)'
+              }}
+            >
+              <FiList className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`p-2 rounded-md transition-all ${
+                viewMode === 'calendar'
+                  ? 'shadow-sm'
+                  : 'opacity-60 hover:opacity-100'
+              }`}
+              aria-label="Вид календаря"
+              style={{
+                backgroundColor: viewMode === 'calendar' ? 'var(--accent)' : 'transparent',
+                color: viewMode === 'calendar' ? 'white' : 'var(--accent)'
+              }}
+            >
+              <FiCalendar className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Контент в зависимости от вида */}
         <div className="flex-1 relative min-h-0">
-          {!hasDeadlines ? (
-            <div className="flex flex-col items-center justify-center py-6 h-full text-center">
-              <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-                {node.children.length > 0 ? t('deadline.noDeadlinesNested') : t('deadline.noDeadlines')}
-              </p>
-            </div>
-          ) : viewMode === 'list' ? (
+          {viewMode === 'list' ? (
             <div className="relative h-full flex flex-col">
               {/* Permanent top fade */}
               <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-white dark:from-gray-800 to-transparent z-10 pointer-events-none" />
