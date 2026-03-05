@@ -194,8 +194,6 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
     return () => window.removeEventListener('resize', checkCompact);
   }, [viewMode]);
 
-  const hasDeadlines = groupedDeadlines.length > 0;
-
   return (
     <>
       <div 
