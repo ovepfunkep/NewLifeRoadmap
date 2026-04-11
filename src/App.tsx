@@ -3,6 +3,8 @@ import { NodePage } from './pages/NodePage';
 import { SyncManager } from './components/SyncManager';
 import { SettingsSyncManager } from './components/SettingsSyncManager';
 import { Snowfall } from './components/Snowfall';
+import { SpringPetals } from './components/SpringPetals';
+import { AMBIENT_SEASON } from './config/ambientSeason';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { ToastProvider, useToast } from './hooks/useToast';
@@ -22,7 +24,7 @@ function AppContent() {
     return (
       <>
         <SettingsSyncManager />
-        <Snowfall />
+        {AMBIENT_SEASON === 'spring' ? <SpringPetals /> : <Snowfall />}
         <NodePage />
         <SyncManager />
         <ToastList toasts={toasts} onRemove={removeToast} />

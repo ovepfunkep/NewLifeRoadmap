@@ -72,7 +72,7 @@ export function generateTutorial(lang: 'ru' | 'en', isMobile: boolean = false): 
                       description:
                         'Теперь умеем: читать, отмечать, радоваться. Переходим к созданию и управлению задачами.\n\n' +
                         'P.S. Перед этим — кастомизируй всё под себя: шестерёнка → тема/акцент/эффекты. ' +
-                        'Да, можно выключить снег. Нет, я не скажу «зачем», но можно.',
+                        'Да, можно выключить лепестки сакуры. Нет, я не скажу «зачем», но можно.',
                       children: [
                         makeBaseNode({
                           title: 'Создай подзадачу',
@@ -180,7 +180,7 @@ export function generateTutorial(lang: 'ru' | 'en', isMobile: boolean = false): 
                       title: '6) Финал: Архив',
                       description:
                         'Ты молодец. Теперь создай папку «Архив» и перетащи туда этот туториал. ' +
-                        'А дальше — уже твоя карта жизни. Я не плачу. Это просто снег в глаза.',
+                        'А дальше — уже твоя карта жизни. Я не плачу. Это просто сакура в глаза.',
                     },
                     now
                   ),
@@ -230,7 +230,7 @@ export function generateTutorial(lang: 'ru' | 'en', isMobile: boolean = false): 
                     description:
                       'Now you can read, complete, celebrate. Time to create and control tasks.\n\n' +
                       'P.S. Customize first: gear → theme/accent/effects. ' +
-                      'Yes, you can turn off snow. No, I won’t ask why.',
+                      'Yes, you can turn off the cherry petals. No, I won’t ask why.',
                     children: [
                       makeBaseNode({
                         title: 'Create a subtask',
@@ -338,7 +338,7 @@ export function generateTutorial(lang: 'ru' | 'en', isMobile: boolean = false): 
                     title: '6) Finale: Archive',
                     description:
                       'Create an “Archive” folder and move this tutorial there. ' +
-                      'Then build your real life map. I’m not emotional. It’s just snow in my eyes.',
+                      'Then build your real life map. I’m not emotional. It’s just cherry blossoms in my eyes.',
                   },
                   now
                 ),

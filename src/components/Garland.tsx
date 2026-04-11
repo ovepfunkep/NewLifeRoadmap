@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useEffects } from '../hooks/useEffects';
 import { useTheme } from '../hooks/useTheme';
 
+/** Зимняя гирлянда. Подключай из Header при AMBIENT_SEASON === 'winter' (рядом со Snowfall). */
 export function Garland() {
   const { effectsEnabled } = useEffects();
   const { theme } = useTheme();
@@ -10,13 +11,12 @@ export function Garland() {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    // Вычисляем количество лампочек в зависимости от ширины экрана
     const updateBulbCount = () => {
       const w = window.innerWidth;
       setWidth(w);
       const mobile = w < 768;
       setIsMobile(mobile);
-      setBulbCount(Math.ceil(w / (mobile ? 80 : 50))); // Реже на мобилках
+      setBulbCount(Math.ceil(w / (mobile ? 80 : 50)));
     };
 
     updateBulbCount();
@@ -24,7 +24,6 @@ export function Garland() {
     return () => window.removeEventListener('resize', updateBulbCount);
   }, []);
 
-  // Если эффекты выключены, не рендерим гирлянду
   if (!effectsEnabled) {
     return null;
   }
@@ -46,20 +45,18 @@ export function Garland() {
         style={{
           display: 'block',
           maxWidth: '100%',
-          paddingTop: '8px'
+          paddingTop: '8px',
         }}
       >
-        {/* Провод гирлянды с провисанием */}
         {width > 0 && (
           <path
-            d={`M 0,5 Q ${width / 2},${isMobile ? 10 : 14} ${width},5`} // Меньше провисание
+            d={`M 0,5 Q ${width / 2},${isMobile ? 10 : 14} ${width},5`}
             fill="none"
             stroke={wireColor}
-            strokeWidth={isMobile ? "1" : "1.5"}
+            strokeWidth={isMobile ? '1' : '1.5'}
             opacity="0.4"
           />
         )}
-        {/* Лампочки */}
         {Array.from({ length: bulbCount }).map((_, index) => {
           const xPercent = bulbCount > 1 ? (index / (bulbCount - 1)) * 100 : 50;
           const y = 5 + Math.sin((index / Math.max(1, bulbCount - 1)) * Math.PI) * (isMobile ? 3 : 5);
@@ -68,7 +65,6 @@ export function Garland() {
 
           return (
             <g key={index}>
-              {/* Провод к лампочке */}
               <line
                 x1={`${xPercent}%`}
                 y1="5"
@@ -78,14 +74,7 @@ export function Garland() {
                 strokeWidth="1"
                 opacity="0.3"
               />
-              {/* Лампочка */}
-              <circle
-                cx={`${xPercent}%`}
-                cy={y + 2}
-                r={isMobile ? "2.5" : "3.5"}
-                fill={color}
-                opacity="0.95"
-              >
+              <circle cx={`${xPercent}%`} cy={y + 2} r={isMobile ? '2.5' : '3.5'} fill={color} opacity="0.95">
                 <animate
                   attributeName="opacity"
                   values="0.6;1;0.6"
@@ -95,20 +84,13 @@ export function Garland() {
                 />
                 <animate
                   attributeName="r"
-                  values={isMobile ? "2;3;2" : "3;4.5;3"}
+                  values={isMobile ? '2;3;2' : '3;4.5;3'}
                   dur="1.5s"
                   begin={`${delay}s`}
                   repeatCount="indefinite"
                 />
               </circle>
-              {/* Свечение вокруг лампочки */}
-              <circle
-                cx={`${xPercent}%`}
-                cy={y + 2}
-                r={isMobile ? "5" : "7"}
-                fill={color}
-                opacity="0.4"
-              >
+              <circle cx={`${xPercent}%`} cy={y + 2} r={isMobile ? '5' : '7'} fill={color} opacity="0.4">
                 <animate
                   attributeName="opacity"
                   values="0.2;0.5;0.2"
@@ -118,7 +100,7 @@ export function Garland() {
                 />
                 <animate
                   attributeName="r"
-                  values={isMobile ? "3;7;3" : "5;9;5"}
+                  values={isMobile ? '3;7;3' : '5;9;5'}
                   dur="1.5s"
                   begin={`${delay}s`}
                   repeatCount="indefinite"

@@ -8,6 +8,7 @@ import { FiEdit2, FiDownload, FiMove, FiCheck, FiTrash2, FiArrowUp } from 'react
 import { Tooltip } from './Tooltip';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Garland } from './Garland';
+import { AMBIENT_SEASON } from '../config/ambientSeason';
 
 interface HeaderProps {
   node: Node;
@@ -101,7 +102,7 @@ export function Header({
                 top: 0
               }}
             >
-              <Garland />
+              {AMBIENT_SEASON === 'winter' && <Garland />}
               <div className="container mx-auto px-4 pt-6 pb-3 relative">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
