@@ -22,7 +22,7 @@ interface Petal {
   baseOpacity: number;
 }
 
-const BASE_HEIGHT_PX = 14;
+const BASE_HEIGHT_PX = 10;
 const DEG = Math.PI / 180;
 /** Было «за кадр» при ~60 FPS — переводим в /сек для стабильной скорости на 120 Hz и т.д. */
 const ASSUMED_FPS = 60;
