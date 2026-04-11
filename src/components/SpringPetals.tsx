@@ -10,18 +10,22 @@ interface Petal {
   baseTilt: number;
   /** Фаза качания: cos(phase) → дрейф влево-вправо и крен в ту же сторону */
   swayPhase: number;
-  swayPhaseSpeed: number;
-  /** Множитель шага по X за кадр при |cos|=1 */
-  swayPixels: number;
+  /** Скорость фазы качания, рад/с (не от FPS) */
+  swayPhaseRadPerSec: number;
+  /** Горизонталь при |cos|=1, пикс/с */
+  swayPixelsPerSec: number;
   /** Макс. крен ±N° (рад): по часовой / против при качании */
   maxBankRad: number;
-  speed: number;
+  /** Скорость падения, пикс/с */
+  fallSpeedPps: number;
   sizeMul: number;
   baseOpacity: number;
 }
 
 const BASE_HEIGHT_PX = 14;
 const DEG = Math.PI / 180;
+/** Было «за кадр» при ~60 FPS — переводим в /сек для стабильной скорости на 120 Hz и т.д. */
+const ASSUMED_FPS = 60;
 
 /** У исходного PNG белый прямоугольник без альфы — делаем светлые «плоские» пиксели прозрачными. Лучше заменить файл на PNG с альфа-каналом. */
 function canvasWithoutFlatWhiteBackdrop(img: HTMLImageElement): HTMLCanvasElement {
@@ -93,10 +97,10 @@ export function SpringPetals() {
         y: Math.random() * canvas.height,
         baseTilt: (Math.random() - 0.5) * 0.08,
         swayPhase: Math.random() * Math.PI * 2,
-        swayPhaseSpeed: 0.011 + Math.random() * 0.016,
-        swayPixels: 0.32 + Math.random() * 0.38,
+        swayPhaseRadPerSec: (0.011 + Math.random() * 0.016) * ASSUMED_FPS,
+        swayPixelsPerSec: (0.32 + Math.random() * 0.38) * ASSUMED_FPS,
         maxBankRad: (18 + Math.random() * 14) * DEG,
-        speed: 0.18 + Math.random() * 0.12,
+        fallSpeedPps: (0.18 + Math.random() * 0.12) * ASSUMED_FPS,
         sizeMul: 0.55 + Math.random() * 0.42,
         baseOpacity: 0.42 + Math.random() * 0.38,
       }));
@@ -111,8 +115,12 @@ export function SpringPetals() {
       resizeCanvas();
       window.addEventListener('resize', resizeCanvas);
 
-      const animate = () => {
+      let lastT: number | null = null;
+      const animate = (t: number) => {
         if (cancelled) return;
+        if (lastT === null) lastT = t;
+        const dt = Math.min((t - lastT) / 1000, 0.05);
+        lastT = t;
 
         const themeMultiplier = themeRef.current === 'dark' ? 0.55 : 1;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -121,11 +129,11 @@ export function SpringPetals() {
         const nw = petalRaster.width;
 
         petalsRef.current.forEach((p) => {
-          p.swayPhase += p.swayPhaseSpeed;
+          p.swayPhase += p.swayPhaseRadPerSec * dt;
           const sway = Math.cos(p.swayPhase);
           // влево-вправо и крен синхронно: вправо (+x) → по часовой (положительный rotate в canvas)
-          p.x += sway * p.swayPixels;
-          p.y += p.speed;
+          p.x += sway * p.swayPixelsPerSec * dt;
+          p.y += p.fallSpeedPps * dt;
 
           const h = BASE_HEIGHT_PX * p.sizeMul;
           const w = (nw / nh) * h;
@@ -153,7 +161,7 @@ export function SpringPetals() {
         animationFrameRef.current = requestAnimationFrame(animate);
       };
 
-      animate();
+      animationFrameRef.current = requestAnimationFrame(animate);
     };
 
     img.onload = tryStart;
