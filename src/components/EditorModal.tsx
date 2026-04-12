@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
-import { generateId } from '../utils';
-import { FiAlertCircle, FiCalendar, FiClock } from 'react-icons/fi';
+import { generateId, buildBreadcrumbs } from '../utils';
+import { FiAlertCircle, FiCalendar, FiClock, FiFolder } from 'react-icons/fi';
+import { getNode } from '../db';
 import { Tooltip } from './Tooltip';
+import { ParentPickerModal } from './ParentPickerModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { TelegramLinkModal } from './TelegramLinkModal';
 import { AuthRequiredModal } from './AuthRequiredModal';
@@ -71,6 +73,13 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
   const [deadlineDate, setDeadlineDate] = useState(getInitialDeadlineDate());
   const [deadlineTime, setDeadlineTime] = useState(getInitialDeadlineTime());
   const [priority, setPriority] = useState(node?.priority || false);
+  const [chosenParentId, setChosenParentId] = useState<string | null>(null);
+  const [showParentPicker, setShowParentPicker] = useState(false);
+  /** null = загрузка; parentTitle — выбранный родитель, fullPath — цепочка для тултипа */
+  const [parentLocation, setParentLocation] = useState<{
+    parentTitle: string;
+    fullPath: string;
+  } | null>(null);
   const [reminders, setReminders] = useState<{ value: number; unit: 'hours' | 'days' }[]>(() => {
     if (node?.reminders) {
       return node.reminders.map(seconds => {
@@ -117,16 +126,47 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
     }
   }, [node, initialDeadline]);
 
-  // Обработка ESC
+  useEffect(() => {
+    if (!node) {
+      setChosenParentId(parentId);
+    }
+  }, [node, parentId]);
+
+  useEffect(() => {
+    if (node) return;
+    const id = chosenParentId ?? parentId;
+    if (!id) {
+      setParentLocation({ parentTitle: '', fullPath: '' });
+      return;
+    }
+    setParentLocation(null);
+    let cancelled = false;
+    (async () => {
+      const crumbs = await buildBreadcrumbs(id, getNode);
+      if (cancelled) return;
+      const parentTitle = crumbs[crumbs.length - 1]?.title ?? '';
+      const fullPath = crumbs.map((c) => c.title).join(' / ');
+      setParentLocation({ parentTitle, fullPath });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [node, chosenParentId, parentId]);
+
+  // Обработка ESC: сначала закрыть пикер родителя, иначе всю модалку
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        if (showParentPicker) {
+          setShowParentPicker(false);
+        } else {
+          onClose();
+        }
       }
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [onClose]);
+  }, [onClose, showParentPicker]);
 
   const handleBackdropMouseDown = (e: React.MouseEvent) => {
     // Запоминаем, где начался клик
@@ -256,7 +296,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
         }
       : {
           id: generateId(),
-          parentId,
+          parentId: chosenParentId ?? parentId,
           title: title.trim(),
           description: description.trim() || undefined,
           deadline,
@@ -283,9 +323,45 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
         className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md mx-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6">
-          {node ? t('node.editNode') : t('node.createChild')}
-        </h2>
+        <div className="mb-6 flex min-w-0 items-center gap-3">
+          <h2
+            className={`m-0 shrink-0 text-xl font-bold leading-tight text-gray-900 dark:text-gray-100 ${
+              !node ? '-translate-y-0.5' : ''
+            }`}
+          >
+            {node ? t('node.editNode') : t('node.createChild')}
+          </h2>
+          {!node && (
+            <div className="flex min-w-0 flex-1 items-center">
+              <div className="min-w-0 w-full">
+              <Tooltip
+                text={
+                  parentLocation === null
+                    ? t('general.loading')
+                    : parentLocation.fullPath || parentLocation.parentTitle || t('editor.pickParentTooltip')
+                }
+                multiline
+              >
+                <button
+                  type="button"
+                  onClick={() => setShowParentPicker(true)}
+                  className="flex w-full min-w-0 items-center gap-2 rounded-xl border-2 border-gray-300 px-2.5 py-2 text-left transition-colors hover:border-accent/50 dark:border-gray-600"
+                  aria-label={t('editor.pickParentTooltip')}
+                >
+                  <FiFolder
+                    size={18}
+                    className="shrink-0 text-gray-700 opacity-50 dark:text-gray-200"
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200">
+                    {parentLocation === null ? t('general.loading') : parentLocation.parentTitle}
+                  </span>
+                </button>
+              </Tooltip>
+              </div>
+            </div>
+          )}
+        </div>
         
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="flex items-center gap-3">
@@ -474,6 +550,12 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
               setShowAuthModal(false);
               handleAddReminder();
             }}
+          />
+        )}
+        {showParentPicker && (
+          <ParentPickerModal
+            onSelectParent={(id) => setChosenParentId(id)}
+            onClose={() => setShowParentPicker(false)}
           />
         )}
       </div>

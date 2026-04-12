@@ -39,6 +39,10 @@ export const i18n: Record<Language, Record<string, any>> = {
       description: 'Description',
       deadline: 'Deadline',
       time: 'Time',
+      pickParentTooltip: 'Choose where to place this task',
+      pickParentTitle: 'Parent location',
+      pickParentSubtitle: 'Select the task that will contain the new subtask',
+      pickParentRootHint: '(top level)',
     },
     filter: {
       all: 'All',
@@ -182,6 +186,10 @@ export const i18n: Record<Language, Record<string, any>> = {
       description: 'Описание',
       deadline: 'Дедлайн',
       time: 'Время',
+      pickParentTooltip: 'Куда поместить задачу',
+      pickParentTitle: 'Расположение задачи',
+      pickParentSubtitle: 'Выберите задачу, внутри которой будет создана подзадача',
+      pickParentRootHint: '(в общий список)',
     },
     filter: {
       all: 'Все',
