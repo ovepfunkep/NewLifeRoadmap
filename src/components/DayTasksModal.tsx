@@ -55,16 +55,18 @@ export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onMarkCo
     onMarkCompleted(taskId, completed);
   };
 
-  // Обработка ESC
+  // ESC в capture: глобальные hotkeys NodePage тоже на window, но в bubble и зарегистрированы раньше — иначе ESC уходит в «к родителю»
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
         onClose();
       }
     };
 
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
+    window.addEventListener('keydown', handleEscape, true);
+    return () => window.removeEventListener('keydown', handleEscape, true);
   }, [onClose]);
 
   const handleBackdropMouseDown = (e: React.MouseEvent) => {
