@@ -94,7 +94,8 @@ export function SpringPetals() {
       const count = Math.floor(area / 26000);
       petalsRef.current = Array.from({ length: count }, () => ({
         x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
+        // Стартуют только выше экрана, чтобы падать сверху вниз.
+        y: -Math.random() * (canvas.height + 120),
         baseTilt: (Math.random() - 0.5) * 0.08,
         swayPhase: Math.random() * Math.PI * 2,
         swayPhaseRadPerSec: (0.011 + Math.random() * 0.016) * ASSUMED_FPS,
@@ -185,7 +186,7 @@ export function SpringPetals() {
     <canvas
       ref={canvasRef}
       className="fixed top-0 left-0 pointer-events-none"
-      style={{ zIndex: 40 }}
+      style={{ zIndex: 60 }}
     />
   );
 }
