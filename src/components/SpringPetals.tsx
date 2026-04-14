@@ -185,7 +185,7 @@ export function SpringPetals() {
     <canvas
       ref={canvasRef}
       className="fixed top-0 left-0 pointer-events-none"
-      style={{ zIndex: 9998 }}
+      style={{ zIndex: 40 }}
     />
   );
 }

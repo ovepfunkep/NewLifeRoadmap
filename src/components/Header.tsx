@@ -8,6 +8,7 @@ import { FiEdit2, FiDownload, FiMove, FiCheck, FiTrash2, FiArrowUp } from 'react
 import { Tooltip } from './Tooltip';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Garland } from './Garland';
+import { SpringTrees } from './SpringTrees';
 import { AMBIENT_SEASON } from '../config/ambientSeason';
 
 interface HeaderProps {
@@ -103,6 +104,7 @@ export function Header({
               }}
             >
               {AMBIENT_SEASON === 'winter' && <Garland />}
+              {AMBIENT_SEASON === 'spring' && <SpringTrees />}
               <div className="container mx-auto px-4 pt-6 pb-3 relative">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
