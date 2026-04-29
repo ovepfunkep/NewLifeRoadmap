@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useEffects } from '../hooks/useEffects';
 import { useTheme } from '../hooks/useTheme';
 import sakuraPetalUrl from '../assets/SakuraLeaf.png';
@@ -56,9 +56,36 @@ export function SpringPetals() {
   const { theme } = useTheme();
   const themeRef = useRef(theme);
   themeRef.current = theme;
+  const [isAnyModalOpen, setIsAnyModalOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | null>(null);
   const petalsRef = useRef<Petal[]>([]);
+
+  // Когда открыта модалка, её overlay обычно имеет backdrop-blur.
+  // Чтобы blur применялся к лепесткам как к фону, опускаем canvas ниже overlay по z-index.
+  useEffect(() => {
+    if (!effectsEnabled) {
+      setIsAnyModalOpen(false);
+      return;
+    }
+
+    const selector = 'div.fixed.inset-0.backdrop-blur-sm';
+    const hasModal = () => Boolean(document.querySelector(selector));
+
+    let last = hasModal();
+    setIsAnyModalOpen(last);
+
+    const observer = new MutationObserver(() => {
+      const next = hasModal();
+      if (next !== last) {
+        last = next;
+        setIsAnyModalOpen(next);
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [effectsEnabled]);
 
   useEffect(() => {
     if (!effectsEnabled) {
@@ -186,7 +213,10 @@ export function SpringPetals() {
     <canvas
       ref={canvasRef}
       className="fixed top-0 left-0 pointer-events-none"
-      style={{ zIndex: 60 }}
+      style={{
+        // Под модалкой (z-50) — чтобы backdrop-blur размывал лепестки.
+        zIndex: isAnyModalOpen ? 40 : 60,
+      }}
     />
   );
 }
