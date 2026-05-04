@@ -6,6 +6,7 @@ import { FiAlertCircle, FiCalendar, FiClock, FiFolder } from 'react-icons/fi';
 import { getNode } from '../db';
 import { Tooltip } from './Tooltip';
 import { ParentPickerModal } from './ParentPickerModal';
+import { Z_MODAL } from '../config/zLayers';
 import { useLanguage } from '../contexts/LanguageContext';
 import { TelegramLinkModal } from './TelegramLinkModal';
 import { AuthRequiredModal } from './AuthRequiredModal';
@@ -314,7 +315,8 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      style={{ zIndex: Z_MODAL }}
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >

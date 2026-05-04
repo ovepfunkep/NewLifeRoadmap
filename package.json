@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && node scripts/postbuild-gh-pages.mjs",
     "build:gh-pages": "GITHUB_PAGES_BASE=/NewLifeRoadmap/ npm run build",
     "preview": "vite preview",
     "test": "vitest",

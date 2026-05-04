@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Z_HEADER_DECOR } from '../config/zLayers';
 import { useEffects } from '../hooks/useEffects';
 import { useTheme } from '../hooks/useTheme';
 
@@ -36,7 +37,7 @@ export function Garland() {
       className="fixed top-0 left-0 right-0 pointer-events-none overflow-hidden"
       style={{
         height: '30px',
-        zIndex: 9999,
+        zIndex: Z_HEADER_DECOR,
       }}
     >
       <svg

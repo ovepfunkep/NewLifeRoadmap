@@ -66,7 +66,6 @@ export function NodeCard({
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressDelayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Состояние для барабана действий на мобильных (магнит + бесконечная лента)
   const [baseActionIndex, setBaseActionIndex] = useState(0);
   const baseActionIndexRef = useRef(0);
@@ -754,28 +753,27 @@ export function NodeCard({
             x: { duration: effectsEnabled ? 0.8 : 0, ease: "easeIn" },
             opacity: { duration: isMovingOut ? (effectsEnabled ? 0.4 : 0) : 0.3 },
           }}
-          className={`bg-white dark:bg-gray-800 rounded-xl border transition-all overflow-visible relative flex flex-col min-h-[140px] hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:hover:shadow-[0_25px_50px_-12px_rgba(255,255,255,0.1)] ${
-            node.priority 
-              ? 'border-[3px]' 
-              : 'border-gray-300 dark:border-gray-700'
+          className={`bg-white dark:bg-gray-800 rounded-2xl transition-[border-color,box-shadow] duration-500 ease-out overflow-hidden relative flex flex-col min-h-[140px] hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:hover:shadow-[0_25px_50px_-12px_rgba(255,255,255,0.1)] ${
+            node.priority
+              ? 'border-[3px]'
+              : 'border border-gray-300 dark:border-gray-700'
           } ${
             isDragOver ? 'ring-2 ring-offset-2' : ''
           } ${
             draggedNode && draggedNode.id !== node.id ? 'opacity-60' : ''
           } ${node.completed ? 'bg-accent/20 dark:bg-accent/30' : ''}`}
           style={{
-            ...(node.priority ? { borderColor: 'var(--accent)' } : {}),
             ...(node.completed ? { 
               opacity: 1, 
               backgroundColor: 'rgba(var(--accent-rgb), 0.2)',
             } : {}),
-            boxShadow: node.priority 
-              ? '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)' 
-              : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-            ...(isDragOver ? { 
-              boxShadow: `0 0 0 3px var(--accent), 0 12px 24px rgba(0, 0, 0, 0.2), 0 8px 16px rgba(0, 0, 0, 0.1)`, 
-              transition: 'all 0.3s ease'
-            } : {}),
+            ...(node.priority ? { borderColor: 'var(--accent)' } : {}),
+            boxShadow: isDragOver
+              ? `0 0 0 3px var(--accent), 0 12px 24px rgba(0, 0, 0, 0.2), 0 8px 16px rgba(0, 0, 0, 0.1)`
+              : node.priority
+                ? '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
+                : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+            ...(isDragOver ? { transition: 'all 0.3s ease' } : {}),
             ...(draggedNode && draggedNode.id !== node.id && (!currentNodeId || node.id !== currentNodeId) ? {
               borderColor: 'var(--accent)',
               opacity: 0.7
@@ -788,7 +786,7 @@ export function NodeCard({
           onMouseUp={handleCardMouseUp}
           onTouchEnd={handleCardTouchEnd}
         >
-          <div className="flex flex-col flex-1 relative">
+          <div className="flex flex-col flex-1 relative z-[2]">
             <div
               className={`flex-1 min-w-0 p-0 flex flex-col ${isMobile ? 'pr-16' : ''}`}
               onMouseDown={handleMouseDown}
@@ -891,9 +889,9 @@ export function NodeCard({
             )}
           </div>
 
-          {/* Прогресс бар в самом низу */}
+          {/* Прогресс: нижние углы задаёт обрезка карточки (overflow-hidden), без ручного calc */}
           {node.children.length > 0 && (
-            <div className="absolute bottom-0 left-0 right-0 h-7 bg-gray-100 dark:bg-gray-700/50 overflow-hidden border-t border-gray-200 dark:border-gray-700 rounded-b-xl">
+            <div className="absolute bottom-0 left-0 right-0 h-7 bg-gray-100 dark:bg-gray-700/50 overflow-hidden border-t border-gray-200 dark:border-gray-700">
               <div
                 className={`h-full transition-all duration-500 ${isBlinking ? 'animate-pulse' : ''}`}
                 style={{

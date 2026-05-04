@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { FiAlertTriangle, FiX } from 'react-icons/fi';
 import { t } from '../i18n';
+import { Z_MODAL } from '../config/zLayers';
 
 interface ConfirmDialogProps {
   title: string;
@@ -33,7 +34,8 @@ export function ConfirmDialog({
 
   return (
     <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+      style={{ zIndex: Z_MODAL }}
       onClick={onCancel}
     >
       <div

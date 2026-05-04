@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Z_HEADER_DECOR } from '../config/zLayers';
 import { useEffects } from '../hooks/useEffects';
 import sakuraTreeUrl from '../assets/SakuraTree.png';
 
@@ -30,7 +31,7 @@ export function SpringTrees() {
   return (
     <div
       className="fixed top-0 left-0 right-0 pointer-events-none overflow-hidden"
-      style={{ height: '46px', zIndex: 9999 }}
+      style={{ height: '46px', zIndex: Z_HEADER_DECOR }}
     >
       <div className="relative w-full h-full">
         {Array.from({ length: treeCount }).map((_, index) => (

@@ -94,12 +94,9 @@ export function Header({
 
     return (
             <header 
-              className={`sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b overflow-visible transition-all ${
-                node.priority ? 'border-b-[3px]' : 'border-gray-300 dark:border-gray-800'
-              }`}
+              className="sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-300 dark:border-gray-800 overflow-visible transition-all"
               style={{
                 boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                borderColor: node.priority ? 'var(--accent)' : undefined,
                 top: 0
               }}
             >

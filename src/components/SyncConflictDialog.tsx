@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
 import { SyncDiff, compareNodes, isSignificantNodeDiff } from '../utils/syncCompare';
+import { Z_MODAL } from '../config/zLayers';
 
 interface SyncConflictDialogProps {
   localNodes: Node[];
@@ -242,7 +243,8 @@ export function SyncConflictDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4"
+      className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-md p-4"
+      style={{ zIndex: Z_MODAL }}
       onMouseDown={(e) => {
         clickStartRef.current = {
           target: e.target,

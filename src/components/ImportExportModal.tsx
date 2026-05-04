@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Node, ImportStrategy } from '../types';
 import { t } from '../i18n';
 import { bulkImport } from '../db';
+import { Z_MODAL } from '../config/zLayers';
 
 interface ImportExportModalProps {
   currentNode: Node;
@@ -86,7 +87,8 @@ export function ImportExportModal({ currentNode, onImport, onClose }: ImportExpo
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      style={{ zIndex: Z_MODAL }}
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
 import { getRoot, getNode } from '../db';
 import { t } from '../i18n';
+import { Z_MODAL } from '../config/zLayers';
 
 interface MoveModalProps {
   sourceNodeId: string;
@@ -186,7 +187,10 @@ export function MoveModal({ sourceNodeId, onMove, onClose }: MoveModalProps) {
 
   if (!rootNode) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div
+        className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        style={{ zIndex: Z_MODAL }}
+      >
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6">
           <p className="text-gray-600 dark:text-gray-400">{t('general.loading')}</p>
         </div>
@@ -196,7 +200,8 @@ export function MoveModal({ sourceNodeId, onMove, onClose }: MoveModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      style={{ zIndex: Z_MODAL }}
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >

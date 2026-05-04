@@ -1,4 +1,5 @@
 import { FiShield, FiHardDrive, FiLock } from 'react-icons/fi';
+import { Z_MODAL } from '../config/zLayers';
 
 interface SecurityChoiceModalProps {
   onChoice: (choice: 'gdrive' | 'firestore') => void;
@@ -6,7 +7,10 @@ interface SecurityChoiceModalProps {
 
 export function SecurityChoiceModal({ onChoice }: SecurityChoiceModalProps) {
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
+    <div
+      className="fixed inset-0 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
+      style={{ zIndex: Z_MODAL }}
+    >
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full overflow-hidden animate-in zoom-in duration-300 border border-gray-100 dark:border-gray-700">
         <div className="p-6">
           <div className="flex items-center gap-4 mb-8">

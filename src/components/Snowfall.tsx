@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Z_AMBIENT } from '../config/zLayers';
 import { useEffects } from '../hooks/useEffects';
 
 interface Snowflake {
@@ -114,7 +115,7 @@ export function Snowfall() {
       ref={canvasRef}
       className="fixed top-0 left-0 pointer-events-none"
       style={{
-        zIndex: 9998, // Ниже гирлянды (9999), поверх контента
+        zIndex: Z_AMBIENT,
       }}
     />
   );

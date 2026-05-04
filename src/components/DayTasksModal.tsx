@@ -3,6 +3,7 @@ import { Node } from '../types';
 import { buildBreadcrumbs, getDeadlineColor, formatDeadline } from '../utils';
 import { getNode } from '../db';
 import { FiX, FiPlus, FiCheck } from 'react-icons/fi';
+import { Z_MODAL } from '../config/zLayers';
 
 interface DayTasksModalProps {
   date: Date;
@@ -100,7 +101,8 @@ export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onMarkCo
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      style={{ zIndex: Z_MODAL }}
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >

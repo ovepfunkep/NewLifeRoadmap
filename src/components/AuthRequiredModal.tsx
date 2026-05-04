@@ -1,5 +1,6 @@
 import { useTranslation } from '../i18n';
 import { signInWithGoogle } from '../firebase/auth';
+import { Z_MODAL_HIGH } from '../config/zLayers';
 
 interface AuthRequiredModalProps {
   onClose: () => void;
@@ -20,7 +21,10 @@ export function AuthRequiredModal({ onClose, onSuccess }: AuthRequiredModalProps
   };
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      style={{ zIndex: Z_MODAL_HIGH }}
+    >
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-8 w-full max-w-sm animate-in zoom-in-95 duration-200 text-center">
         <div className="w-20 h-20 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-6">
           <span className="text-4xl">🔐</span>

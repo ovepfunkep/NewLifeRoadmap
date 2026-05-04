@@ -51,10 +51,9 @@ const firebaseConfig = {
 ## Шаг 5: Настройка переменных окружения
 
 1. Скопируйте файл `.env.example` в `.env`:
-   ```bash
+  ```bash
    cp .env.example .env
-   ```
-
+  ```
 2. Откройте `.env` и заполните значения из Firebase:
 
 ```env
@@ -88,15 +87,14 @@ service cloud.firestore {
 }
 ```
 
-3. Нажмите "Publish"
+1. Нажмите "Publish"
 
 ## Шаг 7: Проверка работы
 
 1. Запустите приложение:
-   ```bash
+  ```bash
    npm run dev
-   ```
-
+  ```
 2. В правом верхнем углу нажмите "Войти через Google"
 3. Выберите Google аккаунт
 4. После входа данные должны синхронизироваться
@@ -104,15 +102,18 @@ service cloud.firestore {
 ## Устранение проблем
 
 ### Ошибка "Firebase config is missing"
+
 - Проверьте, что файл `.env` существует и содержит все переменные
 - Убедитесь, что переменные начинаются с `VITE_`
 - Перезапустите dev-сервер после изменения `.env`
 
 ### Ошибка авторизации
+
 - Убедитесь, что Google Sign-In включен в Firebase Console
 - Проверьте, что домен добавлен в авторизованные домены (для production)
 
 ### Данные не синхронизируются
+
 - Проверьте консоль браузера на ошибки
 - Убедитесь, что правила Firestore настроены правильно
 - Проверьте, что пользователь авторизован
@@ -124,17 +125,11 @@ service cloud.firestore {
 1. Перейдите в Settings вашего репозитория на GitHub
 2. Выберите **Secrets and variables** → **Actions**
 3. Добавьте следующие секреты:
-   - `VITE_FIREBASE_API_KEY`
-   - `VITE_FIREBASE_AUTH_DOMAIN`
-   - `VITE_FIREBASE_PROJECT_ID`
-   - `VITE_FIREBASE_STORAGE_BUCKET`
-   - `VITE_FIREBASE_MESSAGING_SENDER_ID`
-   - `VITE_FIREBASE_APP_ID`
-
+  - `VITE_FIREBASE_API_KEY`
+  - `VITE_FIREBASE_AUTH_DOMAIN`
+  - `VITE_FIREBASE_PROJECT_ID`
+  - `VITE_FIREBASE_STORAGE_BUCKET`
+  - `VITE_FIREBASE_MESSAGING_SENDER_ID`
+  - `VITE_FIREBASE_APP_ID`
 4. Обновите `.github/workflows/deploy.yml` для использования этих секретов в `env`
-
-
-
-
-
 

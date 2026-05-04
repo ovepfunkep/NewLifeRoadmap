@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { useTheme } from '../hooks/useTheme';
 import { useAccent } from '../hooks/useAccent';
 import { useEffects } from '../hooks/useEffects';
@@ -7,7 +7,9 @@ import { FiSun, FiMoon } from 'react-icons/fi';
 import { FaGraduationCap } from 'react-icons/fa';
 import { SparklesIcon } from './SparklesIcon';
 import { recreateTutorial } from '../db';
+import { Z_SETTINGS } from '../config/zLayers';
 import { useToast } from '../hooks/useToast';
+import { Tooltip } from './Tooltip';
 
 type Language = 'ru' | 'en';
 
@@ -189,7 +191,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
         height: isMobile ? '48px' : `${radius * 2}px`,
         right: '1.5rem',
         bottom: '1.5rem',
-        zIndex: 40,
+        zIndex: Z_SETTINGS,
       }}
     >
       {/* Шестеренка (свернутое состояние) - отцентрирована внутри контейнера */}
@@ -340,14 +342,13 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
               : `translate(calc(-50% + ${buttonRadius * Math.cos(rad)}px), calc(-50% + ${buttonRadius * Math.sin(rad)}px)) scale(1)`
             : 'translate(-50%, -50%) scale(0)';
 
-          return (
+          const radialButton = (
             <button
-              key={idx}
               onClick={(e) => {
                 e.stopPropagation();
                 pos.action();
               }}
-              className={`absolute w-10 h-10 rounded-lg border-2 transition-all duration-[333ms] flex items-center justify-center group z-10 shadow-lg backdrop-blur-md ${
+              className={`absolute w-10 h-10 rounded-lg border-2 transition-all duration-[333ms] flex items-center justify-center z-10 shadow-lg backdrop-blur-md ${
                 isActive
                   ? 'border-transparent'
                   : 'border-current hover:bg-accent/10 hover:brightness-150'
@@ -365,13 +366,15 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
               }}
             >
               <Icon size={20} />
-              {/* Tooltip (только на десктопе) */}
-              {!isMobile && (
-                <span className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs text-gray-600 dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none bg-white dark:bg-gray-800 px-2 py-1 rounded shadow-lg border border-gray-200 dark:border-gray-700">
-                  {pos.label}
-                </span>
-              )}
             </button>
+          );
+
+          return !isMobile ? (
+            <Tooltip key={idx} text={pos.label}>
+              {radialButton}
+            </Tooltip>
+          ) : (
+            <Fragment key={idx}>{radialButton}</Fragment>
           );
         })}
       </div>
@@ -380,11 +383,12 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
       {showPalette && (
         <>
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0"
+            style={{ zIndex: 1 }}
             onClick={() => setShowPalette(false)}
           />
           <div 
-            className="absolute z-50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-lg shadow-xl border border-gray-200 dark:border-gray-700"
+            className="absolute bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-lg shadow-xl border border-gray-200 dark:border-gray-700"
             onClick={(e) => e.stopPropagation()}
             onMouseEnter={() => {
               if (timeoutRef.current !== null && !isMobile) {
@@ -399,6 +403,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
               transform: isMobile ? 'none' : 'translateY(-50%)',
               padding: '12px',
               display: 'inline-block',
+              zIndex: 2,
             }}
           >
             <div 
