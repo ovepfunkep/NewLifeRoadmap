@@ -26,6 +26,7 @@ import {
 import { FiChevronLeft, FiChevronRight, FiFolder, FiRotateCw } from 'react-icons/fi';
 import { getNode } from '../db';
 import { useTranslation } from '../i18n';
+import { useNodeNavigation } from '../hooks/useHashRoute';
 import { Node } from '../types';
 import { Z_MODAL } from '../config/zLayers';
 import {
@@ -35,6 +36,7 @@ import {
   shiftDashboardAnchor,
 } from '../utils/dashboardStats';
 import { DashboardNodePickerModal } from './DashboardNodePickerModal';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface DashboardModalProps {
   initialNodeId: string;
@@ -61,6 +63,11 @@ interface TreemapCellProps {
   size?: number;
   minSize?: number;
   maxSize?: number;
+}
+
+interface TreemapNavigateTarget {
+  id: string;
+  name: string;
 }
 
 const CHART_COLORS = {
@@ -219,6 +226,7 @@ function TreemapCell(props: TreemapCellProps) {
 
 export function DashboardModal({ initialNodeId, onClose }: DashboardModalProps) {
   const t = useTranslation();
+  const [, navigateToNode] = useNodeNavigation();
   const modalRef = useRef<HTMLDivElement>(null);
   const clickStartRef = useRef<{ inside: boolean } | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState(initialNodeId);
@@ -226,6 +234,7 @@ export function DashboardModal({ initialNodeId, onClose }: DashboardModalProps) 
   const [period, setPeriod] = useState<DashboardPeriod>('month');
   const [periodAnchor, setPeriodAnchor] = useState(() => new Date());
   const [showPicker, setShowPicker] = useState(false);
+  const [navigateTarget, setNavigateTarget] = useState<TreemapNavigateTarget | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -366,6 +375,22 @@ export function DashboardModal({ initialNodeId, onClose }: DashboardModalProps) 
 
   const handleResetPeriod = () => {
     setPeriodAnchor(new Date());
+  };
+
+  const handleTreemapClick = (entry: unknown) => {
+    if (!entry || typeof entry !== 'object') return;
+    const data = entry as Record<string, unknown>;
+    const id = typeof data.id === 'string' ? data.id : null;
+    const name = typeof data.name === 'string' ? data.name : null;
+    if (!id || !name) return;
+    setNavigateTarget({ id, name });
+  };
+
+  const handleConfirmNavigate = () => {
+    if (!navigateTarget) return;
+    navigateToNode(navigateTarget.id);
+    setNavigateTarget(null);
+    onClose();
   };
 
   return (
@@ -613,6 +638,7 @@ export function DashboardModal({ initialNodeId, onClose }: DashboardModalProps) 
                         <Treemap
                           data={currentTreemapChildren}
                           dataKey="size"
+                          onClick={handleTreemapClick}
                           content={
                             <TreemapCell
                               minSize={treemapSizeRange.min}
@@ -636,6 +662,16 @@ export function DashboardModal({ initialNodeId, onClose }: DashboardModalProps) 
           selectedNodeId={selectedTaskId}
           onSelectNode={setSelectedTaskId}
           onClose={() => setShowPicker(false)}
+        />
+      )}
+      {navigateTarget && (
+        <ConfirmDialog
+          title={t('dashboard.navigateTitle')}
+          message={t('dashboard.navigateMessage').replace('{title}', navigateTarget.name)}
+          confirmText={t('dashboard.navigateConfirm')}
+          onConfirm={handleConfirmNavigate}
+          onCancel={() => setNavigateTarget(null)}
+          isDangerous={false}
         />
       )}
     </>

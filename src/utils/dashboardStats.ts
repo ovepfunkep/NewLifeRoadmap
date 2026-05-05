@@ -97,8 +97,9 @@ function visibleChildren(node: Node, endMs: number): Node[] {
 }
 
 function countDirectOpenLeafTasksByEnd(node: Node, endMs: number): number {
-  return visibleChildren(node, endMs).filter(child => {
-    if (visibleChildren(child, endMs).length !== 0) return false;
+  return activeChildren(node).filter(child => {
+    if (!isVisibleByEnd(child, endMs)) return false;
+    if (activeChildren(child).length !== 0) return false;
     return !isClosedByEnd(child, endMs);
   }).length;
 }
@@ -108,7 +109,7 @@ function collectProjectsWithDirectLeafChildren(node: Node, endMs: number): Dashb
   const result: DashboardTreemapNode[] = [];
 
   for (const child of children) {
-    const directChildren = visibleChildren(child, endMs);
+    const directChildren = activeChildren(child);
     if (directChildren.length === 0) continue;
 
     const directOpenLeafTasks = countDirectOpenLeafTasksByEnd(child, endMs);
