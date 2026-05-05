@@ -4,7 +4,7 @@ import { useTranslation } from '../i18n';
 import { useNodeNavigation } from '../hooks/useHashRoute';
 import { computeProgress, getProgressCounts, formatDeadline } from '../utils';
 import { useEffects } from '../hooks/useEffects';
-import { FiEdit2, FiDownload, FiMove, FiCheck, FiTrash2, FiArrowUp } from 'react-icons/fi';
+import { FiEdit2, FiDownload, FiMove, FiCheck, FiTrash2, FiArrowUp, FiBarChart2 } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Garland } from './Garland';
@@ -23,6 +23,7 @@ interface HeaderProps {
   onDelete?: (id: string) => void;
   onImportExport?: () => void;
   onMove?: () => void;
+  onOpenDashboard?: () => void;
   onMarkCompleted?: (id: string, completed: boolean) => void;
   onTogglePriority?: (id: string, priority: boolean) => void;
   currentNodeId?: string;
@@ -40,6 +41,7 @@ export function Header({
   onDelete,
   onImportExport,
   onMove,
+  onOpenDashboard,
   onMarkCompleted,
   onTogglePriority,
   currentNodeId
@@ -246,6 +248,17 @@ export function Header({
                         style={{ color: 'var(--accent)' }}
                       >
                         <FiDownload size={20} className="sm:w-4 sm:h-4" />
+                      </button>
+                    </Tooltip>
+                  )}
+                  {onOpenDashboard && (
+                    <Tooltip text={t('dashboard.open')}>
+                      <button
+                        onClick={onOpenDashboard}
+                        className="p-3 sm:p-2 rounded-lg border border-current transition-all hover:bg-accent/10 hover:brightness-150"
+                        style={{ color: 'var(--accent)' }}
+                      >
+                        <FiBarChart2 size={20} className="sm:w-4 sm:h-4" />
                       </button>
                     </Tooltip>
                   )}

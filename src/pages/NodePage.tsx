@@ -14,6 +14,7 @@ import { DeadlineList } from '../components/DeadlineList';
 import { EditorModal } from '../components/EditorModal';
 import { ImportExportModal } from '../components/ImportExportModal';
 import { MoveModal } from '../components/MoveModal';
+import { DashboardModal } from '../components/DashboardModal';
 import { SettingsWidget } from '../components/SettingsWidget';
 import { Footer } from '../components/Footer';
 import { ConfettiEffect } from '../components/ConfettiEffect';
@@ -33,6 +34,8 @@ export function NodePage() {
   const [sortType, setSortType] = useState<SortType>('none');
   const [filterType, setFilterType] = useState<'all' | 'completed' | 'incomplete'>('all');
   const [showMoveModal, setShowMoveModal] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [dashboardNodeId, setDashboardNodeId] = useState<string | null>(null);
   const [nodeToMove, setNodeToMove] = useState<Node | null>(null);
   const [draggedNode, setDraggedNode] = useState<Node | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
@@ -1128,6 +1131,10 @@ export function NodePage() {
         onDelete={handleDelete}
         onImportExport={handleImportExport}
         onMove={() => setShowMoveModal(true)}
+        onOpenDashboard={() => {
+          setDashboardNodeId(currentNode.id);
+          setShowDashboard(true);
+        }}
         onMarkCompleted={handleMarkCompleted}
         onTogglePriority={handleTogglePriority}
         currentNodeId={currentNode.id}
@@ -1209,6 +1216,13 @@ export function NodePage() {
             setShowMoveModal(false);
             setNodeToMove(null);
           }}
+        />
+      )}
+
+      {showDashboard && (
+        <DashboardModal
+          initialNodeId={dashboardNodeId || currentNode.id}
+          onClose={() => setShowDashboard(false)}
         />
       )}
       
