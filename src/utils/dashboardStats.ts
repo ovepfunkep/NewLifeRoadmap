@@ -96,8 +96,11 @@ function visibleChildren(node: Node, endMs: number): Node[] {
   return activeChildren(node).filter(child => isVisibleByEnd(child, endMs));
 }
 
-function countDirectLeafTasksByEnd(node: Node, endMs: number): number {
-  return visibleChildren(node, endMs).filter(child => visibleChildren(child, endMs).length === 0).length;
+function countDirectOpenLeafTasksByEnd(node: Node, endMs: number): number {
+  return visibleChildren(node, endMs).filter(child => {
+    if (visibleChildren(child, endMs).length !== 0) return false;
+    return !isClosedByEnd(child, endMs);
+  }).length;
 }
 
 function collectProjectsWithDirectLeafChildren(node: Node, endMs: number): DashboardTreemapNode[] {
@@ -108,12 +111,12 @@ function collectProjectsWithDirectLeafChildren(node: Node, endMs: number): Dashb
     const directChildren = visibleChildren(child, endMs);
     if (directChildren.length === 0) continue;
 
-    const directLeafTasks = countDirectLeafTasksByEnd(child, endMs);
-    if (directLeafTasks > 0) {
+    const directOpenLeafTasks = countDirectOpenLeafTasksByEnd(child, endMs);
+    if (directOpenLeafTasks > 0) {
       result.push({
         id: child.id,
         name: child.title,
-        size: directLeafTasks,
+        size: directOpenLeafTasks,
         kind: 'project',
       });
     }
@@ -305,13 +308,14 @@ export function buildDashboardStats(
   const anchorStart = periodStart(anchorDate, period);
   const periodWindow = [-2, -1, 0, 1, 2].map(offset => makeWindowPoint(leaves, period, anchorStart, offset));
 
+  const openNow = Math.max(0, visibleLeaves.length - closedNow);
   const topProjectNodes = collectProjectsWithDirectLeafChildren(selectedNode, selectedEndMs)
     .sort((a, b) => b.size - a.size);
   const topProjects = topProjectNodes.map(item => ({ id: item.id, name: item.name, size: item.size }));
   const treemapRoot: DashboardTreemapNode = {
     id: selectedNode.id,
     name: selectedNode.title,
-    size: visibleLeaves.length,
+    size: openNow,
     kind: 'project',
     children: topProjectNodes,
   };
@@ -321,7 +325,7 @@ export function buildDashboardStats(
     currentPeriodLabel: periodLabel(anchorStart, period),
     summary: {
       leafTotal: visibleLeaves.length,
-      openNow: Math.max(0, visibleLeaves.length - closedNow),
+      openNow,
       closedNow,
       completionRateNow: visibleLeaves.length > 0 ? Math.round((closedNow / visibleLeaves.length) * 100) : 0,
       withDeadline,
@@ -330,7 +334,7 @@ export function buildDashboardStats(
     trend,
     periodWindow,
     openClosedSplit: [
-      { name: 'open', value: Math.max(0, visibleLeaves.length - closedNow) },
+      { name: 'open', value: openNow },
       { name: 'closed', value: closedNow },
     ],
     deadlineSplit: [

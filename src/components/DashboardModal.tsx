@@ -59,6 +59,8 @@ interface TreemapCellProps {
   id?: string;
   name?: string;
   size?: number;
+  minSize?: number;
+  maxSize?: number;
 }
 
 const CHART_COLORS = {
@@ -69,16 +71,57 @@ const CHART_COLORS = {
   pale: 'rgba(var(--accent-rgb), 0.66)',
   whisper: 'rgba(var(--accent-rgb), 0.58)',
 };
-const TREEMAP_COLORS = [
-  CHART_COLORS.strong,
-  CHART_COLORS.medium,
-  CHART_COLORS.soft,
-  CHART_COLORS.faint,
-  CHART_COLORS.pale,
-  CHART_COLORS.whisper,
-];
 const PERIODS: DashboardPeriod[] = ['year', 'quarter', 'month', 'week'];
 const GRID_STROKE = 'rgba(148,163,184,0.18)';
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function normalizeTreemapSize(size: number, minSize: number, maxSize: number): number {
+  if (maxSize <= minSize) return 0.55;
+  const raw = (size - minSize) / (maxSize - minSize);
+  return Math.pow(clamp(raw, 0, 1), 0.72);
+}
+
+function treemapFill(size: number, minSize: number, maxSize: number): string {
+  const intensity = normalizeTreemapSize(size, minSize, maxSize);
+  const blackMix = Math.round(8 + intensity * 40);
+  return `color-mix(in srgb, rgb(var(--accent-rgb)) ${100 - blackMix}%, black ${blackMix}%)`;
+}
+
+function wrapTreemapLabel(text: string, maxCharsPerLine: number, maxLines: number): string[] {
+  if (!text.trim()) return [];
+  const safeCharsPerLine = Math.max(2, maxCharsPerLine);
+  const safeMaxLines = Math.max(1, maxLines);
+  const tokens = text
+    .trim()
+    .split(/\s+/)
+    .flatMap(word => {
+      if (word.length <= safeCharsPerLine) return [word];
+      return word.match(new RegExp(`.{1,${safeCharsPerLine - 1}}`, 'g')) ?? [word];
+    });
+
+  const lines: string[] = [];
+  let index = 0;
+  while (index < tokens.length && lines.length < safeMaxLines) {
+    let line = tokens[index];
+    index += 1;
+    while (index < tokens.length) {
+      const candidate = `${line} ${tokens[index]}`;
+      if (candidate.length > safeCharsPerLine) break;
+      line = candidate;
+      index += 1;
+    }
+    lines.push(line);
+  }
+
+  if (index < tokens.length && lines.length > 0) {
+    lines[lines.length - 1] = `${lines[lines.length - 1].slice(0, Math.max(1, safeCharsPerLine - 1)).trimEnd()}…`;
+  }
+
+  return lines;
+}
 
 function ChartCard({
   title,
@@ -95,7 +138,7 @@ function ChartCard({
 }
 
 function TreemapCell(props: TreemapCellProps) {
-  const { x, y, width, height, index, depth, payload } = props;
+  const { x, y, width, height, payload } = props;
   const node = payload ?? {
     id: props.id || '',
     name: props.name || '',
@@ -107,26 +150,68 @@ function TreemapCell(props: TreemapCellProps) {
   const py = y ?? 0;
   const w = width ?? 0;
   const h = height ?? 0;
-  const idx = index ?? 0;
-  const lvl = depth ?? 0;
+  const minSize = props.minSize ?? 0;
+  const maxSize = props.maxSize ?? 0;
   if (w <= 0 || h <= 0) return null;
-  const fill = TREEMAP_COLORS[(idx + lvl) % TREEMAP_COLORS.length];
-  const canRenderLabel = w > 74 && h > 28;
-  const canRenderValue = w > 92 && h > 46;
-  const title = node.name.length > 26 ? `${node.name.slice(0, 25)}…` : node.name;
+  const size = typeof node.size === 'number' ? node.size : 0;
+  const fill = treemapFill(size, minSize, maxSize);
+  const canRenderLabel = w > 66 && h > 34;
+  const canRenderValue = w > 52 && h > 34;
+  const baseTextColor = 'rgba(255,255,255,0.97)';
+  const fontSize = clamp(Math.floor(Math.min(w * 0.12, h * 0.2)), 12, 26);
+  const valueText = `${size}`;
+  const valueFontSize = clamp(
+    Math.floor(
+      Math.min(
+        h * 0.86,
+        (w - 8) / Math.max(1, valueText.length * 0.56)
+      )
+    ),
+    20,
+    120
+  );
+  const padding = clamp(Math.round(Math.min(w, h) * 0.09), 8, 16);
+  const maxCharsPerLine = Math.max(6, Math.floor((w - padding * 2) / (fontSize * 0.58)));
+  const maxLabelLines = Math.max(1, Math.min(3, Math.floor((h - padding * 2) / (fontSize * 1.16))));
+  const titleLines = wrapTreemapLabel(node.name, maxCharsPerLine, maxLabelLines);
+  const gap = 1;
+  const drawX = px + gap * 0.5;
+  const drawY = py + gap * 0.5;
+  const drawW = Math.max(0, w - gap);
+  const drawH = Math.max(0, h - gap);
+  const textX = drawX + padding;
 
   return (
     <g>
-      <rect x={px} y={py} width={w} height={h} rx={6} ry={6} fill={fill} stroke="#fff" strokeWidth={2} />
-      {canRenderLabel && (
-        <text x={px + 8} y={py + 18} fill="#fff" fontSize={12} fontWeight={700}>
-          {title}
+      <rect x={drawX} y={drawY} width={drawW} height={drawH} rx={8} ry={8} fill={fill} />
+      {canRenderValue && (
+        <text
+          x={drawX + drawW / 2}
+          y={drawY + drawH / 2}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="rgba(255,255,255,0.08)"
+          fontSize={valueFontSize}
+          fontWeight={800}
+        >
+          {valueText}
         </text>
       )}
-      {canRenderValue && (
-        <text x={px + 8} y={py + 34} fill="rgba(255,255,255,0.9)" fontSize={11}>
-          {node.size}
-        </text>
+      {canRenderLabel && (
+        <>
+          {titleLines.map((line, lineIndex) => (
+            <text
+              key={`${node.id}-${lineIndex}`}
+              x={textX}
+              y={drawY + padding + fontSize + lineIndex * fontSize * 1.14}
+              fill={baseTextColor}
+              fontSize={fontSize}
+              fontWeight={700}
+            >
+              {line}
+            </text>
+          ))}
+        </>
       )}
     </g>
   );
@@ -251,6 +336,13 @@ export function DashboardModal({ initialNodeId, onClose }: DashboardModalProps) 
 
   const currentPeriodLabel = stats?.currentPeriodLabel || t('general.loading');
   const currentTreemapChildren = stats?.topProjects || [];
+  const treemapSizeRange = useMemo(() => {
+    if (currentTreemapChildren.length === 0) {
+      return { min: 0, max: 0 };
+    }
+    const sizes = currentTreemapChildren.map(item => item.size);
+    return { min: Math.min(...sizes), max: Math.max(...sizes) };
+  }, [currentTreemapChildren]);
   const pieOuterRadius = isMobile ? 72 : 92;
   const pieInnerRadius = isMobile ? 40 : 52;
 
@@ -521,7 +613,12 @@ export function DashboardModal({ initialNodeId, onClose }: DashboardModalProps) 
                         <Treemap
                           data={currentTreemapChildren}
                           dataKey="size"
-                          content={<TreemapCell />}
+                          content={
+                            <TreemapCell
+                              minSize={treemapSizeRange.min}
+                              maxSize={treemapSizeRange.max}
+                            />
+                          }
                         >
                           <RechartsTooltip />
                         </Treemap>
