@@ -181,7 +181,7 @@ export function Header({
                                   backgroundColor: '#eab308',
                                 }}
                               >
-                                {formatDeadline(node.deadline)}
+                                {formatDeadline(node.deadline, node.deadlineEnd)}
                               </span>
                             </div>
                           )}

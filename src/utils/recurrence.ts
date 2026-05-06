@@ -88,7 +88,16 @@ function buildSlot(node: Node, day: Date): RecurringScheduleSlot {
 function buildOneOffSlot(node: Node, deadlineDate: Date): RecurringScheduleSlot {
   const startMinutes = minutesFromDate(deadlineDate);
   const hasExplicitTime = startMinutes > 0;
-  const endMinutes = hasExplicitTime ? Math.min(startMinutes + 60, MINUTES_PER_DAY) : null;
+  let endMinutes: number | null = hasExplicitTime ? Math.min(startMinutes + 60, MINUTES_PER_DAY) : null;
+  if (hasExplicitTime && node.deadlineEnd) {
+    const deadlineEndDate = new Date(node.deadlineEnd);
+    if (Number.isFinite(deadlineEndDate.getTime()) && toDayKey(deadlineEndDate) === toDayKey(deadlineDate)) {
+      const parsedEnd = minutesFromDate(deadlineEndDate);
+      if (parsedEnd > startMinutes) {
+        endMinutes = Math.min(parsedEnd, MINUTES_PER_DAY);
+      }
+    }
+  }
 
   return {
     taskId: node.id,

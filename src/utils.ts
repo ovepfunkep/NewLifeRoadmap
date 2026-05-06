@@ -236,11 +236,12 @@ export function remapIds(node: Node, existingIds: Set<string>): Node {
   };
 }
 
-// Форматирование дедлайна с временем
-export function formatDeadline(deadline: string | null | undefined): string {
+// Форматирование дедлайна с временем (и опциональным временем окончания)
+export function formatDeadline(deadline: string | null | undefined, deadlineEnd?: string | null): string {
   if (!deadline) return '';
-  const date = new Date(deadline);
-  const dateStr = date.toLocaleDateString('ru-RU', {
+  const startDate = new Date(deadline);
+  if (!Number.isFinite(startDate.getTime())) return '';
+  const dateStr = startDate.toLocaleDateString('ru-RU', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -248,15 +249,32 @@ export function formatDeadline(deadline: string | null | undefined): string {
   
   // Проверяем, есть ли время в ISO строке (не 00:00)
   // В нашем приложении время сохраняется как T00:00:00.000Z если не введено
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
+  const hours = startDate.getHours();
+  const minutes = startDate.getMinutes();
   
   if (hours !== 0 || minutes !== 0) {
-    const timeStr = date.toLocaleTimeString('ru-RU', {
+    const timeStr = startDate.toLocaleTimeString('ru-RU', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
     });
+    if (deadlineEnd) {
+      const endDate = new Date(deadlineEnd);
+      const sameLocalDay =
+        Number.isFinite(endDate.getTime()) &&
+        startDate.getFullYear() === endDate.getFullYear() &&
+        startDate.getMonth() === endDate.getMonth() &&
+        startDate.getDate() === endDate.getDate();
+      const endAfterStart = sameLocalDay && endDate.getTime() > startDate.getTime();
+      if (endAfterStart) {
+        const endTimeStr = endDate.toLocaleTimeString('ru-RU', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+        return `${dateStr} ${timeStr}-${endTimeStr}`;
+      }
+    }
     return `${dateStr} ${timeStr}`;
   }
   

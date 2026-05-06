@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import { Node, NodeRecurrence, RecurrenceFrequency } from '../types';
 import { t } from '../i18n';
 import { generateId, buildBreadcrumbs } from '../utils';
 import { FiAlertCircle, FiCalendar, FiClock, FiFolder } from 'react-icons/fi';
-import { getNode } from '../db';
+import { getAllNodesFlat, getNode } from '../db';
 import { Tooltip } from './Tooltip';
 import { ParentPickerModal } from './ParentPickerModal';
 import { Z_MODAL } from '../config/zLayers';
@@ -13,6 +13,7 @@ import { AuthRequiredModal } from './AuthRequiredModal';
 import { getCurrentUser } from '../firebase/auth';
 import { getUserSecurityConfig } from '../firebase/security';
 import { AnimatePresence, motion } from 'framer-motion';
+import { expandNodesToSlots } from '../utils/recurrence';
 
 interface EditorModalProps {
   node: Node | null; // null = создание нового
@@ -27,6 +28,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
   const { language } = useLanguage();
   const [showTgLinkModal, setShowTgLinkModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [timeConflicts, setTimeConflicts] = useState<Array<{ id: string; title: string }>>([]);
   
   // Форматируем initialDeadline в строку для input type="date"
   const formatDateForInput = (date: Date): string => {
@@ -76,11 +78,28 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     }
     return '';
   };
+
+  const getInitialDeadlineEndTime = (): string => {
+    if (!node && initialRecurring) {
+      return '';
+    }
+    if (node?.deadlineEnd) {
+      const date = new Date(node.deadlineEnd);
+      const hours = date.getHours();
+      const minutes = date.getMinutes();
+      if (hours === 0 && minutes === 0) {
+        return '';
+      }
+      return formatTimeForInput(date);
+    }
+    return '';
+  };
   
   const [title, setTitle] = useState(node?.title || '');
   const [description, setDescription] = useState(node?.description || '');
   const [deadlineDate, setDeadlineDate] = useState(getInitialDeadlineDate());
   const [deadlineTime, setDeadlineTime] = useState(getInitialDeadlineTime());
+  const [deadlineEndTime, setDeadlineEndTime] = useState(getInitialDeadlineEndTime());
   const [isRecurring, setIsRecurring] = useState(node?.isRecurring || !!initialRecurring);
   const [recurrenceFreq, setRecurrenceFreq] = useState<RecurrenceFrequency>(node?.recurrence?.freq || initialRecurring?.freq || 'daily');
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>(node?.recurrence?.weekdays || initialRecurring?.weekdays || [1]);
@@ -125,6 +144,18 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
         setDeadlineDate('');
         setDeadlineTime('');
       }
+      if (node.deadlineEnd) {
+        const endDate = new Date(node.deadlineEnd);
+        const endHours = endDate.getHours();
+        const endMinutes = endDate.getMinutes();
+        if (endHours === 0 && endMinutes === 0) {
+          setDeadlineEndTime('');
+        } else {
+          setDeadlineEndTime(formatTimeForInput(endDate));
+        }
+      } else {
+        setDeadlineEndTime('');
+      }
       setIsRecurring(node.isRecurring || false);
       setRecurrenceFreq(node.recurrence?.freq || 'daily');
       setRecurrenceWeekdays(node.recurrence?.weekdays || [1]);
@@ -143,6 +174,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
       const hasRecurringPreset = !!initialRecurring;
       setDeadlineDate(hasRecurringPreset ? '' : (initialDeadline ? formatDateForInput(initialDeadline) : ''));
       setDeadlineTime(hasRecurringPreset ? '' : (initialDeadline ? '12:00' : ''));
+      setDeadlineEndTime('');
       setIsRecurring(hasRecurringPreset);
       setRecurrenceFreq(initialRecurring?.freq || 'daily');
       setRecurrenceWeekdays(initialRecurring?.weekdays || [1]);
@@ -310,9 +342,94 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     return null;
   };
 
+  const getDeadlineError = () => {
+    if (isRecurring || !deadlineDate || !deadlineEndTime) return null;
+    if (!deadlineTime) {
+      return t('editor.deadlineEndNeedsStart');
+    }
+    if (deadlineEndTime <= deadlineTime) {
+      return t('editor.deadlineTimeRangeInvalid');
+    }
+    return null;
+  };
+
+  const parseTimeToMinutes = (value: string): number | null => {
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
+    if (!match) return null;
+    return Number(match[1]) * 60 + Number(match[2]);
+  };
+
+  const getDraftTimeRange = () => {
+    if (isRecurring || !deadlineDate || !deadlineTime) return null;
+    const startMinutes = parseTimeToMinutes(deadlineTime);
+    if (startMinutes === null) return null;
+
+    let endMinutes = Math.min(startMinutes + 60, 24 * 60);
+    if (deadlineEndTime) {
+      const parsedEnd = parseTimeToMinutes(deadlineEndTime);
+      if (parsedEnd === null) return null;
+      if (parsedEnd <= startMinutes) return null;
+      endMinutes = parsedEnd;
+    }
+    return { startMinutes, endMinutes };
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkTimeConflicts = async () => {
+      const draftRange = getDraftTimeRange();
+      if (!draftRange || !deadlineDate) {
+        setTimeConflicts([]);
+        return;
+      }
+
+      const selectedDay = new Date(`${deadlineDate}T00:00`);
+      if (!Number.isFinite(selectedDay.getTime())) {
+        setTimeConflicts([]);
+        return;
+      }
+
+      const allNodes = await getAllNodesFlat();
+      if (cancelled) return;
+
+      const candidateNodes = allNodes.filter((item) => !item.deletedAt && !item.completed && item.id !== node?.id);
+      const daySlots = expandNodesToSlots(candidateNodes, selectedDay, 1);
+      const conflicts = new Map<string, { id: string; title: string }>();
+
+      for (const slot of daySlots) {
+        const isOverlapping = slot.isAllDay
+          ? true
+          : slot.startMinutes !== null &&
+            slot.endMinutes !== null &&
+            draftRange.startMinutes < slot.endMinutes &&
+            draftRange.endMinutes > slot.startMinutes;
+        if (isOverlapping) {
+          conflicts.set(slot.taskId, { id: slot.taskId, title: slot.title });
+        }
+      }
+
+      setTimeConflicts(Array.from(conflicts.values()));
+    };
+
+    void checkTimeConflicts();
+    return () => {
+      cancelled = true;
+    };
+  }, [isRecurring, deadlineDate, deadlineTime, deadlineEndTime, node?.id]);
+
+  const handleConflictClick = (taskId: string) => {
+    onClose();
+    window.location.hash = `#/node/${taskId}`;
+  };
+
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = e.target.value;
     setDeadlineDate(newDate);
+    if (!newDate) {
+      setDeadlineEndTime('');
+      return;
+    }
     // Если дата выбрана, а время еще нет — ставим полдень
     if (newDate && !deadlineTime && !isRecurring) {
       setDeadlineTime('12:00');
@@ -328,14 +445,22 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     if (recurrenceError) {
       return;
     }
+    const deadlineError = getDeadlineError();
+    if (deadlineError) {
+      return;
+    }
 
     // Регулярные задачи не используют дедлайн.
     let deadline: string | null = null;
+    let deadlineEnd: string | null = null;
     if (!isRecurring && deadlineDate) {
       if (deadlineTime) {
         deadline = new Date(`${deadlineDate}T${deadlineTime}`).toISOString();
       } else {
         deadline = new Date(`${deadlineDate}T00:00`).toISOString();
+      }
+      if (deadlineTime && deadlineEndTime) {
+        deadlineEnd = new Date(`${deadlineDate}T${deadlineEndTime}`).toISOString();
       }
     }
 
@@ -369,6 +494,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
           title: title.trim(),
           description: description.trim() || undefined,
           deadline,
+          deadlineEnd,
           isRecurring,
           recurrence,
           priority,
@@ -381,6 +507,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
           title: title.trim(),
           description: description.trim() || undefined,
           deadline,
+          deadlineEnd,
           isRecurring,
           recurrence,
           completed: false,
@@ -396,6 +523,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
   };
 
   const recurrenceError = getRecurrenceError();
+  const deadlineError = getDeadlineError();
   const weekdayOptions = language === 'ru'
     ? [
         { value: 1, label: 'Пн' },
@@ -511,51 +639,96 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
           </div>
           
           {!isRecurring && (
-            <div className="grid grid-cols-2 gap-2">
-              <div className="relative group">
-                <div 
-                  className="relative cursor-pointer"
-                  onClick={() => {
-                    const input = document.getElementById('deadlineDateInput');
-                    if (input) (input as any).showPicker?.() || input.focus();
-                  }}
-                >
-                  <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
-                    {deadlineDate ? new Date(deadlineDate).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' }) : <span className="text-gray-400 dark:text-gray-600">Дата</span>}
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="relative group">
+                  <div 
+                    className="relative cursor-pointer"
+                    onClick={() => {
+                      const input = document.getElementById('deadlineDateInput');
+                      if (input) (input as any).showPicker?.() || input.focus();
+                    }}
+                  >
+                    <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                      {deadlineDate ? new Date(deadlineDate).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' }) : <span className="text-gray-400 dark:text-gray-600">{t('editor.date')}</span>}
+                    </div>
+                    <FiCalendar className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                    <input
+                      id="deadlineDateInput"
+                      type="date"
+                      value={deadlineDate}
+                      onChange={handleDateChange}
+                      lang={language === 'ru' ? 'ru-RU' : 'en-US'}
+                      className="absolute inset-0 opacity-0 pointer-events-none"
+                    />
                   </div>
-                  <FiCalendar className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
-                  <input
-                    id="deadlineDateInput"
-                    type="date"
-                    value={deadlineDate}
-                    onChange={handleDateChange}
-                    lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                    className="absolute inset-0 opacity-0 pointer-events-none"
-                  />
+                </div>
+                <div className="relative group">
+                  <div 
+                    className="relative cursor-pointer"
+                    onClick={() => {
+                      const input = document.getElementById('deadlineTimeInput');
+                      if (input) (input as any).showPicker?.() || input.focus();
+                    }}
+                  >
+                    <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                      {deadlineTime || <span className="text-gray-400 dark:text-gray-600">{t('editor.timeStart')}</span>}
+                    </div>
+                    <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                    <input
+                      id="deadlineTimeInput"
+                      type="time"
+                      value={deadlineTime}
+                      onChange={(e) => setDeadlineTime(e.target.value)}
+                      lang={language === 'ru' ? 'ru-RU' : 'en-US'}
+                      className="absolute inset-0 opacity-0 pointer-events-none"
+                    />
+                  </div>
+                </div>
+                <div className="relative group">
+                  <div 
+                    className="relative cursor-pointer"
+                    onClick={() => {
+                      const input = document.getElementById('deadlineEndTimeInput');
+                      if (input) (input as any).showPicker?.() || input.focus();
+                    }}
+                  >
+                    <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                      {deadlineEndTime || <span className="text-gray-400 dark:text-gray-600">{t('editor.timeEndOptional')}</span>}
+                    </div>
+                    <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                    <input
+                      id="deadlineEndTimeInput"
+                      type="time"
+                      value={deadlineEndTime}
+                      onChange={(e) => setDeadlineEndTime(e.target.value)}
+                      lang={language === 'ru' ? 'ru-RU' : 'en-US'}
+                      className="absolute inset-0 opacity-0 pointer-events-none"
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="relative group">
-                <div 
-                  className="relative cursor-pointer"
-                  onClick={() => {
-                    const input = document.getElementById('deadlineTimeInput');
-                    if (input) (input as any).showPicker?.() || input.focus();
-                  }}
-                >
-                  <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
-                    {deadlineTime || <span className="text-gray-400 dark:text-gray-600">Время</span>}
-                  </div>
-                  <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
-                  <input
-                    id="deadlineTimeInput"
-                    type="time"
-                    value={deadlineTime}
-                    onChange={(e) => setDeadlineTime(e.target.value)}
-                    lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                    className="absolute inset-0 opacity-0 pointer-events-none"
-                  />
-                </div>
-              </div>
+              {deadlineError && (
+                <p className="text-[10px] text-red-500 px-1 font-medium">{deadlineError}</p>
+              )}
+              {!deadlineError && timeConflicts.length > 0 && (
+                <p className="text-[10px] px-1 font-medium text-amber-600 dark:text-amber-400">
+                  {t('editor.timeConflictPrefix')}{' '}
+                  {timeConflicts.map((conflict, index) => (
+                    <Fragment key={conflict.id}>
+                      <button
+                        type="button"
+                        onClick={() => handleConflictClick(conflict.id)}
+                        className="underline underline-offset-2 hover:opacity-80"
+                        style={{ color: 'var(--accent)' }}
+                      >
+                        {conflict.title}
+                      </button>
+                      {index < timeConflicts.length - 1 ? ', ' : ''}
+                    </Fragment>
+                  ))}
+                </p>
+              )}
             </div>
           )}
 
@@ -572,6 +745,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                     if (next) {
                       setDeadlineDate('');
                       setDeadlineTime('');
+                      setDeadlineEndTime('');
                       setReminders([]);
                     }
                     return next;
@@ -809,7 +983,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
             </button>
             <button
               type="submit"
-              disabled={(!isRecurring && reminders.some(rem => getReminderError(rem) !== null)) || recurrenceError !== null}
+              disabled={(!isRecurring && reminders.some(rem => getReminderError(rem) !== null)) || recurrenceError !== null || deadlineError !== null}
               className="px-8 py-2.5 text-sm font-bold rounded-xl text-white transition-all shadow-lg shadow-accent/20 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 active:scale-95"
               style={{ backgroundColor: 'var(--accent)' }}
             >

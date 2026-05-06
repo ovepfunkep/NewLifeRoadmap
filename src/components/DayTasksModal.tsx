@@ -15,7 +15,7 @@ interface DayTasksModalProps {
   onClose: () => void;
 }
 
-export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onMarkCompleted, onCreateTask, onClose }: DayTasksModalProps) {
+function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onMarkCompleted, onCreateTask, onClose }: DayTasksModalProps) {
   const [tasksWithBreadcrumbs, setTasksWithBreadcrumbs] = useState<Array<{ node: Node; breadcrumbs: Node[] }>>([]);
   const [localTasks, setLocalTasks] = useState<Node[]>(tasks);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -165,7 +165,7 @@ export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onMarkCo
               <>
                 {tasksWithBreadcrumbs.map(({ node: task, breadcrumbs }) => {
                 const deadlineColor = getDeadlineColor(task);
-                const dateStr = formatDeadline(task.deadline);
+                const dateStr = formatDeadline(task.deadline, task.deadlineEnd);
 
                 return (
                   <div
@@ -266,4 +266,7 @@ export function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onMarkCo
     </div>
   );
 }
+
+export { DayTasksModal };
+export default DayTasksModal;
 

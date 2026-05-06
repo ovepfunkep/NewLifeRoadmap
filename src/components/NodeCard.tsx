@@ -50,7 +50,7 @@ export function NodeCard({
   useDeadlineTicker();
   const t = useTranslation();
   const progress = computeProgress(node);
-  const deadlineDisplay = formatDeadline(node.deadline);
+  const deadlineDisplay = formatDeadline(node.deadline, node.deadlineEnd);
   const { effectsEnabled } = useEffects();
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });

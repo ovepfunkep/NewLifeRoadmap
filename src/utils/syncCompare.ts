@@ -60,6 +60,7 @@ export function compareNodes(localNodes: Node[], cloudNodes: Node[]): SyncDiff {
       if (local.description !== cloud.description) differences.push('description');
       if (local.completed !== cloud.completed) differences.push('completed');
       if (local.deadline !== cloud.deadline) differences.push('deadline');
+      if (local.deadlineEnd !== cloud.deadlineEnd) differences.push('deadlineEnd');
       if (local.isRecurring !== cloud.isRecurring) differences.push('isRecurring');
       if (JSON.stringify(local.recurrence ?? null) !== JSON.stringify(cloud.recurrence ?? null)) differences.push('recurrence');
       if (local.priority !== cloud.priority) differences.push('priority');
@@ -99,6 +100,7 @@ export function isSignificantNodeDiff(local: Node, cloud: Node): boolean {
   if (local.description !== cloud.description) return true;
   if (local.completed !== cloud.completed) return true;
   if (local.deadline !== cloud.deadline) return true;
+  if (local.deadlineEnd !== cloud.deadlineEnd) return true;
   if (local.isRecurring !== cloud.isRecurring) return true;
   if (JSON.stringify(local.recurrence ?? null) !== JSON.stringify(cloud.recurrence ?? null)) return true;
   if (local.priority !== cloud.priority) return true;

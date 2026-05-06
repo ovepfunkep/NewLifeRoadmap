@@ -6,7 +6,7 @@ import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { getNode } from '../db';
 import { FiList, FiCalendar, FiClock } from 'react-icons/fi';
 import { CalendarView } from './CalendarView';
-import { DayTasksModal } from './DayTasksModal';
+import DayTasksModal from './DayTasksModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { expandNodesToSlots, RecurringScheduleSlot } from '../utils/recurrence';
 import { WeekScheduleView } from './WeekScheduleView';
@@ -321,7 +321,7 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
               <div className="space-y-3 max-h-[435px] overflow-y-auto py-4 px-1 custom-scrollbar">
                 <AnimatePresence mode="popLayout">
                   {deadlinesWithBreadcrumbs.map(({ node: dl, breadcrumbs }) => {
-                    const dateStr = formatDeadline(dl.deadline);
+                    const dateStr = formatDeadline(dl.deadline, dl.deadlineEnd);
                     const deadlineColor = getDeadlineColor(dl);
                     
                     return (

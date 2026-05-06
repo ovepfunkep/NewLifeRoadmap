@@ -19,6 +19,7 @@ export interface Node {
   title: string;
   description?: string;
   deadline?: string | null; // ISO
+  deadlineEnd?: string | null; // ISO, optional end time for one-off tasks
   isRecurring?: boolean; // Регулярная задача (информативно в расписании)
   recurrence?: NodeRecurrence | null; // Правило повторения, если isRecurring = true
   completed: boolean;
