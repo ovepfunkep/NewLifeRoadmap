@@ -240,15 +240,32 @@ function getUserNodesPath(userId: string): string {
  * Firestore не принимает undefined, заменяем на null или удаляем
  */
 function cleanForFirestore<T extends Record<string, any>>(obj: T): T {
-  const cleaned: any = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (value === undefined) {
-      // Пропускаем undefined поля - Firestore их не поддерживает
-      continue;
+  const cleanValue = (value: any): any => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => cleanValue(item))
+        .filter((item) => item !== undefined);
     }
-    cleaned[key] = value;
+    if (typeof value === 'object') {
+      const nested: Record<string, any> = {};
+      for (const [nestedKey, nestedValue] of Object.entries(value)) {
+        const cleanedNestedValue = cleanValue(nestedValue);
+        if (cleanedNestedValue !== undefined) {
+          nested[nestedKey] = cleanedNestedValue;
+        }
+      }
+      return nested;
+    }
+    return value;
+  };
+
+  const cleaned = cleanValue(obj);
+  if (cleaned && typeof cleaned === 'object') {
+    return cleaned as T;
   }
-  return cleaned as T;
+  return {} as T;
 }
 
 /**

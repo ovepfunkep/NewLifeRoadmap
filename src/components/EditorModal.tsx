@@ -423,6 +423,20 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     window.location.hash = `#/node/${taskId}`;
   };
 
+  const openInputPicker = (inputId: string) => {
+    const input = document.getElementById(inputId) as HTMLInputElement | null;
+    if (!input) return;
+    try {
+      if (typeof input.showPicker === 'function') {
+        input.showPicker();
+        return;
+      }
+    } catch {
+      // Fallback for browsers that block showPicker without gesture.
+    }
+    input.focus();
+  };
+
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = e.target.value;
     setDeadlineDate(newDate);
@@ -481,8 +495,8 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     const recurrence = isRecurring
       ? {
           freq: recurrenceFreq,
-          weekdays: recurrenceFreq === 'weekly' ? normalizedWeekdays : undefined,
-          monthDays: recurrenceFreq === 'monthly' ? normalizedMonthDays : undefined,
+          ...(recurrenceFreq === 'weekly' ? { weekdays: normalizedWeekdays } : {}),
+          ...(recurrenceFreq === 'monthly' ? { monthDays: normalizedMonthDays } : {}),
           timeStart: recurrenceTimeStart || null,
           timeEnd: recurrenceTimeEnd || null,
         }
@@ -644,10 +658,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                 <div className="relative group">
                   <div 
                     className="relative cursor-pointer"
-                    onClick={() => {
-                      const input = document.getElementById('deadlineDateInput');
-                      if (input) (input as any).showPicker?.() || input.focus();
-                    }}
+                    onClick={() => openInputPicker('deadlineDateInput')}
                   >
                     <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
                       {deadlineDate ? new Date(deadlineDate).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' }) : <span className="text-gray-400 dark:text-gray-600">{t('editor.date')}</span>}
@@ -666,10 +677,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                 <div className="relative group">
                   <div 
                     className="relative cursor-pointer"
-                    onClick={() => {
-                      const input = document.getElementById('deadlineTimeInput');
-                      if (input) (input as any).showPicker?.() || input.focus();
-                    }}
+                    onClick={() => openInputPicker('deadlineTimeInput')}
                   >
                     <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
                       {deadlineTime || <span className="text-gray-400 dark:text-gray-600">{t('editor.timeStart')}</span>}
@@ -688,10 +696,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                 <div className="relative group">
                   <div 
                     className="relative cursor-pointer"
-                    onClick={() => {
-                      const input = document.getElementById('deadlineEndTimeInput');
-                      if (input) (input as any).showPicker?.() || input.focus();
-                    }}
+                    onClick={() => openInputPicker('deadlineEndTimeInput')}
                   >
                     <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
                       {deadlineEndTime || <span className="text-gray-400 dark:text-gray-600">{t('editor.timeEndOptional')}</span>}
@@ -848,10 +853,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                     </span>
                     <div
                       className="relative cursor-pointer"
-                      onClick={() => {
-                        const input = document.getElementById('recurrenceTimeStartInput');
-                        if (input) (input as any).showPicker?.() || input.focus();
-                      }}
+                      onClick={() => openInputPicker('recurrenceTimeStartInput')}
                     >
                       <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
                         {recurrenceTimeStart || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
@@ -874,10 +876,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                     </span>
                     <div
                       className="relative cursor-pointer"
-                      onClick={() => {
-                        const input = document.getElementById('recurrenceTimeEndInput');
-                        if (input) (input as any).showPicker?.() || input.focus();
-                      }}
+                      onClick={() => openInputPicker('recurrenceTimeEndInput')}
                     >
                       <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
                         {recurrenceTimeEnd || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}

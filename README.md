@@ -48,7 +48,7 @@ npm run verify
 - **Синк и нормализация Firestore**: `src/firebase/sync.ts`
 - **Сравнение и значимость конфликтов**: `src/utils/syncCompare.ts`
 - **Слоты расписания/регулярности**: `src/utils/recurrence.ts`
-- **UI и оркестрация**: `src/components/`**, `src/pages/**`
+- **UI и оркестрация**: `src/components/`**, `src/pages/`**
 
 ## Документация
 
