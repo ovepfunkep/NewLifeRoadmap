@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Node } from '../types';
+import { Node, NodeRecurrence } from '../types';
 import { buildBreadcrumbs, getDeadlineColor, formatDeadline } from '../utils';
 import { getNode } from '../db';
 import { FiX, FiPlus, FiCheck } from 'react-icons/fi';
@@ -11,7 +11,7 @@ interface DayTasksModalProps {
   currentNodeId: string;
   onNavigate: (id: string) => void;
   onMarkCompleted: (id: string, completed: boolean) => void;
-  onCreateTask?: (date: Date) => void; // Обработчик создания задачи с датой
+  onCreateTask?: (date: Date, recurringPreset?: NodeRecurrence) => void; // Обработчик создания задачи с датой/пресетом
   onClose: () => void;
 }
 

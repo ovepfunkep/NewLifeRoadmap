@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Node } from '../types';
+import { Node, NodeRecurrence, RecurrenceFrequency } from '../types';
 import { t } from '../i18n';
 import { generateId, buildBreadcrumbs } from '../utils';
 import { FiAlertCircle, FiCalendar, FiClock, FiFolder } from 'react-icons/fi';
@@ -12,6 +12,7 @@ import { TelegramLinkModal } from './TelegramLinkModal';
 import { AuthRequiredModal } from './AuthRequiredModal';
 import { getCurrentUser } from '../firebase/auth';
 import { getUserSecurityConfig } from '../firebase/security';
+import { AnimatePresence, motion } from 'framer-motion';
 
 interface EditorModalProps {
   node: Node | null; // null = создание нового
@@ -19,9 +20,10 @@ interface EditorModalProps {
   onSave: (node: Node) => void;
   onClose: () => void;
   initialDeadline?: Date; // Начальная дата для новой задачи
+  initialRecurring?: NodeRecurrence; // Пресет регулярности для новой задачи
 }
 
-export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }: EditorModalProps) {
+export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, initialRecurring }: EditorModalProps) {
   const { language } = useLanguage();
   const [showTgLinkModal, setShowTgLinkModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -42,6 +44,9 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
   };
   
   const getInitialDeadlineDate = (): string => {
+    if (!node && initialRecurring) {
+      return '';
+    }
     if (node?.deadline) {
       return formatDateForInput(new Date(node.deadline));
     }
@@ -52,6 +57,9 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
   };
   
   const getInitialDeadlineTime = (): string => {
+    if (!node && initialRecurring) {
+      return '';
+    }
     if (node?.deadline) {
       const date = new Date(node.deadline);
       const hours = date.getHours();
@@ -73,6 +81,12 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
   const [description, setDescription] = useState(node?.description || '');
   const [deadlineDate, setDeadlineDate] = useState(getInitialDeadlineDate());
   const [deadlineTime, setDeadlineTime] = useState(getInitialDeadlineTime());
+  const [isRecurring, setIsRecurring] = useState(node?.isRecurring || !!initialRecurring);
+  const [recurrenceFreq, setRecurrenceFreq] = useState<RecurrenceFrequency>(node?.recurrence?.freq || initialRecurring?.freq || 'daily');
+  const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>(node?.recurrence?.weekdays || initialRecurring?.weekdays || [1]);
+  const [recurrenceMonthDays, setRecurrenceMonthDays] = useState<number[]>(node?.recurrence?.monthDays || initialRecurring?.monthDays || [1]);
+  const [recurrenceTimeStart, setRecurrenceTimeStart] = useState<string>(node?.recurrence?.timeStart || initialRecurring?.timeStart || '');
+  const [recurrenceTimeEnd, setRecurrenceTimeEnd] = useState<string>(node?.recurrence?.timeEnd || initialRecurring?.timeEnd || '');
   const [priority, setPriority] = useState(node?.priority || false);
   const [chosenParentId, setChosenParentId] = useState<string | null>(null);
   const [showParentPicker, setShowParentPicker] = useState(false);
@@ -111,6 +125,12 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
         setDeadlineDate('');
         setDeadlineTime('');
       }
+      setIsRecurring(node.isRecurring || false);
+      setRecurrenceFreq(node.recurrence?.freq || 'daily');
+      setRecurrenceWeekdays(node.recurrence?.weekdays || [1]);
+      setRecurrenceMonthDays(node.recurrence?.monthDays || [1]);
+      setRecurrenceTimeStart(node.recurrence?.timeStart || '');
+      setRecurrenceTimeEnd(node.recurrence?.timeEnd || '');
       setPriority(node.priority || false);
       setReminders(node.reminders ? node.reminders.map(seconds => {
         if (seconds % 86400 === 0) return { value: seconds / 86400, unit: 'days' };
@@ -120,12 +140,19 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
       // При создании новой задачи сбрасываем форму
       setTitle('');
       setDescription('');
-      setDeadlineDate(initialDeadline ? formatDateForInput(initialDeadline) : '');
-      setDeadlineTime(initialDeadline ? '12:00' : '');
+      const hasRecurringPreset = !!initialRecurring;
+      setDeadlineDate(hasRecurringPreset ? '' : (initialDeadline ? formatDateForInput(initialDeadline) : ''));
+      setDeadlineTime(hasRecurringPreset ? '' : (initialDeadline ? '12:00' : ''));
+      setIsRecurring(hasRecurringPreset);
+      setRecurrenceFreq(initialRecurring?.freq || 'daily');
+      setRecurrenceWeekdays(initialRecurring?.weekdays || [1]);
+      setRecurrenceMonthDays(initialRecurring?.monthDays || [1]);
+      setRecurrenceTimeStart(initialRecurring?.timeStart || '');
+      setRecurrenceTimeEnd(initialRecurring?.timeEnd || '');
       setPriority(false);
       setReminders([]);
     }
-  }, [node, initialDeadline]);
+  }, [node, initialDeadline, initialRecurring]);
 
   useEffect(() => {
     if (!node) {
@@ -251,11 +278,43 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
     return null;
   };
 
+  const toggleWeekday = (day: number) => {
+    setRecurrenceWeekdays((prev) =>
+      prev.includes(day) ? prev.filter((value) => value !== day) : [...prev, day]
+    );
+  };
+
+  const toggleMonthDay = (day: number) => {
+    setRecurrenceMonthDays((prev) =>
+      prev.includes(day) ? prev.filter((value) => value !== day) : [...prev, day]
+    );
+  };
+
+  const getRecurrenceError = () => {
+    if (!isRecurring) return null;
+    if (recurrenceFreq === 'weekly' && recurrenceWeekdays.length === 0) {
+      return t('editor.recurrenceWeeklyRequired');
+    }
+    if (recurrenceFreq === 'monthly' && recurrenceMonthDays.length === 0) {
+      return t('editor.recurrenceMonthlyRequired');
+    }
+
+    const hasTimeStart = recurrenceTimeStart.trim().length > 0;
+    const hasTimeEnd = recurrenceTimeEnd.trim().length > 0;
+    if (hasTimeStart !== hasTimeEnd) {
+      return t('editor.recurrenceTimePairRequired');
+    }
+    if (hasTimeStart && hasTimeEnd && recurrenceTimeEnd <= recurrenceTimeStart) {
+      return t('editor.recurrenceTimeRangeInvalid');
+    }
+    return null;
+  };
+
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = e.target.value;
     setDeadlineDate(newDate);
     // Если дата выбрана, а время еще нет — ставим полдень
-    if (newDate && !deadlineTime) {
+    if (newDate && !deadlineTime && !isRecurring) {
       setDeadlineTime('12:00');
     }
   };
@@ -265,9 +324,14 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
     
     if (!title.trim()) return;
 
-    // Объединяем дату и время
+    const recurrenceError = getRecurrenceError();
+    if (recurrenceError) {
+      return;
+    }
+
+    // Регулярные задачи не используют дедлайн.
     let deadline: string | null = null;
-    if (deadlineDate) {
+    if (!isRecurring && deadlineDate) {
       if (deadlineTime) {
         deadline = new Date(`${deadlineDate}T${deadlineTime}`).toISOString();
       } else {
@@ -276,14 +340,28 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
     }
 
     const now = new Date().toISOString();
-    const remindersInSeconds = Array.from(new Set(
-      reminders.map(r => r.unit === 'days' ? r.value * 86400 : r.value * 3600)
-    )).sort((a, b) => a - b);
+    const remindersInSeconds = isRecurring
+      ? []
+      : Array.from(new Set(
+          reminders.map(r => r.unit === 'days' ? r.value * 86400 : r.value * 3600)
+        )).sort((a, b) => a - b);
 
     // Проверка на наличие ошибок
-    if (reminders.some(rem => getReminderError(rem) !== null)) {
+    if (!isRecurring && reminders.some(rem => getReminderError(rem) !== null)) {
       return;
     }
+
+    const normalizedWeekdays = Array.from(new Set(recurrenceWeekdays)).sort((a, b) => a - b);
+    const normalizedMonthDays = Array.from(new Set(recurrenceMonthDays)).sort((a, b) => a - b);
+    const recurrence = isRecurring
+      ? {
+          freq: recurrenceFreq,
+          weekdays: recurrenceFreq === 'weekly' ? normalizedWeekdays : undefined,
+          monthDays: recurrenceFreq === 'monthly' ? normalizedMonthDays : undefined,
+          timeStart: recurrenceTimeStart || null,
+          timeEnd: recurrenceTimeEnd || null,
+        }
+      : null;
 
     const newNode: Node = node
       ? {
@@ -291,6 +369,8 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
           title: title.trim(),
           description: description.trim() || undefined,
           deadline,
+          isRecurring,
+          recurrence,
           priority,
           reminders: remindersInSeconds,
           updatedAt: now,
@@ -301,6 +381,8 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
           title: title.trim(),
           description: description.trim() || undefined,
           deadline,
+          isRecurring,
+          recurrence,
           completed: false,
           priority,
           reminders: remindersInSeconds,
@@ -312,6 +394,27 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
     onSave(newNode);
     onClose();
   };
+
+  const recurrenceError = getRecurrenceError();
+  const weekdayOptions = language === 'ru'
+    ? [
+        { value: 1, label: 'Пн' },
+        { value: 2, label: 'Вт' },
+        { value: 3, label: 'Ср' },
+        { value: 4, label: 'Чт' },
+        { value: 5, label: 'Пт' },
+        { value: 6, label: 'Сб' },
+        { value: 0, label: 'Вс' },
+      ]
+    : [
+        { value: 1, label: 'Mon' },
+        { value: 2, label: 'Tue' },
+        { value: 3, label: 'Wed' },
+        { value: 4, label: 'Thu' },
+        { value: 5, label: 'Fri' },
+        { value: 6, label: 'Sat' },
+        { value: 0, label: 'Sun' },
+      ];
 
   return (
     <div 
@@ -407,55 +510,228 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
             />
           </div>
           
-          <div className="grid grid-cols-2 gap-2">
-            <div className="relative group">
-              <div 
-                className="relative cursor-pointer"
-                onClick={() => {
-                  const input = document.getElementById('deadlineDateInput');
-                  if (input) (input as any).showPicker?.() || input.focus();
-                }}
-              >
-                <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
-                  {deadlineDate ? new Date(deadlineDate).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' }) : <span className="text-gray-400 dark:text-gray-600">Дата</span>}
+          {!isRecurring && (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="relative group">
+                <div 
+                  className="relative cursor-pointer"
+                  onClick={() => {
+                    const input = document.getElementById('deadlineDateInput');
+                    if (input) (input as any).showPicker?.() || input.focus();
+                  }}
+                >
+                  <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                    {deadlineDate ? new Date(deadlineDate).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' }) : <span className="text-gray-400 dark:text-gray-600">Дата</span>}
+                  </div>
+                  <FiCalendar className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                  <input
+                    id="deadlineDateInput"
+                    type="date"
+                    value={deadlineDate}
+                    onChange={handleDateChange}
+                    lang={language === 'ru' ? 'ru-RU' : 'en-US'}
+                    className="absolute inset-0 opacity-0 pointer-events-none"
+                  />
                 </div>
-                <FiCalendar className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
-                <input
-                  id="deadlineDateInput"
-                  type="date"
-                  value={deadlineDate}
-                  onChange={handleDateChange}
-                  lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                  className="absolute inset-0 opacity-0 pointer-events-none"
-                />
+              </div>
+              <div className="relative group">
+                <div 
+                  className="relative cursor-pointer"
+                  onClick={() => {
+                    const input = document.getElementById('deadlineTimeInput');
+                    if (input) (input as any).showPicker?.() || input.focus();
+                  }}
+                >
+                  <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                    {deadlineTime || <span className="text-gray-400 dark:text-gray-600">Время</span>}
+                  </div>
+                  <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                  <input
+                    id="deadlineTimeInput"
+                    type="time"
+                    value={deadlineTime}
+                    onChange={(e) => setDeadlineTime(e.target.value)}
+                    lang={language === 'ru' ? 'ru-RU' : 'en-US'}
+                    className="absolute inset-0 opacity-0 pointer-events-none"
+                  />
+                </div>
               </div>
             </div>
-            <div className="relative group">
-              <div 
-                className="relative cursor-pointer"
-                onClick={() => {
-                  const input = document.getElementById('deadlineTimeInput');
-                  if (input) (input as any).showPicker?.() || input.focus();
-                }}
+          )}
+
+          <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border-2 border-gray-100 dark:border-gray-800 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                {t('editor.recurrenceTitle')}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setIsRecurring((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setDeadlineDate('');
+                      setDeadlineTime('');
+                      setReminders([]);
+                    }
+                    return next;
+                  })
+                }
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  isRecurring
+                    ? 'text-white'
+                    : 'text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700'
+                }`}
+                style={isRecurring ? { backgroundColor: 'var(--accent)' } : undefined}
               >
-                <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
-                  {deadlineTime || <span className="text-gray-400 dark:text-gray-600">Время</span>}
-                </div>
-                <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
-                <input
-                  id="deadlineTimeInput"
-                  type="time"
-                  value={deadlineTime}
-                  onChange={(e) => setDeadlineTime(e.target.value)}
-                  lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                  className="absolute inset-0 opacity-0 pointer-events-none"
-                />
-              </div>
+                {isRecurring ? t('editor.recurrenceEnabled') : t('editor.recurrenceDisabled')}
+              </button>
             </div>
+
+            <AnimatePresence initial={false}>
+            {isRecurring && (
+              <motion.div
+                className="space-y-3"
+                initial={{ opacity: 0, y: -8, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: 'auto' }}
+                exit={{ opacity: 0, y: -8, height: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="grid grid-cols-3 gap-2">
+                  {(['daily', 'weekly', 'monthly'] as RecurrenceFrequency[]).map((freq) => (
+                    <button
+                      key={freq}
+                      type="button"
+                      onClick={() => setRecurrenceFreq(freq)}
+                      className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition-all border ${
+                        recurrenceFreq === freq
+                          ? 'text-white border-transparent'
+                          : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-accent/50'
+                      }`}
+                      style={recurrenceFreq === freq ? { backgroundColor: 'var(--accent)' } : undefined}
+                    >
+                      {t(`editor.recurrenceFreq${freq.charAt(0).toUpperCase()}${freq.slice(1)}`)}
+                    </button>
+                  ))}
+                </div>
+
+                {recurrenceFreq === 'weekly' && (
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400">{t('editor.recurrenceWeekdays')}</p>
+                    <div className="grid grid-cols-7 gap-1">
+                      {weekdayOptions.map((day) => {
+                        const active = recurrenceWeekdays.includes(day.value);
+                        return (
+                          <button
+                            key={day.value}
+                            type="button"
+                            onClick={() => toggleWeekday(day.value)}
+                            className={`rounded-md py-1 text-[11px] font-semibold transition-all border ${
+                              active
+                                ? 'text-white border-transparent'
+                                : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+                            }`}
+                            style={active ? { backgroundColor: 'var(--accent)' } : undefined}
+                          >
+                            {day.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {recurrenceFreq === 'monthly' && (
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400">{t('editor.recurrenceMonthDays')}</p>
+                    <div className="grid grid-cols-8 gap-1 max-h-28 overflow-y-auto pr-1">
+                      {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => {
+                        const active = recurrenceMonthDays.includes(day);
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => toggleMonthDay(day)}
+                            className={`rounded-md py-1 text-[11px] font-semibold transition-all border ${
+                              active
+                                ? 'text-white border-transparent'
+                                : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+                            }`}
+                            style={active ? { backgroundColor: 'var(--accent)' } : undefined}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="space-y-1">
+                    <span className="block text-[11px] text-gray-500 dark:text-gray-400">
+                      {t('editor.recurrenceTimeStart')}
+                    </span>
+                    <div
+                      className="relative cursor-pointer"
+                      onClick={() => {
+                        const input = document.getElementById('recurrenceTimeStartInput');
+                        if (input) (input as any).showPicker?.() || input.focus();
+                      }}
+                    >
+                      <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                        {recurrenceTimeStart || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
+                      </div>
+                      <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                      <input
+                        id="recurrenceTimeStartInput"
+                        type="time"
+                        value={recurrenceTimeStart}
+                        onChange={(e) => setRecurrenceTimeStart(e.target.value)}
+                        lang={language === 'ru' ? 'ru-RU' : 'en-US'}
+                        className="absolute inset-0 opacity-0 pointer-events-none"
+                        aria-label={t('editor.recurrenceTimeStart')}
+                      />
+                    </div>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="block text-[11px] text-gray-500 dark:text-gray-400">
+                      {t('editor.recurrenceTimeEnd')}
+                    </span>
+                    <div
+                      className="relative cursor-pointer"
+                      onClick={() => {
+                        const input = document.getElementById('recurrenceTimeEndInput');
+                        if (input) (input as any).showPicker?.() || input.focus();
+                      }}
+                    >
+                      <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                        {recurrenceTimeEnd || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
+                      </div>
+                      <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                      <input
+                        id="recurrenceTimeEndInput"
+                        type="time"
+                        value={recurrenceTimeEnd}
+                        onChange={(e) => setRecurrenceTimeEnd(e.target.value)}
+                        lang={language === 'ru' ? 'ru-RU' : 'en-US'}
+                        className="absolute inset-0 opacity-0 pointer-events-none"
+                        aria-label={t('editor.recurrenceTimeEnd')}
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                {recurrenceError && (
+                  <p className="text-[10px] text-red-500 px-1 font-medium">{recurrenceError}</p>
+                )}
+              </motion.div>
+            )}
+            </AnimatePresence>
           </div>
           
           {/* Блок уведомлений Telegram */}
-          {deadlineDate && (
+          {deadlineDate && !isRecurring && (
             <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border-2 border-gray-100 dark:border-gray-800 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
@@ -533,7 +809,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline }
             </button>
             <button
               type="submit"
-              disabled={reminders.some(rem => getReminderError(rem) !== null)}
+              disabled={(!isRecurring && reminders.some(rem => getReminderError(rem) !== null)) || recurrenceError !== null}
               className="px-8 py-2.5 text-sm font-bold rounded-xl text-white transition-all shadow-lg shadow-accent/20 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 active:scale-95"
               style={{ backgroundColor: 'var(--accent)' }}
             >

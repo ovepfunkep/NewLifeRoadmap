@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Node } from '../types';
+import { Node, NodeRecurrence } from '../types';
 import { FiChevronLeft, FiChevronRight, FiRotateCw } from 'react-icons/fi';
 
 interface CalendarViewProps {
@@ -7,7 +7,7 @@ interface CalendarViewProps {
   deadlines: Node[];
   onNavigate: (id: string) => void;
   onDayClick: (date: Date, tasks: Node[]) => void;
-  onCreateTask?: (date: Date) => void;
+  onCreateTask?: (date: Date, recurringPreset?: NodeRecurrence) => void;
   compact?: boolean;
 }
 

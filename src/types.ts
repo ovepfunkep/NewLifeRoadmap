@@ -1,3 +1,17 @@
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
+
+export interface NodeRecurrence {
+  freq: RecurrenceFrequency;
+  // weekly: [0..6], где 0 = Sunday, 1 = Monday ... 6 = Saturday
+  weekdays?: number[];
+  // monthly: [1..31]
+  monthDays?: number[];
+  // HH:mm, optional
+  timeStart?: string | null;
+  // HH:mm, optional, should be > timeStart if both are set
+  timeEnd?: string | null;
+}
+
 // Тип узла (мапы)
 export interface Node {
   id: string; // UUID
@@ -5,6 +19,8 @@ export interface Node {
   title: string;
   description?: string;
   deadline?: string | null; // ISO
+  isRecurring?: boolean; // Регулярная задача (информативно в расписании)
+  recurrence?: NodeRecurrence | null; // Правило повторения, если isRecurring = true
   completed: boolean;
   completedAt?: string | null; // ISO время завершения
   priority?: boolean; // Приоритетная задача

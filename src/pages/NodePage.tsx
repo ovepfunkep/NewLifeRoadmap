@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Node } from '../types';
+import { Node, NodeRecurrence } from '../types';
 import { t } from '../i18n';
 import { initDB, getNode, getRoot, saveNode, deleteNode } from '../db';
 import { syncNodeNow } from '../db-sync';
@@ -31,6 +31,7 @@ export function NodePage() {
   const [showImportExport, setShowImportExport] = useState(false);
   const [editingNode, setEditingNode] = useState<Node | null>(null);
   const [initialDeadline, setInitialDeadline] = useState<Date | undefined>(undefined);
+  const [initialRecurring, setInitialRecurring] = useState<NodeRecurrence | undefined>(undefined);
   const [sortType, setSortType] = useState<SortType>('none');
   const [filterType, setFilterType] = useState<'all' | 'completed' | 'incomplete'>('all');
   const [showMoveModal, setShowMoveModal] = useState(false);
@@ -223,19 +224,22 @@ export function NodePage() {
 
   const handleEdit = useCallback((node: Node) => {
     setEditingNode(node);
+    setInitialRecurring(undefined);
     setShowEditor(true);
   }, []);
 
   const handleCreateChild = useCallback(() => {
     setEditingNode(null);
     setInitialDeadline(undefined);
+    setInitialRecurring(undefined);
     setShowEditor(true);
   }, []);
 
   // Обработчик создания задачи с установленной датой
-  const handleCreateTaskWithDate = useCallback((date: Date) => {
+  const handleCreateTaskWithDate = useCallback((date: Date, recurringPreset?: NodeRecurrence) => {
     setEditingNode(null);
-    setInitialDeadline(date);
+    setInitialDeadline(recurringPreset ? undefined : date);
+    setInitialRecurring(recurringPreset);
     setShowEditor(true);
   }, []);
 
@@ -1192,10 +1196,12 @@ export function NodePage() {
           parentId={currentNode.id}
           onSave={handleSave}
           initialDeadline={initialDeadline}
+          initialRecurring={initialRecurring}
           onClose={() => {
             setShowEditor(false);
             setEditingNode(null);
             setInitialDeadline(undefined);
+            setInitialRecurring(undefined);
           }}
         />
       )}

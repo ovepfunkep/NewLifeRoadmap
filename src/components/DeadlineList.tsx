@@ -1,19 +1,21 @@
-import { useState, useEffect } from 'react';
-import { Node } from '../types';
+import { useState, useEffect, useMemo } from 'react';
+import { Node, NodeRecurrence } from '../types';
 import { t } from '../i18n';
-import { collectDeadlines, sortByDeadlineAsc, getDeadlineColor, buildBreadcrumbs, formatDeadline } from '../utils';
+import { collectDeadlines, sortByDeadlineAsc, getDeadlineColor, buildBreadcrumbs, formatDeadline, walkSubtree } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { getNode } from '../db';
-import { FiList, FiCalendar } from 'react-icons/fi';
+import { FiList, FiCalendar, FiClock } from 'react-icons/fi';
 import { CalendarView } from './CalendarView';
 import { DayTasksModal } from './DayTasksModal';
 import { motion, AnimatePresence } from 'framer-motion';
+import { expandNodesToSlots, RecurringScheduleSlot } from '../utils/recurrence';
+import { WeekScheduleView } from './WeekScheduleView';
 
 interface DeadlineListProps {
   node: Node;
   onNavigate: (id: string) => void;
   onMarkCompleted: (id: string, completed: boolean) => void;
-  onCreateTask?: (date: Date) => void; // Обработчик создания задачи с датой
+  onCreateTask?: (date: Date, recurringPreset?: NodeRecurrence) => void; // Создание задачи с датой и optional пресетом регулярности
 }
 
 // Проверка, является ли дедлайн прошедшим
@@ -101,10 +103,10 @@ function groupDeadlines(node: Node): Node[] {
 
 export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }: DeadlineListProps) {
   useDeadlineTicker(); // подписка на тикер
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>(() => {
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'week'>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('deadlineViewMode');
-      return (stored === 'list' || stored === 'calendar') ? stored : 'list';
+      return (stored === 'list' || stored === 'calendar' || stored === 'week') ? stored : 'list';
     }
     return 'list';
   });
@@ -112,6 +114,13 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
   const [selectedDay, setSelectedDay] = useState<{ date: Date; tasks: Node[] } | null>(null);
   const [groupedDeadlines, setGroupedDeadlines] = useState<Node[]>([]);
   const [allDeadlines, setAllDeadlines] = useState<Node[]>([]); // Все задачи с дедлайнами для календаря
+  const [scheduleNodes, setScheduleNodes] = useState<Node[]>([]);
+  const [weekStartDate, setWeekStartDate] = useState(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return now;
+  });
+  const [weekShiftDirection, setWeekShiftDirection] = useState<-1 | 0 | 1>(0);
 
   useEffect(() => {
     const grouped = groupDeadlines(node);
@@ -140,7 +149,45 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
     });
     
     setAllDeadlines(uniqueDeadlines);
+
+    const allScheduleNodes: Node[] = [];
+    walkSubtree(node, (task) => {
+      if (task.completed || task.deletedAt) return;
+      if ((task.isRecurring && task.recurrence) || task.deadline) {
+        allScheduleNodes.push(task);
+      }
+    });
+
+    const seenScheduleIds = new Set<string>();
+    const uniqueSchedule = allScheduleNodes.filter((task) => {
+      if (seenScheduleIds.has(task.id)) return false;
+      seenScheduleIds.add(task.id);
+      return true;
+    });
+    setScheduleNodes(uniqueSchedule);
   }, [node]);
+
+  const recurringSlots = useMemo<RecurringScheduleSlot[]>(
+    () => expandNodesToSlots(scheduleNodes, weekStartDate, 7),
+    [scheduleNodes, weekStartDate]
+  );
+
+  const handleShiftWeekWindow = (offsetDays: number) => {
+    if (!offsetDays) return;
+    setWeekShiftDirection(offsetDays > 0 ? 1 : -1);
+    setWeekStartDate((prev) => {
+      const next = new Date(prev);
+      next.setDate(prev.getDate() + offsetDays);
+      return next;
+    });
+  };
+
+  const handleResetWeekWindow = () => {
+    setWeekShiftDirection(0);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    setWeekStartDate(now);
+  };
 
   useEffect(() => {
     const loadBreadcrumbs = async () => {
@@ -238,13 +285,36 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
             >
               <FiCalendar className="w-4 h-4" />
             </button>
+            <button
+              onClick={() => setViewMode('week')}
+              className={`p-2 rounded-md transition-all ${
+                viewMode === 'week'
+                  ? 'shadow-sm'
+                  : 'opacity-60 hover:opacity-100'
+              }`}
+              aria-label="Вид недели"
+              style={{
+                backgroundColor: viewMode === 'week' ? 'var(--accent)' : 'transparent',
+                color: viewMode === 'week' ? 'white' : 'var(--accent)'
+              }}
+            >
+              <FiClock className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
         {/* Контент в зависимости от вида */}
         <div className="flex-1 relative min-h-0">
-          {viewMode === 'list' ? (
-            <div className="relative h-full flex flex-col">
+          <AnimatePresence mode="wait" initial={false}>
+            {viewMode === 'list' ? (
+            <motion.div
+              key="deadline-list-view"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+              className="relative h-full flex flex-col"
+            >
               {/* Permanent top fade */}
               <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-white dark:from-gray-800 to-transparent z-10 pointer-events-none" />
               
@@ -303,9 +373,16 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
               
               {/* Permanent bottom fade */}
               <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-gray-800 to-transparent z-10 pointer-events-none" />
-            </div>
-          ) : (
-            <div className="relative">
+            </motion.div>
+          ) : viewMode === 'calendar' ? (
+            <motion.div
+              key="deadline-calendar-view"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+              className="relative"
+            >
               <CalendarView
                 node={node}
                 deadlines={allDeadlines}
@@ -314,8 +391,27 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
                 onCreateTask={onCreateTask}
                 compact={isCompact}
               />
-            </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="deadline-week-view"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+            >
+              <WeekScheduleView
+                slots={recurringSlots}
+                startDate={weekStartDate}
+                shiftDirection={weekShiftDirection}
+                onShiftDays={handleShiftWeekWindow}
+                onResetToday={handleResetWeekWindow}
+                onNavigate={onNavigate}
+                onCreateTask={onCreateTask}
+              />
+            </motion.div>
           )}
+          </AnimatePresence>
         </div>
       </div>
 
