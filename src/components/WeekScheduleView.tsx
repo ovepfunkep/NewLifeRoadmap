@@ -3,7 +3,6 @@ import { t } from '../i18n';
 import { useLanguage } from '../contexts/LanguageContext';
 import { RecurringScheduleSlot, getRollingDays } from '../utils/recurrence';
 import { NodeRecurrence } from '../types';
-import { useAccent } from '../hooks/useAccent';
 import { motion } from 'framer-motion';
 import { FiChevronLeft, FiChevronRight, FiRotateCw } from 'react-icons/fi';
 
@@ -25,17 +24,6 @@ interface TimedSlotLayout {
   laneCount: number;
 }
 
-const CONTRAST_PRIORITY = [
-  '#2563eb', // blue
-  '#ea580c', // orange
-  '#16a34a', // green
-  '#ec4899', // pink
-  '#0891b2', // cyan
-  '#dc2626', // red
-  '#ca8a04', // yellow
-  '#9333ea', // purple
-];
-
 function formatMinutes(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
@@ -56,6 +44,15 @@ function hashString(value: string): number {
     hash |= 0;
   }
   return Math.abs(hash);
+}
+
+function buildStableTaskColor(taskId: string): string {
+  const hash = hashString(taskId);
+  // Golden-angle hue distribution gives visually separated colors for nearby ids.
+  const hue = Math.floor((hash * 137.508) % 360);
+  const saturation = 68 + (hash % 18); // 68..85
+  const lightness = 45 + ((hash >> 4) % 11); // 45..55
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 }
 
 function buildTimedLayouts(slots: RecurringScheduleSlot[]): TimedSlotLayout[] {
@@ -129,7 +126,6 @@ export function WeekScheduleView({
   onNavigate,
 }: WeekScheduleViewProps) {
   const { language } = useLanguage();
-  const { colors: accentColors } = useAccent();
   const days = useMemo(() => getRollingDays(startDate, 7), [startDate]);
   const weekKey = useMemo(() => days[0]?.toISOString() ?? 'week', [days]);
   const hasAnySlots = slots.length > 0;
@@ -157,26 +153,16 @@ export function WeekScheduleView({
     return grouped;
   }, [days, slots]);
 
-  const contrastPalette = useMemo(() => {
-    const fromSettings = accentColors.filter(Boolean);
-    const prioritized = CONTRAST_PRIORITY.filter((color) => fromSettings.includes(color));
-    const fallback = fromSettings.filter((color) => !prioritized.includes(color));
-    const merged = [...prioritized, ...fallback];
-    return merged.length > 0 ? merged : CONTRAST_PRIORITY;
-  }, [accentColors]);
-
   const colorByTaskId = useMemo(() => {
     const map = new Map<string, string>();
-    const paletteSize = contrastPalette.length;
-    if (paletteSize === 0) return map;
     const uniqueIds = Array.from(new Set(slots.map((slot) => slot.taskId)));
 
     uniqueIds.forEach((taskId) => {
-      // Stable color: depends only on taskId, not on current visible slot list.
-      map.set(taskId, contrastPalette[hashString(taskId) % paletteSize] || 'var(--accent)');
+      // Stable and diverse color: depends only on taskId.
+      map.set(taskId, buildStableTaskColor(taskId));
     });
     return map;
-  }, [slots, contrastPalette]);
+  }, [slots]);
 
   const legendItems = useMemo(() => {
     const seen = new Set<string>();
@@ -307,6 +293,7 @@ export function WeekScheduleView({
 
           {days.map((day, dayIndex) => {
           const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+          const isWeekend = day.getDay() === 0 || day.getDay() === 6;
           const daySlots = slotsByDay.get(dayKey) ?? [];
           const allDaySlots = daySlots.filter((slot) => slot.isAllDay);
           const timedSlots = daySlots.filter((slot) => !slot.isAllDay);
@@ -346,6 +333,7 @@ export function WeekScheduleView({
               <div
                 className={`relative h-[530px] rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40 overflow-hidden ${onCreateTask ? 'cursor-copy' : ''}`}
                 onClick={(event) => handleCreateFromTimeline(day, event)}
+                style={isWeekend ? { backgroundColor: 'rgba(var(--accent-rgb), 0.08)', borderColor: 'rgba(var(--accent-rgb), 0.28)' } : undefined}
               >
                 {timelineMarks.map((minutes) => (
                   <div

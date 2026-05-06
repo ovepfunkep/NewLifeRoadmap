@@ -360,7 +360,15 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
   };
 
   const getDraftTimeRange = () => {
-    if (isRecurring || !deadlineDate || !deadlineTime) return null;
+    if (isRecurring) {
+      if (!recurrenceTimeStart || !recurrenceTimeEnd) return null;
+      const startMinutes = parseTimeToMinutes(recurrenceTimeStart);
+      const endMinutes = parseTimeToMinutes(recurrenceTimeEnd);
+      if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) return null;
+      return { startMinutes, endMinutes };
+    }
+
+    if (!deadlineDate || !deadlineTime) return null;
     const startMinutes = parseTimeToMinutes(deadlineTime);
     if (startMinutes === null) return null;
 
@@ -374,18 +382,30 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     return { startMinutes, endMinutes };
   };
 
+  const getConflictTargetDay = () => {
+    if (!isRecurring) {
+      if (!deadlineDate) return null;
+      const selectedDay = new Date(`${deadlineDate}T00:00`);
+      return Number.isFinite(selectedDay.getTime()) ? selectedDay : null;
+    }
+
+    // For recurring task created from week timeline, we receive an exact start day via initialDeadline.
+    if (!node && initialDeadline) {
+      const selectedDay = new Date(initialDeadline);
+      selectedDay.setHours(0, 0, 0, 0);
+      return Number.isFinite(selectedDay.getTime()) ? selectedDay : null;
+    }
+
+    return null;
+  };
+
   useEffect(() => {
     let cancelled = false;
 
     const checkTimeConflicts = async () => {
       const draftRange = getDraftTimeRange();
-      if (!draftRange || !deadlineDate) {
-        setTimeConflicts([]);
-        return;
-      }
-
-      const selectedDay = new Date(`${deadlineDate}T00:00`);
-      if (!Number.isFinite(selectedDay.getTime())) {
+      const targetDay = getConflictTargetDay();
+      if (!draftRange || !targetDay) {
         setTimeConflicts([]);
         return;
       }
@@ -394,7 +414,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
       if (cancelled) return;
 
       const candidateNodes = allNodes.filter((item) => !item.deletedAt && !item.completed && item.id !== node?.id);
-      const daySlots = expandNodesToSlots(candidateNodes, selectedDay, 1);
+      const daySlots = expandNodesToSlots(candidateNodes, targetDay, 1);
       const conflicts = new Map<string, { id: string; title: string }>();
 
       for (const slot of daySlots) {
@@ -416,7 +436,16 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     return () => {
       cancelled = true;
     };
-  }, [isRecurring, deadlineDate, deadlineTime, deadlineEndTime, node?.id]);
+  }, [
+    isRecurring,
+    deadlineDate,
+    deadlineTime,
+    deadlineEndTime,
+    recurrenceTimeStart,
+    recurrenceTimeEnd,
+    initialDeadline,
+    node,
+  ]);
 
   const handleConflictClick = (taskId: string) => {
     onClose();
@@ -897,6 +926,24 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
 
                 {recurrenceError && (
                   <p className="text-[10px] text-red-500 px-1 font-medium">{recurrenceError}</p>
+                )}
+                {!recurrenceError && timeConflicts.length > 0 && (
+                  <p className="text-[10px] px-1 font-medium text-amber-600 dark:text-amber-400">
+                    {t('editor.timeConflictPrefix')}{' '}
+                    {timeConflicts.map((conflict, index) => (
+                      <Fragment key={conflict.id}>
+                        <button
+                          type="button"
+                          onClick={() => handleConflictClick(conflict.id)}
+                          className="underline underline-offset-2 hover:opacity-80"
+                          style={{ color: 'var(--accent)' }}
+                        >
+                          {conflict.title}
+                        </button>
+                        {index < timeConflicts.length - 1 ? ', ' : ''}
+                      </Fragment>
+                    ))}
+                  </p>
                 )}
               </motion.div>
             )}
