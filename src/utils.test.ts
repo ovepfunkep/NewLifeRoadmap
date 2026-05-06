@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Node } from '../types';
-import { computeProgress, deadlineStatus, collectDeadlines, sortByDeadlineAsc, remapIds, generateId } from '../utils';
+import { Node } from './types';
+import { computeProgress, deadlineStatus, collectDeadlines, sortByDeadlineAsc, remapIds, generateId } from './utils';
 
 describe('utils', () => {
   describe('computeProgress', () => {

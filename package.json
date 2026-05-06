@@ -8,7 +8,9 @@
     "build:gh-pages": "GITHUB_PAGES_BASE=/NewLifeRoadmap/ npm run build",
     "preview": "vite preview",
     "test": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ci": "vitest run",
+    "test:ui": "vitest --ui",
+    "verify": "npm run test:ci && npm run build"
   },
   "dependencies": {
     "@types/canvas-confetti": "^1.9.0",

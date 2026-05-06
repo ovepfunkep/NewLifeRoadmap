@@ -1,0 +1,18 @@
+---
+description: Security boundaries for encrypted data and secrets
+globs:
+  - "src/firebase/security.ts"
+  - "src/firebase/sync.ts"
+  - "src/utils/securityManager.ts"
+  - "src/utils/crypto.ts"
+  - ".github/workflows/*.yml"
+alwaysApply: false
+---
+
+# Security Rule
+
+- Never commit secrets, credentials, or service account payloads.
+- Do not introduce plaintext logging for encrypted user content.
+- Preserve existing E2EE behavior and key-management expectations.
+- Keep workflow changes least-privilege; avoid broad permission increases.
+- If security posture changes, update docs and clearly describe migration impact.

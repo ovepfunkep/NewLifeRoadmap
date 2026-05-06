@@ -1,0 +1,15 @@
+---
+description: Core stack and coding constraints for app changes
+globs:
+  - "src/**/*.{ts,tsx}"
+alwaysApply: true
+---
+
+# Stack Rule
+
+- Keep the existing stack: React 18 + TypeScript + Vite + Tailwind + Framer Motion.
+- Prefer extending existing components/hooks/utilities instead of introducing parallel patterns.
+- Do not add new runtime dependencies unless they are clearly required by the task.
+- Keep files focused and changes minimal; avoid broad refactors in feature tasks.
+- Use existing naming and state patterns from nearby modules.
+- Update `src/i18n.ts` whenever user-visible strings are changed.

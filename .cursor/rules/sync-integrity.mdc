@@ -1,0 +1,21 @@
+---
+description: Protect sync compatibility and data model invariants
+globs:
+  - "src/types.ts"
+  - "src/db.ts"
+  - "src/firebase/**/*.ts"
+  - "src/utils/syncCompare.ts"
+  - "src/utils/recurrence.ts"
+alwaysApply: false
+---
+
+# Sync Integrity Rule
+
+- Preserve backward compatibility when extending the `Node` model.
+- Any new persisted field must be propagated through:
+  - local DB paths (`src/db.ts`)
+  - Firebase normalization/sync (`src/firebase/sync.ts`)
+  - conflict comparison (`src/utils/syncCompare.ts`)
+- Do not silently change conflict semantics; document intentional behavior updates.
+- Avoid breaking shape assumptions used by sync workers and notifications.
+- If a change touches recurring/deadline semantics, validate schedule generation paths.
