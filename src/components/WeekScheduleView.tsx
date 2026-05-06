@@ -167,11 +167,13 @@ export function WeekScheduleView({
 
   const colorByTaskId = useMemo(() => {
     const map = new Map<string, string>();
+    const paletteSize = contrastPalette.length;
+    if (paletteSize === 0) return map;
     const uniqueIds = Array.from(new Set(slots.map((slot) => slot.taskId)));
-    uniqueIds.sort((a, b) => hashString(a) - hashString(b));
 
-    uniqueIds.forEach((taskId, index) => {
-      map.set(taskId, contrastPalette[index % contrastPalette.length] || 'var(--accent)');
+    uniqueIds.forEach((taskId) => {
+      // Stable color: depends only on taskId, not on current visible slot list.
+      map.set(taskId, contrastPalette[hashString(taskId) % paletteSize] || 'var(--accent)');
     });
     return map;
   }, [slots, contrastPalette]);
