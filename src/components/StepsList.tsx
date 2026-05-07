@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
 import { NodeCard } from './NodeCard';
@@ -62,6 +62,19 @@ export function StepsList({
   const { allowDecorativeMotion } = useMotionPreferences();
   const [isMobile, setIsMobile] = useState(false);
   const [showSortSheet, setShowSortSheet] = useState(false);
+  const filterScrollRef = useRef<HTMLDivElement>(null);
+  const [filterScrollFade, setFilterScrollFade] = useState({ left: false, right: false });
+
+  const updateFilterScrollFade = useCallback(() => {
+    const el = filterScrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    const overflow = scrollWidth > clientWidth + 2;
+    setFilterScrollFade({
+      left: overflow && scrollLeft > 3,
+      right: overflow && scrollLeft < scrollWidth - clientWidth - 3,
+    });
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -81,6 +94,32 @@ export function StepsList({
       incomplete: total - completed,
     };
   }, [children]);
+
+  useEffect(() => {
+    updateFilterScrollFade();
+    const el = filterScrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => updateFilterScrollFade());
+    ro.observe(el);
+    el.addEventListener('scroll', updateFilterScrollFade, { passive: true });
+    window.addEventListener('resize', updateFilterScrollFade);
+    return () => {
+      ro.disconnect();
+      el.removeEventListener('scroll', updateFilterScrollFade);
+      window.removeEventListener('resize', updateFilterScrollFade);
+    };
+  }, [updateFilterScrollFade, children.length, counts.all, counts.completed, counts.incomplete]);
+
+  useEffect(() => {
+    let id2 = 0;
+    const id1 = requestAnimationFrame(() => {
+      id2 = requestAnimationFrame(updateFilterScrollFade);
+    });
+    return () => {
+      cancelAnimationFrame(id1);
+      cancelAnimationFrame(id2);
+    };
+  }, [updateFilterScrollFade, filterType]);
 
   const filteredChildren = useMemo(() => {
     return children.filter(child => {
@@ -170,9 +209,12 @@ export function StepsList({
           )}
         </div>
 
-        <div className="mb-4 min-h-9">
+        <div className="relative mb-4 min-h-9 min-w-0">
           <LayoutGroup id="steps-filter-chips">
-          <div className="flex min-h-9 min-w-0 items-center gap-1 overflow-x-auto custom-scrollbar">
+            <div
+              ref={filterScrollRef}
+              className="flex min-h-9 min-w-0 items-center gap-1 overflow-x-auto custom-scrollbar"
+            >
             {filterChips.map((chip) => {
               const active = filterType === chip.key;
               return (
@@ -209,8 +251,20 @@ export function StepsList({
                 </motion.button>
               );
             })}
-          </div>
+            </div>
           </LayoutGroup>
+          <div
+            className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-slate-100 to-transparent transition-opacity duration-200 dark:from-gray-900 ${
+              filterScrollFade.left ? 'opacity-100' : 'opacity-0'
+            }`}
+            aria-hidden
+          />
+          <div
+            className={`pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-slate-100 to-transparent transition-opacity duration-200 dark:from-gray-900 ${
+              filterScrollFade.right ? 'opacity-100' : 'opacity-0'
+            }`}
+            aria-hidden
+          />
         </div>
 
         {children.length === 0 ? (
