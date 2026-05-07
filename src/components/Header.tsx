@@ -129,7 +129,7 @@ export function Header({
             >
               {AMBIENT_SEASON === 'winter' && <Garland />}
               {AMBIENT_SEASON === 'spring' && !isMobile && <SpringTrees />}
-              <div className="container relative mx-auto px-2 pb-3 pt-6 md:px-4">
+              <div className="container relative mx-auto w-full max-w-full pb-6 pt-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   {/* Хлебные крошки */}
@@ -215,11 +215,11 @@ export function Header({
                                 <button
                                   type="button"
                                   onClick={() => setShowActionsSheet(true)}
-                                  className="flex h-10 w-10 self-start items-center justify-center rounded-lg border border-current transition-all hover:bg-accent/10"
+                                  className="flex h-9 w-9 shrink-0 items-center justify-center self-start rounded-lg border border-current transition-all hover:bg-accent/10"
                                   style={{ color: 'var(--accent)' }}
                                   aria-label="Open actions menu"
                                 >
-                                  <FiMoreVertical size={20} />
+                                  <FiMoreVertical size={15} />
                                 </button>
                               </div>
                             )}

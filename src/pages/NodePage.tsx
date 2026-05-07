@@ -1249,7 +1249,7 @@ export function NodePage() {
             />
           )}
 
-          <main className={`container mx-auto px-2 py-6 md:px-4 ${isMobile ? 'pb-[calc(88px+env(safe-area-inset-bottom))]' : ''}`}>
+          <main className={`container mx-auto px-4 py-6 ${isMobile ? 'pb-[calc(88px+env(safe-area-inset-bottom))]' : ''}`}>
             {!isMobile && (
               <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3">
                 <div className="lg:col-span-1 lg:order-2">
@@ -1265,7 +1265,6 @@ export function NodePage() {
                 <div className="lg:col-span-2 lg:order-1">
                   <StepsList
                     children={sortedChildren}
-                    onCreateChild={handleCreateChild}
                     onNavigate={navigateToNode}
                     onMarkCompleted={handleMarkCompleted}
                     onEdit={handleEdit}
@@ -1296,7 +1295,6 @@ export function NodePage() {
             {isMobile && mobileSection === 'tasks' && (
               <StepsList
                 children={sortedChildren}
-                onCreateChild={handleCreateChild}
                 onNavigate={navigateToNode}
                 onMarkCompleted={handleMarkCompleted}
                 onEdit={handleEdit}
@@ -1458,7 +1456,7 @@ export function NodePage() {
       {isMobile && mobileSection === 'tasks' && (
         <button
           onClick={handleCreateChild}
-          className="fixed right-6 flex h-12 w-12 items-center justify-center rounded-xl text-white transition-all hover:brightness-110"
+          className="fixed right-4 flex h-12 w-12 items-center justify-center rounded-xl text-white transition-all hover:brightness-110"
           style={{
             zIndex: Z_MOBILE_FAB,
             bottom: 'calc(88px + env(safe-area-inset-bottom))',

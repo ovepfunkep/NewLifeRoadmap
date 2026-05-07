@@ -157,6 +157,25 @@ export function shiftDashboardAnchor(date: Date, period: DashboardPeriod, offset
   return shiftPeriod(periodStart(date, period), period, offset);
 }
 
+/** Label for a dashboard period window (matches stats header). */
+export function dashboardPeriodLabel(date: Date, period: DashboardPeriod): string {
+  return periodLabel(date, period);
+}
+
+/** Monday-start weeks whose Monday falls in `year` (same bucketing as dashboard `week` period). */
+export function dashboardWeekStartsInYear(year: number): Date[] {
+  const weeks: Date[] = [];
+  let d = shiftDashboardAnchor(new Date(year, 0, 1), 'week', 0);
+  while (d.getFullYear() < year) {
+    d = shiftDashboardAnchor(d, 'week', 1);
+  }
+  while (d.getFullYear() === year) {
+    weeks.push(new Date(d));
+    d = shiftDashboardAnchor(d, 'week', 1);
+  }
+  return weeks;
+}
+
 function periodRange(date: Date, period: DashboardPeriod): PeriodRange {
   const start = periodStart(date, period);
   const nextStart = shiftPeriod(start, period, 1);

@@ -830,9 +830,9 @@ export function NodeCard({
                   className="group min-w-0 flex-1 text-left"
                 >
                   <div className="space-y-1.5">
-                    <span className="line-clamp-2 text-lg font-bold leading-snug text-gray-900 transition-opacity group-hover:opacity-75 dark:text-gray-100" style={{ color: 'var(--accent)' }}>
+                    <h3 className="m-0 line-clamp-2 text-lg font-bold leading-snug text-gray-900 transition-opacity group-hover:opacity-75 dark:text-gray-100" style={{ color: 'var(--accent)' }}>
                       {node.title}
-                    </span>
+                    </h3>
                     {deadlineDisplay && (
                       <div className="pt-0.5">
                         <span

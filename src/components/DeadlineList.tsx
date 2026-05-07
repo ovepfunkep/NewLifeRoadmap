@@ -258,7 +258,7 @@ export function DeadlineList({ node, onNavigate, onNavigateToTask, onMarkComplet
   return (
     <>
       <div
-        className={`flex min-h-[140px] flex-col p-4 transition-all md:p-5 ${
+        className={`flex min-h-[140px] flex-col py-4 transition-all md:p-5 ${
           isMobile ? '' : 'rounded-lg border border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-800'
         }`}
       >
@@ -396,7 +396,7 @@ export function DeadlineList({ node, onNavigate, onNavigateToTask, onMarkComplet
                           onNavigate(dl.id);
                           onNavigateToTask?.(dl.id);
                         }}
-                        className="w-full rounded-xl border border-gray-300 bg-slate-50/90 p-3.5 text-left transition-all dark:border-gray-700 dark:bg-gray-700/40"
+                        className="w-full rounded-xl border border-gray-300 bg-white p-3.5 text-left transition-all dark:border-gray-700 dark:bg-gray-800"
                       >
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="min-w-0 flex-1">

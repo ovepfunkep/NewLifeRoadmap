@@ -3,7 +3,7 @@ import { Node } from '../types';
 import { t } from '../i18n';
 import { NodeCard } from './NodeCard';
 import { Tooltip } from './Tooltip';
-import { FiPlus, FiCalendar, FiCheck, FiSliders, FiAlignLeft, FiList } from 'react-icons/fi';
+import { FiCalendar, FiSliders } from 'react-icons/fi';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { useEffects } from '../hooks/useEffects';
 import { MobileBottomSheet } from './MobileBottomSheet';
@@ -15,7 +15,6 @@ type FilterType = 'all' | 'completed' | 'incomplete';
 
 interface StepsListProps {
   children: Node[];
-  onCreateChild: () => void;
   onNavigate: (id: string) => void;
   onMarkCompleted: (id: string, completed: boolean) => void;
   onEdit: (node: Node) => void;
@@ -39,7 +38,6 @@ interface StepsListProps {
 
 export function StepsList({ 
   children, 
-  onCreateChild,
   onNavigate, 
   onMarkCompleted, 
   onEdit, 
@@ -128,64 +126,11 @@ export function StepsList({
 
   return (
     <>
-      <div className="rounded-lg border border-gray-300 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 md:p-5">
+      <div className="min-w-0">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+          <h2 className="text-2xl font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100 md:text-xl">
             {t('node.steps') || 'Задачи'}
           </h2>
-          <Tooltip text={t('node.createChild')}>
-            <button
-              onClick={onCreateChild}
-              className="flex h-9 w-9 items-center justify-center rounded-lg transition-all hover:brightness-110"
-              style={{ color: 'white', backgroundColor: 'var(--accent)' }}
-            >
-              <FiPlus size={18} />
-            </button>
-          </Tooltip>
-        </div>
-
-        <div className="mb-4 flex min-h-9 items-center gap-2">
-          <LayoutGroup id="steps-filter-chips">
-          <div className="flex min-h-9 min-w-0 flex-1 items-center gap-2 overflow-x-auto custom-scrollbar">
-            {filterChips.map((chip) => {
-              const active = filterType === chip.key;
-              return (
-                <motion.button
-                  key={chip.key}
-                  type="button"
-                  onClick={() => onFilterChange(chip.key)}
-                  className={`relative flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all ${
-                    active
-                      ? 'border-transparent text-white'
-                      : 'border-gray-300 text-gray-600 dark:border-gray-600 dark:text-gray-300'
-                  }`}
-                  style={{
-                    backgroundColor: active && !allowDecorativeMotion ? 'var(--accent)' : 'transparent',
-                  }}
-                  whileTap={allowDecorativeMotion ? { scale: 0.97 } : undefined}
-                >
-                  {active && allowDecorativeMotion && (
-                    <motion.span
-                      layoutId="steps-filter-active-chip"
-                      className="absolute inset-0 rounded-full"
-                      style={{ backgroundColor: 'var(--accent)' }}
-                      transition={motionTransitions.itemSpring}
-                    />
-                  )}
-                  <span className="relative z-10 min-w-0 truncate">{chip.label}</span>
-                  <span
-                    className={`relative z-10 min-w-[1.8rem] shrink-0 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold tabular-nums ${
-                      active ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
-                    }`}
-                  >
-                    {chip.count}
-                  </span>
-                </motion.button>
-              );
-            })}
-          </div>
-          </LayoutGroup>
-
           {isMobile ? (
             <Tooltip text={t('sort.openOptions')}>
               <motion.button
@@ -223,6 +168,49 @@ export function StepsList({
               ))}
             </div>
           )}
+        </div>
+
+        <div className="mb-4 min-h-9">
+          <LayoutGroup id="steps-filter-chips">
+          <div className="flex min-h-9 min-w-0 items-center gap-1 overflow-x-auto custom-scrollbar">
+            {filterChips.map((chip) => {
+              const active = filterType === chip.key;
+              return (
+                <motion.button
+                  key={chip.key}
+                  type="button"
+                  onClick={() => onFilterChange(chip.key)}
+                  className={`relative flex items-center gap-1 rounded-full border-0 px-3 py-1.5 text-xs font-semibold shadow-none ring-0 transition-all outline-none focus-visible:ring-2 focus-visible:ring-accent/35 ${
+                    active
+                      ? 'text-white'
+                      : 'bg-white text-gray-700 dark:bg-gray-800 dark:text-gray-200'
+                  }`}
+                  style={{
+                    backgroundColor: active && !allowDecorativeMotion ? 'var(--accent)' : undefined,
+                  }}
+                  whileTap={allowDecorativeMotion ? { scale: 0.97 } : undefined}
+                >
+                  {active && allowDecorativeMotion && (
+                    <motion.span
+                      layoutId="steps-filter-active-chip"
+                      className="absolute inset-0 rounded-full"
+                      style={{ backgroundColor: 'var(--accent)' }}
+                      transition={motionTransitions.itemSpring}
+                    />
+                  )}
+                  <span className="relative z-10 min-w-0 truncate">{chip.label}</span>
+                  <span
+                    className={`relative z-10 min-w-[1.8rem] shrink-0 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold tabular-nums ${
+                      active ? 'bg-white/20 text-white' : 'bg-[#F4F4F6] text-gray-700 dark:bg-[#2e2e34] dark:text-gray-200'
+                    }`}
+                  >
+                    {chip.count}
+                  </span>
+                </motion.button>
+              );
+            })}
+          </div>
+          </LayoutGroup>
         </div>
 
         {children.length === 0 ? (
@@ -279,8 +267,6 @@ export function StepsList({
           <div className="space-y-2">
             {sortOptions.map((option) => {
               const active = sortType === option.key;
-              const Icon =
-                option.key === 'deadline' ? FiCalendar : option.key === 'name' ? FiAlignLeft : FiList;
               return (
                 <button
                   key={option.key}
@@ -289,28 +275,14 @@ export function StepsList({
                     onSortChange(option.key);
                     setShowSortSheet(false);
                   }}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-all ${
+                  className={`w-full rounded-xl px-4 py-3 text-left text-sm font-semibold transition-all ${
                     active
                       ? 'text-white shadow-lg shadow-accent/20'
                       : 'bg-gray-50 text-gray-700 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'
                   }`}
                   style={active ? { backgroundColor: 'var(--accent)' } : undefined}
                 >
-                  <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
-                      active ? 'bg-white/20' : 'bg-white dark:bg-gray-800'
-                    }`}
-                  >
-                    <Icon size={18} className={active ? 'text-white' : 'text-accent'} aria-hidden />
-                  </div>
-                  <span
-                    className={`min-w-0 flex-1 text-sm font-semibold ${
-                      active ? 'text-white' : 'text-gray-700 dark:text-gray-300'
-                    }`}
-                  >
-                    {option.label}
-                  </span>
-                  {active && <FiCheck size={18} className="shrink-0 text-white" aria-hidden />}
+                  {option.label}
                 </button>
               );
             })}

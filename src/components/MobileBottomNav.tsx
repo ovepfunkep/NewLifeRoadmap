@@ -19,7 +19,7 @@ const NAV_ITEMS: Array<{ id: MobileSection; icon: React.ElementType; labelKey: s
 export function MobileBottomNav({ activeSection, onSectionChange }: MobileBottomNavProps) {
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 border-t border-gray-200 bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-2 backdrop-blur-md dark:border-gray-700 dark:bg-gray-900/95"
+      className="fixed inset-x-0 bottom-0 border-t border-gray-200 bg-white/95 px-4 pb-[max(env(safe-area-inset-bottom),8px)] pt-2 backdrop-blur-md dark:border-gray-700 dark:bg-gray-900/95"
       style={{ zIndex: Z_MOBILE_NAV }}
     >
       <div className="mx-auto grid max-w-3xl grid-cols-4 gap-1">
