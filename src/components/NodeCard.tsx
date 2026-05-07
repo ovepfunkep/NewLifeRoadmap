@@ -922,7 +922,7 @@ export function NodeCard({
                                         ? action.color
                                         : theme === 'dark'
                                           ? 'rgba(71, 85, 105, 0.55)'
-                                          : '#e2e8f0'
+                                          : '#f1f1f1'
                                     : 'transparent',
                                   color: action.id === 'delete'
                                     ? '#ef4444'

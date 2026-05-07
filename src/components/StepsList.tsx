@@ -3,7 +3,7 @@ import { Node } from '../types';
 import { t } from '../i18n';
 import { NodeCard } from './NodeCard';
 import { Tooltip } from './Tooltip';
-import { FiPlus, FiCalendar, FiCheck, FiSliders } from 'react-icons/fi';
+import { FiPlus, FiCalendar, FiCheck, FiSliders, FiAlignLeft, FiList } from 'react-icons/fi';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { useEffects } from '../hooks/useEffects';
 import { MobileBottomSheet } from './MobileBottomSheet';
@@ -144,9 +144,9 @@ export function StepsList({
           </Tooltip>
         </div>
 
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-4 flex min-h-9 items-center gap-2">
           <LayoutGroup id="steps-filter-chips">
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+          <div className="flex min-h-9 min-w-0 flex-1 items-center gap-2 overflow-x-auto custom-scrollbar">
             {filterChips.map((chip) => {
               const active = filterType === chip.key;
               return (
@@ -191,7 +191,7 @@ export function StepsList({
               <motion.button
                 type="button"
                 onClick={() => setShowSortSheet(true)}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-current transition-all hover:bg-accent/10"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-current transition-all hover:bg-accent/10"
                 style={{
                   color: 'var(--accent)',
                 }}
@@ -201,7 +201,7 @@ export function StepsList({
               </motion.button>
             </Tooltip>
           ) : (
-            <div className="flex items-center gap-1">
+            <div className="flex min-h-9 shrink-0 items-center gap-1">
               {sortOptions.map((option) => (
                 <Tooltip key={option.key} text={option.label}>
                   <button
@@ -275,53 +275,47 @@ export function StepsList({
         title={t('sort.openOptions')}
         onClose={() => setShowSortSheet(false)}
       >
-        <motion.div
-          className="space-y-2"
-          initial={allowDecorativeMotion ? 'hidden' : false}
-          animate={allowDecorativeMotion ? 'visible' : undefined}
-          variants={
-            allowDecorativeMotion
-              ? {
-                  hidden: { opacity: 0 },
-                  visible: {
-                    opacity: 1,
-                    transition: { staggerChildren: 0.05, delayChildren: 0.04 },
-                  },
-                }
-              : undefined
-          }
-        >
-          {sortOptions.map((option) => (
-            <motion.button
-              key={option.key}
-              type="button"
-              onClick={() => {
-                onSortChange(option.key);
-                setShowSortSheet(false);
-              }}
-              className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-semibold transition-all ${
-                sortType === option.key
-                  ? 'border-transparent text-white'
-                  : 'border-gray-300 text-gray-700 dark:border-gray-600 dark:text-gray-200'
-              }`}
-              style={{
-                backgroundColor: sortType === option.key ? 'var(--accent)' : 'transparent',
-              }}
-              variants={
-                allowDecorativeMotion
-                  ? {
-                      hidden: { opacity: 0, y: 10 },
-                      visible: { opacity: 1, y: 0, transition: motionTransitions.fade },
-                    }
-                  : undefined
-              }
-              whileTap={allowDecorativeMotion ? { scale: 0.98 } : undefined}
-            >
-              <span>{option.label}</span>
-              {sortType === option.key && <FiCheck size={16} />}
-            </motion.button>
-          ))}
-        </motion.div>
+        <div className="max-h-[80vh] overflow-y-auto px-1 pb-1">
+          <div className="space-y-2">
+            {sortOptions.map((option) => {
+              const active = sortType === option.key;
+              const Icon =
+                option.key === 'deadline' ? FiCalendar : option.key === 'name' ? FiAlignLeft : FiList;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => {
+                    onSortChange(option.key);
+                    setShowSortSheet(false);
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-all ${
+                    active
+                      ? 'text-white shadow-lg shadow-accent/20'
+                      : 'bg-gray-50 text-gray-700 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'
+                  }`}
+                  style={active ? { backgroundColor: 'var(--accent)' } : undefined}
+                >
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                      active ? 'bg-white/20' : 'bg-white dark:bg-gray-800'
+                    }`}
+                  >
+                    <Icon size={18} className={active ? 'text-white' : 'text-accent'} aria-hidden />
+                  </div>
+                  <span
+                    className={`min-w-0 flex-1 text-sm font-semibold ${
+                      active ? 'text-white' : 'text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    {option.label}
+                  </span>
+                  {active && <FiCheck size={18} className="shrink-0 text-white" aria-hidden />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </MobileBottomSheet>
     </>
   );

@@ -138,8 +138,6 @@ export function WeekScheduleView({
   const [viewportHeight, setViewportHeight] = useState(0);
   const days = useMemo(() => getRollingDays(startDate, 7), [startDate]);
   const weekKey = useMemo(() => days[0]?.toISOString() ?? 'week', [days]);
-  const hasAnySlots = slots.length > 0;
-
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
@@ -207,7 +205,7 @@ export function WeekScheduleView({
 
   const timelineMarks = useMemo(() => {
     const marks: number[] = [];
-    for (let hour = 0; hour <= 24; hour += 2) {
+    for (let hour = 0; hour <= 24; hour += 1) {
       marks.push(hour * 60);
     }
     return marks;
@@ -240,14 +238,11 @@ export function WeekScheduleView({
     onNavigateToTask?.(taskId);
   };
 
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
   return (
     <div className="space-y-3">
-      {!hasAnySlots && (
-        <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-          {t('schedule.weekEmpty')}
-        </div>
-      )}
-
       <motion.div
         key={weekKey}
         initial={allowDecorativeMotion ? { opacity: 0, x: shiftDirection > 0 ? 22 : shiftDirection < 0 ? -22 : 0 } : false}
@@ -256,34 +251,17 @@ export function WeekScheduleView({
         className="relative"
       >
         <div className="grid grid-cols-8 gap-2">
-          <div className="px-1" />
-          {days.map((day, idx) => (
-            <div
-              key={day.toISOString()}
-              className="relative px-1 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-              style={idx === 0 ? { color: 'var(--accent)' } : undefined}
-            >
-              <div className="text-center">
-                <div>{day.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'short' })}</div>
-                <div className="text-[11px] normal-case font-medium text-gray-600 dark:text-gray-300">
-                  {day.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit' })}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-8 gap-2">
-          <div className="space-y-2">
+          <div className="flex flex-col space-y-2">
+            <div className="min-h-[48px] shrink-0" aria-hidden />
             <div className={hasAnyAllDay ? 'min-h-[42px]' : 'min-h-[8px]'} />
-            <div className="relative" style={{ height: `${timelineHeight}px` }}>
+            <div className="relative shrink-0" style={{ height: `${timelineHeight}px` }}>
               {timelineMarks.map((minutes) => (
                 <div
                   key={minutes}
-                  className="absolute left-0 right-0 text-[10px] text-gray-400 dark:text-gray-500"
+                  className="absolute left-0 right-0 text-[10px] text-gray-400 dark:text-gray-500 tabular-nums leading-none"
                   style={{ top: `${(minutes / (24 * 60)) * 100}%`, transform: 'translateY(-50%)' }}
                 >
-                  {formatMinutes(minutes)}
+                  {!isMobile || minutes % 120 === 0 ? formatMinutes(minutes) : ''}
                 </div>
               ))}
             </div>
@@ -292,6 +270,14 @@ export function WeekScheduleView({
           {days.map((day) => {
           const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
           const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+          const isToday = dayKey === todayKey;
+          const weekendWash =
+            isWeekend && !isToday
+              ? {
+                  backgroundColor: 'rgba(var(--accent-rgb), 0.08)',
+                  borderColor: 'rgba(var(--accent-rgb), 0.28)',
+                }
+              : undefined;
           const daySlots = slotsByDay.get(dayKey) ?? [];
           const allDaySlots = daySlots.filter((slot) => slot.isAllDay);
           const timedSlots = daySlots.filter((slot) => !slot.isAllDay);
@@ -301,8 +287,25 @@ export function WeekScheduleView({
           return (
             <div
               key={dayKey}
-              className="space-y-2"
+              className={`space-y-2 rounded-lg border-2 ${isToday ? '' : 'border-transparent'}`}
+              style={isToday ? { borderColor: 'var(--accent)' } : undefined}
             >
+              <div
+                className={`relative flex min-h-[48px] flex-col justify-center px-1 text-center text-[10px] font-bold uppercase tracking-wider ${
+                  isWeekend && !isToday ? '' : 'text-gray-500 dark:text-gray-400'
+                }`}
+                style={isWeekend && !isToday ? { color: 'var(--accent)' } : undefined}
+              >
+                <div>{day.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'short' })}</div>
+                <div
+                  className={`text-[11px] normal-case font-medium ${
+                    isWeekend && !isToday ? 'opacity-90' : 'text-gray-600 dark:text-gray-300'
+                  }`}
+                >
+                  {day.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit' })}
+                </div>
+              </div>
+
               <div className={`${hasAnyAllDay ? 'min-h-[42px]' : 'min-h-[8px]'} space-y-1`}>
                 {allDaySlots.map((slot) => (
                   <motion.button
@@ -326,19 +329,21 @@ export function WeekScheduleView({
               </div>
 
               <div
-                className={`relative rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40 overflow-hidden ${onCreateTask ? 'cursor-copy' : ''}`}
+                className={`relative rounded-lg border border-gray-200 bg-gray-50/60 dark:border-gray-700 dark:bg-gray-900/40 overflow-hidden ${onCreateTask ? 'cursor-copy' : ''}`}
                 onClick={(event) => handleCreateFromTimeline(day, event)}
                 style={{
                   height: `${timelineHeight}px`,
-                  ...(isWeekend
-                    ? { backgroundColor: 'rgba(var(--accent-rgb), 0.08)', borderColor: 'rgba(var(--accent-rgb), 0.28)' }
-                    : {}),
+                  ...weekendWash,
                 }}
               >
                 {timelineMarks.map((minutes) => (
                   <div
                     key={`${dayKey}-${minutes}`}
-                    className="absolute left-0 right-0 border-t border-gray-200/70 dark:border-gray-700/60"
+                    className={`absolute left-0 right-0 border-t ${
+                      minutes % 120 === 0
+                        ? 'border-gray-200/70 dark:border-gray-700/60'
+                        : 'border-gray-200/40 dark:border-gray-700/40'
+                    }`}
                     style={{ top: `${(minutes / (24 * 60)) * 100}%` }}
                   />
                 ))}

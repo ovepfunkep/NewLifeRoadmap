@@ -379,7 +379,9 @@ export function Header({
               <span className="flex-1 text-left">{node.priority ? t('tooltip.removePriority') : t('tooltip.priority')}</span>
             </button>
           )}
-          <div className="mb-1 h-px bg-gray-200 dark:bg-gray-700" />
+          {((onMarkCompleted && node.id !== 'root-node') || (onTogglePriority && node.id !== 'root-node')) && (
+            <div className="mb-1 h-px bg-gray-200 dark:bg-gray-700" />
+          )}
           {onEdit && (
             <button
               type="button"
