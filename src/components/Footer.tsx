@@ -1,11 +1,15 @@
-import { FiGithub } from 'react-icons/fi';
+import { FiGithub, FiSettings } from 'react-icons/fi';
 import { FaTelegram } from 'react-icons/fa';
 import { Tooltip } from './Tooltip';
 import { AuthAvatar } from './AuthAvatar';
 import { t } from '../i18n';
 import { useEffect, useState } from 'react';
 
-export function Footer() {
+interface FooterProps {
+  onOpenSettings?: () => void;
+}
+
+export function Footer({ onOpenSettings }: FooterProps) {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -19,7 +23,7 @@ export function Footer() {
 
   return (
     <footer className="border-t border-gray-200 dark:border-gray-700 mt-auto bg-transparent">
-      <div className="container mx-auto px-4 py-4">
+      <div className="container mx-auto px-2 py-4 md:px-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-2 sm:gap-4">
             <AuthAvatar />
@@ -45,6 +49,17 @@ export function Footer() {
                 <FiGithub size={22} className="sm:w-5 sm:h-5" />
               </a>
             </Tooltip>
+            {isMobile && onOpenSettings && (
+              <Tooltip text={t('footer.settings')}>
+                <button
+                  onClick={onOpenSettings}
+                  className="p-3 rounded-lg transition-all hover:bg-accent/10 hover:brightness-150"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  <FiSettings size={22} />
+                </button>
+              </Tooltip>
+            )}
           </div>
           {!isMobile && (
             <div className="flex items-center gap-6">

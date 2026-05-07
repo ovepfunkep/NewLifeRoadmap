@@ -1,7 +1,7 @@
 import { useTranslation } from '../i18n';
 import { TELEGRAM_BOT_USERNAME } from '../utils/constants';
 import { getCurrentUser } from '../firebase/auth';
-import { Z_MODAL } from '../config/zLayers';
+import { Z_MODAL_HIGH } from '../config/zLayers';
 
 interface TelegramLinkModalProps {
   onClose: () => void;
@@ -15,7 +15,7 @@ export function TelegramLinkModal({ onClose }: TelegramLinkModalProps) {
   return (
     <div
       className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-      style={{ zIndex: Z_MODAL }}
+      style={{ zIndex: Z_MODAL_HIGH }}
     >
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md animate-in zoom-in-95 duration-200">
         <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">

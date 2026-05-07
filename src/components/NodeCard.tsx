@@ -5,9 +5,12 @@ import { useTranslation } from '../i18n';
 import { computeProgress, getProgressCounts, formatDeadline } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { useEffects } from '../hooks/useEffects';
+import { useTheme } from '../hooks/useTheme';
 import { FiCheck, FiEdit2, FiTrash2, FiArrowUp, FiMove } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
 import { motion } from 'framer-motion';
+import { useMotionPreferences } from '../hooks/useMotionPreferences';
+import { motionTransitions } from '../config/motion';
 
 interface NodeCardProps {
   node: Node;
@@ -52,6 +55,8 @@ export function NodeCard({
   const progress = computeProgress(node);
   const deadlineDisplay = formatDeadline(node.deadline, node.deadlineEnd);
   const { effectsEnabled } = useEffects();
+  const { allowDecorativeMotion } = useMotionPreferences();
+  const { theme } = useTheme();
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [justDragged, setJustDragged] = useState(false);
@@ -581,8 +586,14 @@ export function NodeCard({
     }
   };
 
+  const isDragBlockedTarget = (target: EventTarget | null): boolean => {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest('[data-card-action="true"]'));
+  };
+
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; 
+    if (isDragBlockedTarget(e.target)) return;
     const startX = e.clientX;
     const startY = e.clientY;
     let hasStartedDrag = false;
@@ -622,6 +633,10 @@ export function NodeCard({
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (isDragBlockedTarget(e.target)) {
+      return;
+    }
+
     // Если барабан активен, игнорируем события карточки
     if (document.body.classList.contains('any-drum-dragging')) {
       e.preventDefault();
@@ -657,10 +672,6 @@ export function NodeCard({
       setDragPosition({ x, y });
       onDragStart?.(node);
       document.body.style.userSelect = 'none';
-      
-      if (window.navigator && window.navigator.vibrate) {
-        window.navigator.vibrate(50);
-      }
     };
 
     const updateProgress = (now: number) => {
@@ -723,6 +734,10 @@ export function NodeCard({
       document.body.style.userSelect = '';
       
       if (hasStartedDrag) {
+        if (endEvent.cancelable) {
+          endEvent.preventDefault();
+        }
+        endEvent.stopPropagation();
         setIsDragging(false);
         setJustDragged(true);
         if (timeoutRef.current) {
@@ -738,6 +753,21 @@ export function NodeCard({
     window.addEventListener('touchcancel', handleTouchEnd);
   };
 
+  const handleNavigateClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    // Do not open the node while drag gesture is active/just finished.
+    if (
+      justDragged ||
+      isDragging ||
+      (draggedNode && draggedNode.id === node.id) ||
+      document.body.classList.contains('any-drum-dragging')
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    onNavigate(node.id);
+  };
+
   return (
     <>
       <div className="relative">
@@ -751,11 +781,12 @@ export function NodeCard({
           }}
           transition={{
             x: { duration: effectsEnabled ? 0.8 : 0, ease: "easeIn" },
-            opacity: { duration: isMovingOut ? (effectsEnabled ? 0.4 : 0) : 0.3 },
+            opacity: { duration: isMovingOut ? (effectsEnabled ? 0.4 : 0) : motionTransitions.fade.duration },
           }}
-          className={`bg-white dark:bg-gray-800 rounded-2xl transition-[border-color,box-shadow] duration-500 ease-out overflow-hidden relative flex flex-col min-h-[140px] hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:hover:shadow-[0_25px_50px_-12px_rgba(255,255,255,0.1)] ${
+          whileTap={allowDecorativeMotion && !isDrumActive ? { scale: 0.995 } : undefined}
+          className={`relative flex min-h-[140px] flex-col overflow-hidden rounded-2xl bg-white transition-[border-color,box-shadow] duration-300 ease-out dark:bg-gray-800 ${
             node.priority
-              ? 'border-[3px]'
+              ? 'border-2'
               : 'border border-gray-300 dark:border-gray-700'
           } ${
             isDragOver ? 'ring-2 ring-offset-2' : ''
@@ -769,10 +800,10 @@ export function NodeCard({
             } : {}),
             ...(node.priority ? { borderColor: 'var(--accent)' } : {}),
             boxShadow: isDragOver
-              ? `0 0 0 3px var(--accent), 0 12px 24px rgba(0, 0, 0, 0.2), 0 8px 16px rgba(0, 0, 0, 0.1)`
+              ? `0 0 0 2px var(--accent), var(--card-shadow-priority)`
               : node.priority
-                ? '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
-                : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                ? 'var(--card-shadow-priority)'
+                : 'var(--card-shadow-soft)',
             ...(isDragOver ? { transition: 'all 0.3s ease' } : {}),
             ...(draggedNode && draggedNode.id !== node.id && (!currentNodeId || node.id !== currentNodeId) ? {
               borderColor: 'var(--accent)',
@@ -785,40 +816,36 @@ export function NodeCard({
           onMouseLeave={handleMouseLeave}
           onMouseUp={handleCardMouseUp}
           onTouchEnd={handleCardTouchEnd}
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
         >
           <div className="flex flex-col flex-1 relative z-[2]">
             <div
-              className={`flex-1 min-w-0 p-0 flex flex-col ${isMobile ? 'pr-16' : ''}`}
-              onMouseDown={handleMouseDown}
-              onTouchStart={handleTouchStart}
+              className={`flex min-w-0 flex-1 flex-col p-0 ${isMobile ? 'pr-16' : ''}`}
             >
-              <div className="flex items-center justify-between p-4 pb-2">
+              <div className="flex items-start justify-between p-4 pb-1">
                 <button
-                  onClick={(e) => {
-                    if (justDragged) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      return;
-                    }
-                    onNavigate(node.id);
-                  }}
-                  className="flex-1 text-left group min-w-0"
+                  type="button"
+                  onClick={handleNavigateClick}
+                  className="group min-w-0 flex-1 text-left"
                 >
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="font-bold text-lg text-gray-900 dark:text-gray-100 group-hover:opacity-75 transition-opacity line-clamp-2" style={{ color: 'var(--accent)' }}>
+                  <div className="space-y-1.5">
+                    <span className="line-clamp-2 text-lg font-bold leading-snug text-gray-900 transition-opacity group-hover:opacity-75 dark:text-gray-100" style={{ color: 'var(--accent)' }}>
                       {node.title}
                     </span>
                     {deadlineDisplay && (
-                      <span
-                        className="text-[10px] px-1.5 py-0.5 rounded font-bold border uppercase tracking-wider whitespace-nowrap"
-                        style={{
-                          borderColor: '#eab308',
-                          color: 'black',
-                          backgroundColor: '#eab308',
-                        }}
-                      >
-                        {deadlineDisplay}
-                      </span>
+                      <div className="pt-0.5">
+                        <span
+                          className="whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                          style={{
+                            borderColor: '#f97316',
+                            color: 'white',
+                            backgroundColor: '#f97316',
+                          }}
+                        >
+                          {deadlineDisplay}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </button>
@@ -828,9 +855,16 @@ export function NodeCard({
                     <div className="flex items-center gap-1.5">
                       {actions.map((action) => (
                         <Tooltip key={action.id} text={action.label}>
-                          <button onClick={(e) => { e.stopPropagation(); action.action(); }} className={`p-2.5 rounded-lg transition-all border hover:scale-110 shadow-sm ${action.active ? 'border-transparent' : 'border-current hover:bg-accent/10'}`} style={{ color: action.color, backgroundColor: action.active ? action.color : 'transparent' }}>
+                          <motion.button
+                            type="button"
+                            data-card-action="true"
+                            onClick={(e) => { e.stopPropagation(); action.action(); }}
+                            whileTap={allowDecorativeMotion ? { scale: 0.94 } : undefined}
+                            className={`rounded-lg border p-2.5 shadow-sm transition-all hover:scale-110 ${action.active ? 'border-transparent' : 'border-current hover:bg-accent/10'}`}
+                            style={{ color: action.color, backgroundColor: action.active ? action.color : 'transparent' }}
+                          >
                             {React.createElement(action.icon, { size: 20, style: { color: action.active ? 'white' : action.color } })}
-                          </button>
+                          </motion.button>
                         </Tooltip>
                       ))}
                     </div>
@@ -839,11 +873,12 @@ export function NodeCard({
               </div>
 
               <button
-                onClick={() => onNavigate(node.id)}
-                className="w-full text-left px-4 pb-10 flex-1 min-h-[40px]"
+                type="button"
+                onClick={handleNavigateClick}
+                className="flex min-h-[40px] w-full flex-1 px-4 pb-4 text-left"
               >
                 {node.description && (
-                  <div className="text-[12px] font-normal text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight">
+                  <div className="line-clamp-2 text-[12px] font-normal leading-[1.45] text-gray-500 dark:text-gray-400">
                     {node.description}
                   </div>
                 )}
@@ -852,10 +887,10 @@ export function NodeCard({
 
             {/* Барабан для мобильных - центрирован по высоте контента без прогресс-бара */}
             {isMobile && (
-              <div className="absolute right-2 top-0 bottom-7 flex items-center z-20 pointer-events-none touch-none">
+              <div className="pointer-events-none absolute bottom-0 right-2 top-0 z-20 flex touch-none items-center">
                     <div 
                       ref={drumRef} 
-                      className="relative flex items-center justify-center w-16 h-full select-none rounded-lg overflow-hidden pointer-events-auto touch-none drum-container"
+                      className="drum-container pointer-events-auto relative flex h-full w-16 select-none items-center justify-center overflow-hidden rounded-lg touch-none"
                       style={{
                         backgroundColor: 'transparent'
                       }}
@@ -877,8 +912,27 @@ export function NodeCard({
                           
                           return (
                             <div key={offset} className="absolute flex items-center justify-center" style={{ top: '50%', marginTop: `${offset * ITEM_HEIGHT - (ITEM_HEIGHT / 2)}px`, height: `${ITEM_HEIGHT}px`, width: '100%', transform: `scale(${scale})`, opacity: opacity, color: action.color, zIndex: isSelected ? 10 : 1, transition: 'none' }}>
-                              <div className={`p-1.5 rounded-lg flex items-center justify-center ${isSelected ? 'border-2 shadow-sm' : ''}`} style={{ backgroundColor: isSelected && action.active ? action.color : 'transparent', borderColor: isSelected ? (action.active ? 'transparent' : 'currentColor') : 'transparent', color: isSelected && action.active ? 'white' : action.color, transition: 'none', ...(action.id === 'delete' && isSelected ? { borderColor: '#ef4444', color: '#ef4444' } : {}) }}>
-                                <Icon size={20} style={{ color: isSelected && action.active ? 'white' : undefined }} />
+                              <div
+                                className="flex items-center justify-center rounded-lg p-2"
+                                style={{
+                                  backgroundColor: isSelected
+                                    ? action.id === 'delete'
+                                      ? 'rgba(239, 68, 68, 0.16)'
+                                      : action.active
+                                        ? action.color
+                                        : theme === 'dark'
+                                          ? 'rgba(71, 85, 105, 0.55)'
+                                          : '#e2e8f0'
+                                    : 'transparent',
+                                  color: action.id === 'delete'
+                                    ? '#ef4444'
+                                    : isSelected && action.active
+                                      ? 'white'
+                                      : action.color,
+                                  transition: 'none',
+                                }}
+                              >
+                                <Icon size={20} style={{ color: action.id === 'delete' ? '#ef4444' : isSelected && action.active ? 'white' : undefined }} />
                               </div>
                             </div>
                           );
@@ -889,9 +943,9 @@ export function NodeCard({
             )}
           </div>
 
-          {/* Прогресс: нижние углы задаёт обрезка карточки (overflow-hidden), без ручного calc */}
+          {/* Прогресс подзадач */}
           {node.children.length > 0 && (
-            <div className="absolute bottom-0 left-0 right-0 h-7 bg-gray-100 dark:bg-gray-700/50 overflow-hidden border-t border-gray-200 dark:border-gray-700">
+            <div className="relative mt-auto h-7 overflow-hidden bg-slate-100 dark:bg-gray-700/50">
               <div
                 className={`h-full transition-all duration-500 ${isBlinking ? 'animate-pulse' : ''}`}
                 style={{
@@ -900,7 +954,7 @@ export function NodeCard({
                 }}
               />
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <span className={`text-xs font-normal opacity-40 ${progress > 50 ? 'text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                <span className={`text-xs font-semibold ${progress > 50 ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
                   {getProgressCounts(node).completed} / {getProgressCounts(node).total}
                 </span>
               </div>

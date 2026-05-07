@@ -72,6 +72,10 @@ export const i18n: Record<Language, Record<string, any>> = {
     sort: {
       name: 'Sort by name',
       deadline: 'Sort by deadline',
+      byName: 'By name',
+      byDeadline: 'By deadline',
+      defaultOrder: 'By manual order',
+      openOptions: 'Sort options',
     },
     keyboard: {
       esc: 'ESC - Close modal / Go to parent',
@@ -96,13 +100,18 @@ export const i18n: Record<Language, Record<string, any>> = {
       selectFile: 'Select file',
     },
     deadline: {
-      title: 'Upcoming deadlines',
+      title: 'Deadlines',
       none: 'No deadline',
       overdue: 'Overdue',
       soon: 'Soon (≤3 days)',
       future: 'Future',
       noDeadlines: 'No deadlines',
       noDeadlinesNested: 'No deadlines in nested tasks',
+      noActiveFuture: 'No active tasks with future deadlines',
+      listLabel: 'List',
+      calendarLabel: 'Calendar',
+      weekLabel: 'Schedule',
+      chooseScope: 'Choose task scope',
     },
     schedule: {
       time: 'Time',
@@ -151,7 +160,24 @@ export const i18n: Record<Language, Record<string, any>> = {
       priority: 'Priority task',
     },
     footer: {
-      refreshMemory: 'Refresh memory',
+      refreshMemory: 'Add tutorial',
+      settings: 'Settings',
+    },
+    mobileNav: {
+      tasks: 'Tasks',
+      deadlines: 'Deadlines',
+      dashboard: 'Dashboard',
+      settings: 'Settings',
+    },
+    settingsTab: {
+      theme: 'Theme',
+      language: 'Language',
+      accent: 'Accent color',
+      darkTheme: 'Dark theme',
+      effects: 'Effects',
+      enabled: 'Enabled',
+      disabled: 'Disabled',
+      addTutorial: 'Add tutorial',
     },
     telegram: {
       title: 'Telegram Notifications',
@@ -310,6 +336,10 @@ export const i18n: Record<Language, Record<string, any>> = {
     sort: {
       name: 'Сортировка по имени',
       deadline: 'Сортировка по дедлайну',
+      byName: 'По имени',
+      byDeadline: 'По дедлайну',
+      defaultOrder: 'По порядку',
+      openOptions: 'Параметры сортировки',
     },
     keyboard: {
       esc: 'ESC - Закрыть попап / Перейти к родителю',
@@ -334,13 +364,18 @@ export const i18n: Record<Language, Record<string, any>> = {
       selectFile: 'Выбрать файл',
     },
     deadline: {
-      title: 'Ближайшие дедлайны',
+      title: 'Дедлайны',
       none: 'Без дедлайна',
       overdue: 'Просрочено',
       soon: 'Скоро (≤3 дня)',
       future: 'Будущее',
       noDeadlines: 'Нет дедлайнов',
       noDeadlinesNested: 'Нет дедлайнов во вложенных задачах',
+      noActiveFuture: 'Нет активных задач с дедлайном в будущем',
+      listLabel: 'Список',
+      calendarLabel: 'Календарь',
+      weekLabel: 'Расписание',
+      chooseScope: 'Выбрать задачу',
     },
     schedule: {
       time: 'Время',
@@ -389,7 +424,24 @@ export const i18n: Record<Language, Record<string, any>> = {
       priority: 'Приоритетная задача',
     },
     footer: {
-      refreshMemory: 'Освежим память',
+      refreshMemory: 'Добавить туториал',
+      settings: 'Настройки',
+    },
+    mobileNav: {
+      tasks: 'Задачи',
+      deadlines: 'Дедлайны',
+      dashboard: 'Дашборд',
+      settings: 'Настройки',
+    },
+    settingsTab: {
+      theme: 'Тема',
+      language: 'Язык',
+      accent: 'Акцентный цвет',
+      darkTheme: 'Темная тема',
+      effects: 'Эффекты',
+      enabled: 'Включено',
+      disabled: 'Выключено',
+      addTutorial: 'Добавить туториал',
     },
     telegram: {
       title: 'Уведомления в Telegram',

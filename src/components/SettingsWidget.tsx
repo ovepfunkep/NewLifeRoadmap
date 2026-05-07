@@ -15,19 +15,35 @@ type Language = 'ru' | 'en';
 
 interface SettingsWidgetProps {
   onLanguageChange?: (lang: Language) => void;
+  controlledOpen?: boolean;
+  onControlledOpenChange?: (open: boolean) => void;
+  showLauncher?: boolean;
 }
 
-export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
+export function SettingsWidget({
+  onLanguageChange,
+  controlledOpen,
+  onControlledOpenChange,
+  showLauncher = true,
+}: SettingsWidgetProps) {
   const { theme, setTheme } = useTheme();
   const { accent, setAccent, colors } = useAccent();
   const { effectsEnabled, setEffectsEnabled } = useEffects();
   const { language, setLanguage } = useLanguage();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<number | null>(null);
   const { showToast } = useToast();
+  const isExpanded = controlledOpen ?? internalExpanded;
+
+  const setExpanded = (open: boolean) => {
+    if (controlledOpen === undefined) {
+      setInternalExpanded(open);
+    }
+    onControlledOpenChange?.(open);
+  };
 
   useEffect(() => {
     const checkMobile = () => {
@@ -42,7 +58,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsExpanded(false);
+        setExpanded(false);
         setShowPalette(false);
       }
     };
@@ -53,6 +69,12 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
+  }, [isExpanded]);
+
+  useEffect(() => {
+    if (!isExpanded) {
+      setShowPalette(false);
+    }
   }, [isExpanded]);
 
   const radius = 70; // Радиус 70px
@@ -98,7 +120,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
               Math.pow(mouseX - finalCenterX, 2) + Math.pow(mouseY - finalCenterY, 2)
             );
             if (finalDistance > finalEffectiveRadius + 50) {
-              setIsExpanded(false);
+              setExpanded(false);
               setShowPalette(false);
             }
           }
@@ -143,7 +165,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
       await recreateTutorial();
       showToast(language === 'ru' ? 'Окей. Туториал добавлен в корень.' : 'Okay. Tutorial added to root.', undefined, { type: 'success' });
       window.dispatchEvent(new CustomEvent('syncManager:dataUpdated'));
-      setIsExpanded(false);
+      setExpanded(false);
     } catch (e: any) {
       if (e.message === 'DUPLICATE_TUTORIAL') {
         showToast(language === 'ru' ? 'Туториал уже есть в списке.' : 'Tutorial is already in the list.', undefined, { type: 'warning' });
@@ -195,7 +217,8 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
       }}
     >
       {/* Шестеренка (свернутое состояние) - отцентрирована внутри контейнера */}
-      <div
+      {showLauncher && (
+        <div
         className="absolute flex items-center justify-center transition-all duration-[333ms] ease-in-out backdrop-blur-md bg-white/30 dark:bg-gray-900/30 border border-gray-300/50 dark:border-gray-800/50 rounded-2xl shadow-lg hover:shadow-xl hover:bg-white/40 dark:hover:bg-gray-900/40"
         style={{
           width: `${gearSize + 16}px`,
@@ -210,12 +233,12 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
         }}
         onMouseEnter={() => {
           if (!isExpanded && !isMobile) {
-            setIsExpanded(true);
+            setExpanded(true);
           }
         }}
         onClick={() => {
           if (isMobile) {
-            setIsExpanded(!isExpanded);
+            setExpanded(!isExpanded);
           }
         }}
       >
@@ -243,6 +266,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
           />
         </svg>
       </div>
+      )}
 
       {/* Спиннер с кнопками (развернутое состояние) - отцентрирован внутри контейнера */}
       <div
@@ -266,7 +290,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
         }}
         onClick={() => {
           if (isMobile) {
-            setIsExpanded(false);
+            setExpanded(false);
             setShowPalette(false);
           }
         }}
@@ -419,7 +443,7 @@ export function SettingsWidget({ onLanguageChange }: SettingsWidgetProps) {
                   onClick={() => {
                     setAccent(color);
                     setShowPalette(false);
-                    if (isMobile) setIsExpanded(false);
+                    if (isMobile) setExpanded(false);
                   }}
                   className={`rounded border-2 transition-all hover:brightness-150 flex-shrink-0 ${
                     accent === color

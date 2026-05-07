@@ -3,6 +3,7 @@ import { Toast } from '../hooks/useToast';
 import { t } from '../i18n';
 import { FiLoader, FiCheck } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Z_TOAST } from '../config/zLayers';
 
 interface ToastListProps {
   toasts: Toast[];
@@ -12,7 +13,10 @@ interface ToastListProps {
 
 export function ToastList({ toasts, onRemove, onUndo }: ToastListProps) {
   return (
-    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 space-y-2 flex flex-col items-center w-full max-w-[90vw] pointer-events-none">
+    <div
+      className="fixed left-1/2 transform -translate-x-1/2 space-y-2 flex flex-col items-center w-full max-w-[90vw] pointer-events-none bottom-[calc(88px+env(safe-area-inset-bottom))] md:bottom-4"
+      style={{ zIndex: Z_TOAST }}
+    >
       <AnimatePresence mode="popLayout">
         {toasts.map((toast) => (
           <motion.div

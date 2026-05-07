@@ -7,13 +7,16 @@ import { getNode } from '../db';
 import { FiList, FiCalendar, FiClock } from 'react-icons/fi';
 import { CalendarView } from './CalendarView';
 import DayTasksModal from './DayTasksModal';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { expandNodesToSlots, RecurringScheduleSlot } from '../utils/recurrence';
 import { WeekScheduleView } from './WeekScheduleView';
+import { useMotionPreferences } from '../hooks/useMotionPreferences';
+import { motionTransitions } from '../config/motion';
 
 interface DeadlineListProps {
   node: Node;
   onNavigate: (id: string) => void;
+  onNavigateToTask?: (id: string) => void;
   onMarkCompleted: (id: string, completed: boolean) => void;
   onCreateTask?: (date: Date, recurringPreset?: NodeRecurrence) => void; // Создание задачи с датой и optional пресетом регулярности
 }
@@ -101,8 +104,10 @@ function groupDeadlines(node: Node): Node[] {
   });
 }
 
-export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }: DeadlineListProps) {
+export function DeadlineList({ node, onNavigate, onNavigateToTask, onMarkCompleted, onCreateTask }: DeadlineListProps) {
   useDeadlineTicker(); // подписка на тикер
+  const { allowDecorativeMotion } = useMotionPreferences();
+  const [isMobile, setIsMobile] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'week'>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('deadlineViewMode');
@@ -230,6 +235,15 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
   const [isCompact, setIsCompact] = useState(false);
   
   useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     
     const checkCompact = () => {
@@ -243,64 +257,106 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
 
   return (
     <>
-      <div 
-        className="bg-white dark:bg-gray-800 rounded-xl border border-gray-300 dark:border-gray-700 p-5 min-h-[140px] flex flex-col transition-all"
-        style={{
-          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)'
-        }}
+      <div
+        className={`flex min-h-[140px] flex-col p-4 transition-all md:p-5 ${
+          isMobile ? '' : 'rounded-lg border border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-800'
+        }`}
       >
-        {/* Заголовок с тумблером */}
-        <div className="flex items-center justify-between mb-4 flex-shrink-0">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+        {/* Режимы дедлайнов */}
+        <div className="mb-4 flex flex-col gap-3 flex-shrink-0">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
             {t('deadline.title')}
           </h2>
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-gray-100 dark:bg-gray-700">
+          <LayoutGroup id="deadline-view-chips">
+          <div
+            className="mt-1 flex w-full items-center gap-2 rounded-xl border border-gray-200 bg-white p-1 dark:border-gray-700 dark:bg-gray-800"
+          >
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-md transition-all ${
+              className={`flex-1 relative transition-all ${
                 viewMode === 'list'
-                  ? 'shadow-sm'
-                  : 'opacity-60 hover:opacity-100'
+                  ? 'text-white'
+                  : 'opacity-80 hover:opacity-100'
               }`}
               aria-label="Вид списка"
               style={{
-                backgroundColor: viewMode === 'list' ? 'var(--accent)' : 'transparent',
                 color: viewMode === 'list' ? 'white' : 'var(--accent)'
               }}
             >
-              <FiList className="w-4 h-4" />
+              {viewMode === 'list' && allowDecorativeMotion && (
+                <motion.span
+                  layoutId="deadline-view-active-indicator"
+                  className="absolute inset-0 rounded-xl"
+                  style={{ backgroundColor: 'var(--accent)' }}
+                  transition={motionTransitions.itemSpring}
+                />
+              )}
+              {!allowDecorativeMotion && viewMode === 'list' && (
+                <span className="absolute inset-0 rounded-xl" style={{ backgroundColor: 'var(--accent)' }} />
+              )}
+              <span className="relative z-10 flex w-full items-center justify-center gap-2 rounded-xl px-2 py-2 text-xs font-semibold">
+                <FiList className="h-4 w-4" />
+                <span>{t('deadline.listLabel')}</span>
+              </span>
             </button>
             <button
               onClick={() => setViewMode('calendar')}
-              className={`p-2 rounded-md transition-all ${
+              className={`flex-1 relative transition-all ${
                 viewMode === 'calendar'
-                  ? 'shadow-sm'
-                  : 'opacity-60 hover:opacity-100'
+                  ? 'text-white'
+                  : 'opacity-80 hover:opacity-100'
               }`}
               aria-label="Вид календаря"
               style={{
-                backgroundColor: viewMode === 'calendar' ? 'var(--accent)' : 'transparent',
                 color: viewMode === 'calendar' ? 'white' : 'var(--accent)'
               }}
             >
-              <FiCalendar className="w-4 h-4" />
+              {viewMode === 'calendar' && allowDecorativeMotion && (
+                <motion.span
+                  layoutId="deadline-view-active-indicator"
+                  className="absolute inset-0 rounded-xl"
+                  style={{ backgroundColor: 'var(--accent)' }}
+                  transition={motionTransitions.itemSpring}
+                />
+              )}
+              {!allowDecorativeMotion && viewMode === 'calendar' && (
+                <span className="absolute inset-0 rounded-xl" style={{ backgroundColor: 'var(--accent)' }} />
+              )}
+              <span className="relative z-10 flex w-full items-center justify-center gap-2 rounded-xl px-2 py-2 text-xs font-semibold">
+                <FiCalendar className="h-4 w-4" />
+                <span>{t('deadline.calendarLabel')}</span>
+              </span>
             </button>
             <button
               onClick={() => setViewMode('week')}
-              className={`p-2 rounded-md transition-all ${
+              className={`flex-1 relative transition-all ${
                 viewMode === 'week'
-                  ? 'shadow-sm'
-                  : 'opacity-60 hover:opacity-100'
+                  ? 'text-white'
+                  : 'opacity-80 hover:opacity-100'
               }`}
               aria-label="Вид недели"
               style={{
-                backgroundColor: viewMode === 'week' ? 'var(--accent)' : 'transparent',
                 color: viewMode === 'week' ? 'white' : 'var(--accent)'
               }}
             >
-              <FiClock className="w-4 h-4" />
+              {viewMode === 'week' && allowDecorativeMotion && (
+                <motion.span
+                  layoutId="deadline-view-active-indicator"
+                  className="absolute inset-0 rounded-xl"
+                  style={{ backgroundColor: 'var(--accent)' }}
+                  transition={motionTransitions.itemSpring}
+                />
+              )}
+              {!allowDecorativeMotion && viewMode === 'week' && (
+                <span className="absolute inset-0 rounded-xl" style={{ backgroundColor: 'var(--accent)' }} />
+              )}
+              <span className="relative z-10 flex w-full items-center justify-center gap-2 rounded-xl px-2 py-2 text-xs font-semibold">
+                <FiClock className="h-4 w-4" />
+                <span>{t('deadline.weekLabel')}</span>
+              </span>
             </button>
           </div>
+          </LayoutGroup>
         </div>
 
         {/* Контент в зависимости от вида */}
@@ -309,16 +365,21 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
             {viewMode === 'list' ? (
             <motion.div
               key="deadline-list-view"
-              initial={{ opacity: 0, y: 8 }}
+              initial={allowDecorativeMotion ? { opacity: 0, y: 8 } : false}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
+              exit={allowDecorativeMotion ? { opacity: 0, y: -8 } : { opacity: 0 }}
+              transition={motionTransitions.fade}
               className="relative h-full flex flex-col"
             >
-              {/* Permanent top fade */}
-              <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-white dark:from-gray-800 to-transparent z-10 pointer-events-none" />
-              
-              <div className="space-y-3 max-h-[435px] overflow-y-auto py-4 px-1 custom-scrollbar">
+              {!isMobile && (
+                <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-white dark:from-gray-800 to-transparent z-10 pointer-events-none" />
+              )}
+
+              <div
+                className={`space-y-3 overflow-y-auto px-1 custom-scrollbar ${
+                  isMobile ? 'flex-1 min-h-0 py-1' : 'max-h-[435px] py-4'
+                }`}
+              >
                 <AnimatePresence mode="popLayout">
                   {deadlinesWithBreadcrumbs.map(({ node: dl, breadcrumbs }) => {
                     const dateStr = formatDeadline(dl.deadline, dl.deadlineEnd);
@@ -327,39 +388,37 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
                     return (
                       <motion.button
                         key={dl.id}
-                        initial={{ opacity: 0, y: 10 }}
+                        initial={allowDecorativeMotion ? { opacity: 0, y: 10 } : false}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        onClick={() => onNavigate(dl.id)}
-                        className="w-full text-left p-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 transition-all min-h-[64px] hover:shadow-md"
-                        style={{
-                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                        exit={allowDecorativeMotion ? { opacity: 0, scale: 0.95 } : { opacity: 0 }}
+                        transition={motionTransitions.fade}
+                        onClick={() => {
+                          onNavigate(dl.id);
+                          onNavigateToTask?.(dl.id);
                         }}
+                        className="w-full rounded-xl border border-gray-300 bg-slate-50/90 p-3.5 text-left transition-all dark:border-gray-700 dark:bg-gray-700/40"
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex-1 min-w-0 flex items-center gap-2">
-                            <div className="flex-1 min-w-0">
-                              {/* Breadcrumbs - мелким шрифтом, полупрозрачным, над названием */}
-                              {breadcrumbs.length > 0 && (
-                                <div className="text-[10px] text-gray-400 dark:text-gray-500 opacity-60 mb-0.5 truncate font-normal">
-                                  {breadcrumbs.map((b, idx) => (
-                                    <span key={b.id}>
-                                      {b.title}
-                                      {idx < breadcrumbs.length - 1 && ' / '}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              <span className="font-medium text-gray-900 dark:text-gray-100">
-                                {dl.title}
-                              </span>
-                            </div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0 flex-1">
+                            {breadcrumbs.length > 0 && (
+                              <div className="mb-1 truncate text-[10px] font-medium text-gray-400 opacity-70 dark:text-gray-500">
+                                {breadcrumbs.map((b, idx) => (
+                                  <span key={b.id}>
+                                    {b.title}
+                                    {idx < breadcrumbs.length - 1 && ' / '}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            <span className="block break-words text-sm font-semibold text-gray-900 dark:text-gray-100">
+                              {dl.title}
+                            </span>
                           </div>
                           <span
-                            className="text-xs px-2 py-1 rounded flex-shrink-0 self-center font-normal"
+                            className="inline-flex max-w-full flex-shrink-0 self-start rounded-full px-2.5 py-1 text-xs font-semibold sm:self-center"
                             style={{ 
                               backgroundColor: deadlineColor,
-                              color: deadlineColor === '#eab308' ? 'black' : 'white'
+                              color: 'white'
                             }}
                           >
                             {dateStr}
@@ -369,18 +428,24 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
                     );
                   })}
                 </AnimatePresence>
+                {deadlinesWithBreadcrumbs.length === 0 && (
+                  <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                    {t('deadline.noActiveFuture')}
+                  </p>
+                )}
               </div>
-              
-              {/* Permanent bottom fade */}
-              <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-gray-800 to-transparent z-10 pointer-events-none" />
+
+              {!isMobile && (
+                <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-gray-800 to-transparent z-10 pointer-events-none" />
+              )}
             </motion.div>
           ) : viewMode === 'calendar' ? (
             <motion.div
               key="deadline-calendar-view"
-              initial={{ opacity: 0, y: 8 }}
+              initial={allowDecorativeMotion ? { opacity: 0, y: 8 } : false}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
+              exit={allowDecorativeMotion ? { opacity: 0, y: -8 } : { opacity: 0 }}
+              transition={motionTransitions.fade}
               className="relative"
             >
               <CalendarView
@@ -395,10 +460,10 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
           ) : (
             <motion.div
               key="deadline-week-view"
-              initial={{ opacity: 0, y: 8 }}
+              initial={allowDecorativeMotion ? { opacity: 0, y: 8 } : false}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
+              exit={allowDecorativeMotion ? { opacity: 0, y: -8 } : { opacity: 0 }}
+              transition={motionTransitions.fade}
             >
               <WeekScheduleView
                 slots={recurringSlots}
@@ -407,6 +472,7 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
                 onShiftDays={handleShiftWeekWindow}
                 onResetToday={handleResetWeekWindow}
                 onNavigate={onNavigate}
+                onNavigateToTask={onNavigateToTask}
                 onCreateTask={onCreateTask}
               />
             </motion.div>
@@ -422,6 +488,7 @@ export function DeadlineList({ node, onNavigate, onMarkCompleted, onCreateTask }
           tasks={selectedDay.tasks}
           currentNodeId={node.id}
           onNavigate={onNavigate}
+          onNavigateToTask={onNavigateToTask}
           onMarkCompleted={onMarkCompleted}
           onCreateTask={onCreateTask}
           onClose={() => setSelectedDay(null)}

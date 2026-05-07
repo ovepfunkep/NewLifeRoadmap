@@ -14,6 +14,9 @@ import { getCurrentUser } from '../firebase/auth';
 import { getUserSecurityConfig } from '../firebase/security';
 import { AnimatePresence, motion } from 'framer-motion';
 import { expandNodesToSlots } from '../utils/recurrence';
+import { useMotionPreferences } from '../hooks/useMotionPreferences';
+import { motionDurations, motionTransitions } from '../config/motion';
+import { MobileBottomSheet } from './MobileBottomSheet';
 
 interface EditorModalProps {
   node: Node | null; // null = создание нового
@@ -25,10 +28,12 @@ interface EditorModalProps {
 }
 
 export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, initialRecurring }: EditorModalProps) {
+  const { allowEssentialMotion } = useMotionPreferences();
   const { language } = useLanguage();
   const [showTgLinkModal, setShowTgLinkModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [timeConflicts, setTimeConflicts] = useState<Array<{ id: string; title: string }>>([]);
+  const [isMobile, setIsMobile] = useState(false);
   
   // Форматируем initialDeadline в строку для input type="date"
   const formatDateForInput = (date: Date): string => {
@@ -185,6 +190,15 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
       setReminders([]);
     }
   }, [node, initialDeadline, initialRecurring]);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     if (!node) {
@@ -587,18 +601,8 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
         { value: 0, label: 'Sun' },
       ];
 
-  return (
-    <div 
-      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      style={{ zIndex: Z_MODAL }}
-      onMouseDown={handleBackdropMouseDown}
-      onClick={handleBackdropClick}
-    >
-      <div 
-        ref={modalRef}
-        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md mx-4"
-        onClick={(e) => e.stopPropagation()}
-      >
+  const editorContent = (
+    <>
         <div className="mb-6 flex min-w-0 items-center gap-3">
           <h2
             className={`m-0 shrink-0 text-xl font-bold leading-tight text-gray-900 dark:text-gray-100 ${
@@ -607,36 +611,6 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
           >
             {node ? t('node.editNode') : t('node.createChild')}
           </h2>
-          {!node && (
-            <div className="flex min-w-0 flex-1 items-center">
-              <div className="min-w-0 w-full">
-              <Tooltip
-                text={
-                  parentLocation === null
-                    ? t('general.loading')
-                    : parentLocation.fullPath || parentLocation.parentTitle || t('editor.pickParentTooltip')
-                }
-                multiline
-              >
-                <button
-                  type="button"
-                  onClick={() => setShowParentPicker(true)}
-                  className="flex w-full min-w-0 items-center gap-2 rounded-xl border-2 border-gray-300 px-2.5 py-2 text-left transition-colors hover:border-accent/50 dark:border-gray-600"
-                  aria-label={t('editor.pickParentTooltip')}
-                >
-                  <FiFolder
-                    size={18}
-                    className="shrink-0 text-gray-700 opacity-50 dark:text-gray-200"
-                    aria-hidden
-                  />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200">
-                    {parentLocation === null ? t('general.loading') : parentLocation.parentTitle}
-                  </span>
-                </button>
-              </Tooltip>
-              </div>
-            </div>
-          )}
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -1018,45 +992,119 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
               )}
             </div>
           )}
+
+          {!node && (
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                {t('editor.pickParentTitle')}
+              </p>
+              <Tooltip
+                text={
+                  parentLocation === null
+                    ? t('general.loading')
+                    : parentLocation.fullPath || parentLocation.parentTitle || t('editor.pickParentTooltip')
+                }
+                multiline
+              >
+                <button
+                  type="button"
+                  onClick={() => setShowParentPicker(true)}
+                  className="flex w-full min-w-0 items-center gap-2 rounded-xl border-2 border-gray-300 px-2.5 py-2 text-left transition-colors hover:border-accent/50 dark:border-gray-600"
+                  aria-label={t('editor.pickParentTooltip')}
+                >
+                  <FiFolder
+                    size={18}
+                    className="shrink-0 text-gray-700 opacity-50 dark:text-gray-200"
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200">
+                    {parentLocation === null ? t('general.loading') : parentLocation.parentTitle}
+                  </span>
+                </button>
+              </Tooltip>
+            </div>
+          )}
           
-          <div className="flex gap-3 justify-end pt-2">
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2.5 text-sm font-bold rounded-xl border-2 border-gray-100 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-all"
+              className="w-full px-6 py-2.5 text-sm font-bold rounded-xl border-2 border-gray-100 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-all sm:w-auto"
             >
               {t('general.cancel')}
             </button>
             <button
               type="submit"
               disabled={(!isRecurring && reminders.some(rem => getReminderError(rem) !== null)) || recurrenceError !== null || deadlineError !== null}
-              className="px-8 py-2.5 text-sm font-bold rounded-xl text-white transition-all shadow-lg shadow-accent/20 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 active:scale-95"
+              className="w-full px-8 py-2.5 text-sm font-bold rounded-xl text-white transition-all shadow-lg shadow-accent/20 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 active:scale-95 sm:w-auto"
               style={{ backgroundColor: 'var(--accent)' }}
             >
               {t('general.save')}
             </button>
           </div>
         </form>
-        
-        {showTgLinkModal && (
-          <TelegramLinkModal onClose={() => setShowTgLinkModal(false)} />
-        )}
-        {showAuthModal && (
-          <AuthRequiredModal 
-            onClose={() => setShowAuthModal(false)} 
-            onSuccess={() => {
-              setShowAuthModal(false);
-              handleAddReminder();
-            }}
-          />
-        )}
-        {showParentPicker && (
-          <ParentPickerModal
-            onSelectParent={(id) => setChosenParentId(id)}
-            onClose={() => setShowParentPicker(false)}
-          />
-        )}
-      </div>
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      {isMobile ? (
+        <MobileBottomSheet isOpen={true} onClose={onClose}>
+          <div className="max-h-[80vh] overflow-y-auto px-1 pb-1">
+            {editorContent}
+          </div>
+        </MobileBottomSheet>
+      ) : (
+        <motion.div
+          className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          style={{ zIndex: Z_MODAL }}
+          onMouseDown={handleBackdropMouseDown}
+          onClick={handleBackdropClick}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={
+            allowEssentialMotion
+              ? motionTransitions.fade
+              : { duration: motionDurations.fast }
+          }
+        >
+          <motion.div
+            ref={modalRef}
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md mx-4"
+            onClick={(e) => e.stopPropagation()}
+            initial={allowEssentialMotion ? { y: 20, scale: 0.98, opacity: 0.92 } : { opacity: 1 }}
+            animate={allowEssentialMotion ? { y: 0, scale: 1, opacity: 1 } : { opacity: 1 }}
+            exit={allowEssentialMotion ? { y: 20, scale: 0.98, opacity: 0 } : { opacity: 0 }}
+            transition={
+              allowEssentialMotion
+                ? motionTransitions.modal
+                : { duration: motionDurations.fast }
+            }
+          >
+            {editorContent}
+          </motion.div>
+        </motion.div>
+      )}
+
+      {showTgLinkModal && (
+        <TelegramLinkModal onClose={() => setShowTgLinkModal(false)} />
+      )}
+      {showAuthModal && (
+        <AuthRequiredModal
+          onClose={() => setShowAuthModal(false)}
+          onSuccess={() => {
+            setShowAuthModal(false);
+            handleAddReminder();
+          }}
+        />
+      )}
+      {showParentPicker && (
+        <ParentPickerModal
+          onSelectParent={(id) => setChosenParentId(id)}
+          onClose={() => setShowParentPicker(false)}
+        />
+      )}
+    </>
   );
 }

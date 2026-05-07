@@ -190,8 +190,8 @@ export function getDeadlineColor(node: Node): string {
     return '#ef4444'; // red-500
   }
   if (diffDays < 30) {
-    // Меньше месяца - жёлтый
-    return '#eab308'; // yellow-500
+    // Меньше месяца - оранжевый
+    return '#f97316'; // orange-500
   }
   // Больше месяца - акцентный
   return 'var(--accent)';

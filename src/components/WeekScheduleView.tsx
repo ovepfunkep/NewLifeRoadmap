@@ -1,10 +1,11 @@
-import { useMemo, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { t } from '../i18n';
 import { useLanguage } from '../contexts/LanguageContext';
 import { RecurringScheduleSlot, getRollingDays } from '../utils/recurrence';
 import { NodeRecurrence } from '../types';
 import { motion } from 'framer-motion';
 import { FiChevronLeft, FiChevronRight, FiRotateCw } from 'react-icons/fi';
+import { useMotionPreferences } from '../hooks/useMotionPreferences';
 
 interface WeekScheduleViewProps {
   slots: RecurringScheduleSlot[];
@@ -14,6 +15,7 @@ interface WeekScheduleViewProps {
   onResetToday?: () => void;
   onCreateTask?: (date: Date, recurringPreset?: NodeRecurrence) => void;
   onNavigate?: (taskId: string) => void;
+  onNavigateToTask?: (taskId: string) => void;
 }
 
 interface TimedSlotLayout {
@@ -53,6 +55,10 @@ function buildStableTaskColor(taskId: string): string {
   const saturation = 68 + (hash % 18); // 68..85
   const lightness = 45 + ((hash >> 4) % 11); // 45..55
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+}
+
+function toTransparentFill(color: string, opacityPercent = 58): string {
+  return `color-mix(in srgb, ${color} ${opacityPercent}%, transparent)`;
 }
 
 function buildTimedLayouts(slots: RecurringScheduleSlot[]): TimedSlotLayout[] {
@@ -124,11 +130,31 @@ export function WeekScheduleView({
   onResetToday,
   onCreateTask,
   onNavigate,
+  onNavigateToTask,
 }: WeekScheduleViewProps) {
+  const { allowDecorativeMotion } = useMotionPreferences();
   const { language } = useLanguage();
+  const [isMobile, setIsMobile] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(0);
   const days = useMemo(() => getRollingDays(startDate, 7), [startDate]);
   const weekKey = useMemo(() => days[0]?.toISOString() ?? 'week', [days]);
   const hasAnySlots = slots.length > 0;
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+      setViewportHeight(window.innerHeight);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const timelineHeight = useMemo(() => {
+    if (!isMobile) return 530;
+    if (!viewportHeight) return 260;
+    return Math.max(220, Math.min(360, viewportHeight - 470));
+  }, [isMobile, viewportHeight]);
 
   const slotsByDay = useMemo(() => {
     const grouped = new Map<string, RecurringScheduleSlot[]>();
@@ -209,6 +235,11 @@ export function WeekScheduleView({
     });
   };
 
+  const handleTaskTap = (taskId: string) => {
+    onNavigate?.(taskId);
+    onNavigateToTask?.(taskId);
+  };
+
   return (
     <div className="space-y-3">
       {!hasAnySlots && (
@@ -219,12 +250,139 @@ export function WeekScheduleView({
 
       <motion.div
         key={weekKey}
-        initial={{ opacity: 0, x: shiftDirection > 0 ? 36 : shiftDirection < 0 ? -36 : 0 }}
+        initial={allowDecorativeMotion ? { opacity: 0, x: shiftDirection > 0 ? 22 : shiftDirection < 0 ? -22 : 0 } : false}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.22 }}
+        transition={allowDecorativeMotion ? { duration: 0.16 } : { duration: 0.12 }}
         className="relative"
       >
-        <div className="mb-1 flex items-center justify-center gap-2">
+        <div className="grid grid-cols-8 gap-2">
+          <div className="px-1" />
+          {days.map((day, idx) => (
+            <div
+              key={day.toISOString()}
+              className="relative px-1 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+              style={idx === 0 ? { color: 'var(--accent)' } : undefined}
+            >
+              <div className="text-center">
+                <div>{day.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'short' })}</div>
+                <div className="text-[11px] normal-case font-medium text-gray-600 dark:text-gray-300">
+                  {day.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit' })}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-8 gap-2">
+          <div className="space-y-2">
+            <div className={hasAnyAllDay ? 'min-h-[42px]' : 'min-h-[8px]'} />
+            <div className="relative" style={{ height: `${timelineHeight}px` }}>
+              {timelineMarks.map((minutes) => (
+                <div
+                  key={minutes}
+                  className="absolute left-0 right-0 text-[10px] text-gray-400 dark:text-gray-500"
+                  style={{ top: `${(minutes / (24 * 60)) * 100}%`, transform: 'translateY(-50%)' }}
+                >
+                  {formatMinutes(minutes)}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {days.map((day) => {
+          const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+          const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+          const daySlots = slotsByDay.get(dayKey) ?? [];
+          const allDaySlots = daySlots.filter((slot) => slot.isAllDay);
+          const timedSlots = daySlots.filter((slot) => !slot.isAllDay);
+          const timedLayouts = buildTimedLayouts(timedSlots);
+          const laneGapPercent = 1.8;
+
+          return (
+            <div
+              key={dayKey}
+              className="space-y-2"
+            >
+              <div className={`${hasAnyAllDay ? 'min-h-[42px]' : 'min-h-[8px]'} space-y-1`}>
+                {allDaySlots.map((slot) => (
+                  <motion.button
+                    type="button"
+                    key={`${slot.taskId}-${slot.dayKey}-allday`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleTaskTap(slot.taskId);
+                    }}
+                    className="w-full h-2.5 rounded-md transition-colors hover:brightness-110"
+                    style={{
+                      backgroundColor: toTransparentFill(colorByTaskId.get(slot.taskId) || 'var(--accent)', 66),
+                    }}
+                    title={slot.title}
+                    aria-label={slot.title}
+                    initial={{ opacity: 0, scale: 0.97 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.18 }}
+                  />
+                ))}
+              </div>
+
+              <div
+                className={`relative rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40 overflow-hidden ${onCreateTask ? 'cursor-copy' : ''}`}
+                onClick={(event) => handleCreateFromTimeline(day, event)}
+                style={{
+                  height: `${timelineHeight}px`,
+                  ...(isWeekend
+                    ? { backgroundColor: 'rgba(var(--accent-rgb), 0.08)', borderColor: 'rgba(var(--accent-rgb), 0.28)' }
+                    : {}),
+                }}
+              >
+                {timelineMarks.map((minutes) => (
+                  <div
+                    key={`${dayKey}-${minutes}`}
+                    className="absolute left-0 right-0 border-t border-gray-200/70 dark:border-gray-700/60"
+                    style={{ top: `${(minutes / (24 * 60)) * 100}%` }}
+                  />
+                ))}
+
+                {timedLayouts.map((layout) => {
+                  const top = (layout.start / (24 * 60)) * 100;
+                  const height = Math.max(((layout.end - layout.start) / (24 * 60)) * 100, 2.2);
+                  const laneWidth = (100 - (layout.laneCount - 1) * laneGapPercent) / layout.laneCount;
+                  const left = layout.lane * (laneWidth + laneGapPercent);
+                  const color = colorByTaskId.get(layout.slot.taskId) || 'var(--accent)';
+
+                  return (
+                    <motion.button
+                      type="button"
+                      key={`${layout.slot.taskId}-${layout.slot.dayKey}-${layout.start}-${layout.end}-${layout.lane}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleTaskTap(layout.slot.taskId);
+                      }}
+                      className="absolute rounded-md shadow-sm hover:brightness-110 transition-all"
+                      style={{
+                        top: `${Math.max(0, top)}%`,
+                        height: `${height}%`,
+                        left: `${left}%`,
+                        width: `${laneWidth}%`,
+                        backgroundColor: toTransparentFill(color, 58),
+                        border: `1px solid ${color}`,
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+                      }}
+                      title={`${layout.slot.title} (${formatMinutes(layout.start)}-${formatMinutes(layout.end)})`}
+                      aria-label={layout.slot.title}
+                      initial={{ opacity: 0, scale: 0.96 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.22 }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+          })}
+        </div>
+
+        <div className="mt-3 flex items-center justify-center gap-2">
           <button
             type="button"
             onClick={() => onShiftDays?.(-1)}
@@ -257,131 +415,6 @@ export function WeekScheduleView({
           </button>
         </div>
 
-        <div className="grid grid-cols-8 gap-2">
-          <div className="px-1" />
-          {days.map((day, idx) => (
-            <div
-              key={day.toISOString()}
-              className="relative px-1 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-              style={idx === 0 ? { color: 'var(--accent)' } : undefined}
-            >
-              <div className="text-center">
-                <div>{day.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'short' })}</div>
-                <div className="text-[11px] normal-case font-medium text-gray-600 dark:text-gray-300">
-                  {day.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit' })}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-8 gap-2">
-          <div className="space-y-2">
-            <div className={hasAnyAllDay ? 'min-h-[42px]' : 'min-h-[8px]'} />
-            <div className="relative h-[530px]">
-              {timelineMarks.map((minutes) => (
-                <div
-                  key={minutes}
-                  className="absolute left-0 right-0 text-[10px] text-gray-400 dark:text-gray-500"
-                  style={{ top: `${(minutes / (24 * 60)) * 100}%`, transform: 'translateY(-50%)' }}
-                >
-                  {formatMinutes(minutes)}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {days.map((day, dayIndex) => {
-          const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-          const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-          const daySlots = slotsByDay.get(dayKey) ?? [];
-          const allDaySlots = daySlots.filter((slot) => slot.isAllDay);
-          const timedSlots = daySlots.filter((slot) => !slot.isAllDay);
-          const timedLayouts = buildTimedLayouts(timedSlots);
-          const laneGapPercent = 1.8;
-
-          return (
-            <motion.div
-              key={dayKey}
-              className="space-y-2"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, delay: dayIndex * 0.03 }}
-            >
-              <div className={`${hasAnyAllDay ? 'min-h-[42px]' : 'min-h-[8px]'} space-y-1`}>
-                {allDaySlots.map((slot) => (
-                  <motion.button
-                    type="button"
-                    key={`${slot.taskId}-${slot.dayKey}-allday`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onNavigate?.(slot.taskId);
-                    }}
-                    className="w-full h-2.5 rounded-md transition-colors hover:brightness-110"
-                    style={{
-                      backgroundColor: colorByTaskId.get(slot.taskId) || 'var(--accent)',
-                    }}
-                    title={slot.title}
-                    aria-label={slot.title}
-                    initial={{ opacity: 0, scale: 0.97 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.18 }}
-                  />
-                ))}
-              </div>
-
-              <div
-                className={`relative h-[530px] rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40 overflow-hidden ${onCreateTask ? 'cursor-copy' : ''}`}
-                onClick={(event) => handleCreateFromTimeline(day, event)}
-                style={isWeekend ? { backgroundColor: 'rgba(var(--accent-rgb), 0.08)', borderColor: 'rgba(var(--accent-rgb), 0.28)' } : undefined}
-              >
-                {timelineMarks.map((minutes) => (
-                  <div
-                    key={`${dayKey}-${minutes}`}
-                    className="absolute left-0 right-0 border-t border-gray-200/70 dark:border-gray-700/60"
-                    style={{ top: `${(minutes / (24 * 60)) * 100}%` }}
-                  />
-                ))}
-
-                {timedLayouts.map((layout) => {
-                  const top = (layout.start / (24 * 60)) * 100;
-                  const height = Math.max(((layout.end - layout.start) / (24 * 60)) * 100, 2.2);
-                  const laneWidth = (100 - (layout.laneCount - 1) * laneGapPercent) / layout.laneCount;
-                  const left = layout.lane * (laneWidth + laneGapPercent);
-                  const color = colorByTaskId.get(layout.slot.taskId) || 'var(--accent)';
-
-                  return (
-                    <motion.button
-                      type="button"
-                      key={`${layout.slot.taskId}-${layout.slot.dayKey}-${layout.start}-${layout.end}-${layout.lane}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onNavigate?.(layout.slot.taskId);
-                      }}
-                      className="absolute rounded-md shadow-sm hover:brightness-110 transition-all"
-                      style={{
-                        top: `${Math.max(0, top)}%`,
-                        height: `${height}%`,
-                        left: `${left}%`,
-                        width: `${laneWidth}%`,
-                        backgroundColor: color,
-                        border: '1px solid rgba(255,255,255,0.35)',
-                        boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
-                      }}
-                      title={`${layout.slot.title} (${formatMinutes(layout.start)}-${formatMinutes(layout.end)})`}
-                      aria-label={layout.slot.title}
-                      initial={{ opacity: 0, scale: 0.96 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.22 }}
-                    />
-                  );
-                })}
-              </div>
-            </motion.div>
-          );
-          })}
-        </div>
-
         {legendItems.length > 0 && (
           <div className="mt-3">
             <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
@@ -389,7 +422,7 @@ export function WeekScheduleView({
                 <button
                   key={`legend-${item.taskId}`}
                   type="button"
-                  onClick={() => onNavigate?.(item.taskId)}
+                  onClick={() => handleTaskTap(item.taskId)}
                   className="inline-flex items-center gap-1.5 text-[10px] text-gray-700 dark:text-gray-200 hover:opacity-80 transition-opacity"
                   title={item.title}
                 >

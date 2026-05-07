@@ -15,10 +15,21 @@ import { EditorModal } from '../components/EditorModal';
 import { ImportExportModal } from '../components/ImportExportModal';
 import { MoveModal } from '../components/MoveModal';
 import { DashboardModal } from '../components/DashboardModal';
+import { DashboardContent } from '../components/DashboardContent';
 import { SettingsWidget } from '../components/SettingsWidget';
+import { DashboardNodePickerModal } from '../components/DashboardNodePickerModal';
 import { Footer } from '../components/Footer';
 import { ConfettiEffect } from '../components/ConfettiEffect';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { MobileBottomNav, MobileSection } from '../components/MobileBottomNav';
+import { MobileSettingsTab } from '../components/MobileSettingsTab';
+import { SpringTrees } from '../components/SpringTrees';
+import { FiFolder, FiPlus } from 'react-icons/fi';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useMotionPreferences } from '../hooks/useMotionPreferences';
+import { motionDurations, motionTransitions } from '../config/motion';
+import { Z_MOBILE_FAB } from '../config/zLayers';
+import { AMBIENT_SEASON } from '../config/ambientSeason';
 
 type SortType = 'none' | 'name' | 'deadline';
 
@@ -32,7 +43,7 @@ export function NodePage() {
   const [editingNode, setEditingNode] = useState<Node | null>(null);
   const [initialDeadline, setInitialDeadline] = useState<Date | undefined>(undefined);
   const [initialRecurring, setInitialRecurring] = useState<NodeRecurrence | undefined>(undefined);
-  const [sortType, setSortType] = useState<SortType>('none');
+  const [sortType, setSortType] = useState<SortType>('deadline');
   const [filterType, setFilterType] = useState<'all' | 'completed' | 'incomplete'>('all');
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
@@ -43,13 +54,41 @@ export function NodePage() {
   const [nodeToDeleteId, setNodeToDeleteId] = useState<string | null>(null);
   const [animatingBurnId, setAnimatingBurnId] = useState<string | null>(null);
   const [animatingMoveId, setAnimatingMoveId] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileSection, setMobileSection] = useState<MobileSection>('tasks');
+  const [editorParentId, setEditorParentId] = useState<string | null>(null);
+  const [mobileDeadlinesNodeId, setMobileDeadlinesNodeId] = useState<string>('root-node');
+  const [mobileDeadlinesNode, setMobileDeadlinesNode] = useState<Node | null>(null);
+  const [mobileDashboardNodeId, setMobileDashboardNodeId] = useState<string>('root-node');
+  const [mobileDashboardNode, setMobileDashboardNode] = useState<Node | null>(null);
+  const [showDeadlinesScopePicker, setShowDeadlinesScopePicker] = useState(false);
+  const [showDashboardScopePicker, setShowDashboardScopePicker] = useState(false);
   const { showToast, updateToast, removeToast } = useToast();
   const { effectsEnabled } = useEffects();
   const { setLanguage } = useLanguage();
+  const { allowEssentialMotion } = useMotionPreferences();
 
   // Сохраняем последнюю позицию touch для проверки в handleDragEnd
   const lastTouchPositionRef = useRef<{ x: number; y: number } | null>(null);
   const scrollIntervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileSection('tasks');
+      setShowDeadlinesScopePicker(false);
+      setShowDashboardScopePicker(false);
+    }
+  }, [isMobile]);
 
   // Глобальный обработчик touchmove и dragover для определения карточки под пальцем и авто-скролла
   useEffect(() => {
@@ -181,6 +220,40 @@ export function NodePage() {
     }
   }, [currentNode, setLanguage]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDeadlinesScopeNode = async () => {
+      if (!mobileDeadlinesNodeId) {
+        setMobileDeadlinesNode(currentNode);
+        return;
+      }
+      const scopedNode = await getNode(mobileDeadlinesNodeId);
+      if (cancelled) return;
+      setMobileDeadlinesNode(scopedNode ?? currentNode);
+    };
+
+    loadDeadlinesScopeNode();
+    return () => {
+      cancelled = true;
+    };
+  }, [mobileDeadlinesNodeId, currentNode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDashboardScopeNode = async () => {
+      const scopedNode = await getNode(mobileDashboardNodeId);
+      if (cancelled) return;
+      setMobileDashboardNode(scopedNode ?? currentNode);
+    };
+
+    loadDashboardScopeNode();
+    return () => {
+      cancelled = true;
+    };
+  }, [mobileDashboardNodeId, currentNode]);
+
   const [confettiTrigger, setConfettiTrigger] = useState(0); // Изменено на number для поддержки нескольких запусков
   const [confettiChildCount, setConfettiChildCount] = useState(0);
 
@@ -230,18 +303,26 @@ export function NodePage() {
 
   const handleCreateChild = useCallback(() => {
     setEditingNode(null);
+    setEditorParentId(null);
     setInitialDeadline(undefined);
     setInitialRecurring(undefined);
     setShowEditor(true);
   }, []);
 
   // Обработчик создания задачи с установленной датой
-  const handleCreateTaskWithDate = useCallback((date: Date, recurringPreset?: NodeRecurrence) => {
+  const handleCreateTaskWithDate = useCallback((date: Date, recurringPreset?: NodeRecurrence, parentIdOverride?: string) => {
     setEditingNode(null);
+    setEditorParentId(parentIdOverride ?? null);
     setInitialDeadline(recurringPreset ? undefined : date);
     setInitialRecurring(recurringPreset);
     setShowEditor(true);
   }, []);
+
+  const handleMobileDeadlineTaskNavigate = useCallback(() => {
+    if (isMobile) {
+      setMobileSection('tasks');
+    }
+  }, [isMobile]);
 
   // Обработка ESC и shortcuts
   useEffect(() => {
@@ -1119,45 +1200,68 @@ export function NodePage() {
     );
   }
 
-      return (
-        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col w-full overflow-x-hidden">
+  const disablePageTransition = Boolean(
+    showImportExport ||
+    showMoveModal ||
+    showDashboard ||
+    nodeToDeleteId
+  );
+  const pageTransitionKey = allowEssentialMotion && !disablePageTransition
+    ? currentNode.id
+    : 'node-page-static';
+  const activeDeadlinesNode = mobileDeadlinesNode ?? currentNode;
+
+  return (
+    <div className="flex min-h-screen w-full flex-col overflow-x-hidden bg-slate-100 dark:bg-gray-900">
+      {isMobile && AMBIENT_SEASON === 'spring' && <SpringTrees />}
+
       {/* Конфетти эффект */}
       <ConfettiEffect trigger={confettiTrigger} childCount={confettiChildCount} />
-      <Header 
-        node={currentNode} 
-        breadcrumbs={breadcrumbs}
-        draggedNode={draggedNode}
-        dragOverNodeId={dragOverNodeId}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDragEnd={handleDragEnd}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        onImportExport={handleImportExport}
-        onMove={() => setShowMoveModal(true)}
-        onOpenDashboard={() => {
-          setDashboardNodeId(currentNode.id);
-          setShowDashboard(true);
-        }}
-        onMarkCompleted={handleMarkCompleted}
-        onTogglePriority={handleTogglePriority}
-        currentNodeId={currentNode.id}
-      />
-      
-            <main className="container mx-auto px-4 py-6">
-              {/* Контент: дедлайны и шаги */}
-              <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6">
-                {/* Блок дедлайнов - сверху на мобильных, справа на больших экранах */}
+
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={pageTransitionKey}
+          initial={allowEssentialMotion && !disablePageTransition ? { opacity: 0, y: 14 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          exit={allowEssentialMotion && !disablePageTransition ? { opacity: 0, y: -10 } : { opacity: 1 }}
+          transition={allowEssentialMotion ? motionTransitions.fade : { duration: motionDurations.fast }}
+        >
+          {(!isMobile || mobileSection === 'tasks') && (
+            <Header
+              node={currentNode}
+              breadcrumbs={breadcrumbs}
+              draggedNode={draggedNode}
+              dragOverNodeId={dragOverNodeId}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDragEnd={handleDragEnd}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onImportExport={handleImportExport}
+              onMove={() => setShowMoveModal(true)}
+              onOpenDashboard={!isMobile ? () => {
+                setDashboardNodeId(currentNode.id);
+                setShowDashboard(true);
+              } : undefined}
+              onMarkCompleted={handleMarkCompleted}
+              onTogglePriority={handleTogglePriority}
+              currentNodeId={currentNode.id}
+            />
+          )}
+
+          <main className={`container mx-auto px-2 py-6 md:px-4 ${isMobile ? 'pb-[calc(88px+env(safe-area-inset-bottom))]' : ''}`}>
+            {!isMobile && (
+              <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3">
                 <div className="lg:col-span-1 lg:order-2">
-                  <DeadlineList 
-                    node={currentNode} 
+                  <DeadlineList
+                    node={currentNode}
                     onNavigate={navigateToNode}
+                    onNavigateToTask={handleMobileDeadlineTaskNavigate}
                     onMarkCompleted={handleMarkCompleted}
-                    onCreateTask={handleCreateTaskWithDate}
+                    onCreateTask={(date, recurringPreset) => handleCreateTaskWithDate(date, recurringPreset)}
                   />
                 </div>
-                
-                {/* Блок шагов - снизу на мобильных, слева на больших экранах */}
+
                 <div className="lg:col-span-2 lg:order-1">
                   <StepsList
                     children={sortedChildren}
@@ -1187,66 +1291,188 @@ export function NodePage() {
                   />
                 </div>
               </div>
-      </main>
-      
-      {/* Модалки */}
-      {showEditor && (
-        <EditorModal
-          node={editingNode}
-          parentId={currentNode.id}
-          onSave={handleSave}
-          initialDeadline={initialDeadline}
-          initialRecurring={initialRecurring}
-          onClose={() => {
-            setShowEditor(false);
-            setEditingNode(null);
-            setInitialDeadline(undefined);
-            setInitialRecurring(undefined);
+            )}
+
+            {isMobile && mobileSection === 'tasks' && (
+              <StepsList
+                children={sortedChildren}
+                onCreateChild={handleCreateChild}
+                onNavigate={navigateToNode}
+                onMarkCompleted={handleMarkCompleted}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onTogglePriority={handleTogglePriority}
+                onMove={(node) => {
+                  setNodeToMove(node);
+                  setShowMoveModal(true);
+                }}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                draggedNode={draggedNode}
+                dragOverNodeId={dragOverNodeId}
+                sortType={sortType}
+                onSortChange={setSortType}
+                filterType={filterType}
+                onFilterChange={setFilterType}
+                currentNodeId={currentNode.id}
+                animatingBurnId={animatingBurnId}
+                animatingMoveId={animatingMoveId}
+              />
+            )}
+
+            {isMobile && mobileSection === 'deadlines' && (
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setShowDeadlinesScopePicker(true)}
+                  className="flex w-full min-w-0 items-center gap-2 rounded-xl px-1 py-1 text-sm font-medium text-gray-700 transition-colors hover:text-accent dark:text-gray-200"
+                  title={t('deadline.chooseScope')}
+                >
+                  <FiFolder size={16} className="shrink-0" />
+                  <span className="truncate">{activeDeadlinesNode?.title || t('general.loading')}</span>
+                </button>
+                <DeadlineList
+                  node={activeDeadlinesNode}
+                  onNavigate={navigateToNode}
+                  onNavigateToTask={handleMobileDeadlineTaskNavigate}
+                  onMarkCompleted={handleMarkCompleted}
+                  onCreateTask={(date, recurringPreset) =>
+                    handleCreateTaskWithDate(date, recurringPreset, activeDeadlinesNode.id)
+                  }
+                />
+              </div>
+            )}
+
+            {isMobile && mobileSection === 'dashboard' && (
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setShowDashboardScopePicker(true)}
+                  className="flex w-full min-w-0 items-center gap-2 rounded-xl px-1 py-1 text-sm font-medium text-gray-700 transition-colors hover:text-accent dark:text-gray-200"
+                  title={t('deadline.chooseScope')}
+                >
+                  <FiFolder size={16} className="shrink-0" />
+                  <span className="truncate">{mobileDashboardNode?.title || t('general.loading')}</span>
+                </button>
+                <DashboardContent
+                  initialNodeId={mobileDashboardNodeId || currentNode.id}
+                  onSelectedNodeChange={setMobileDashboardNodeId}
+                  showNodePicker={false}
+                  className="flex min-h-[calc(100vh-240px)] w-full flex-col overflow-hidden"
+                />
+              </div>
+            )}
+
+            {isMobile && mobileSection === 'settings' && <MobileSettingsTab />}
+          </main>
+        </motion.div>
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showEditor && (
+          <EditorModal
+            node={editingNode}
+            parentId={editorParentId || currentNode.id}
+            onSave={handleSave}
+            initialDeadline={initialDeadline}
+            initialRecurring={initialRecurring}
+            onClose={() => {
+              setShowEditor(false);
+              setEditingNode(null);
+              setEditorParentId(null);
+              setInitialDeadline(undefined);
+              setInitialRecurring(undefined);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showImportExport && (
+          <ImportExportModal
+            currentNode={currentNode}
+            onImport={handleImportComplete}
+            onClose={() => setShowImportExport(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showMoveModal && (nodeToMove || currentNode) && (
+          <MoveModal
+            sourceNodeId={nodeToMove ? nodeToMove.id : currentNode.id}
+            onMove={handleMoveNode}
+            onClose={() => {
+              setShowMoveModal(false);
+              setNodeToMove(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showDashboard && (
+          <DashboardModal
+            initialNodeId={dashboardNodeId || currentNode.id}
+            onClose={() => setShowDashboard(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {nodeToDeleteId && (
+          <ConfirmDialog
+            title={t('general.delete')}
+            message={t('node.deleteConfirm')}
+            onConfirm={() => executeDelete(nodeToDeleteId)}
+            onCancel={() => setNodeToDeleteId(null)}
+            isDangerous={true}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showDeadlinesScopePicker && (
+          <DashboardNodePickerModal
+            selectedNodeId={mobileDeadlinesNodeId}
+            onSelectNode={setMobileDeadlinesNodeId}
+            onClose={() => setShowDeadlinesScopePicker(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showDashboardScopePicker && (
+          <DashboardNodePickerModal
+            selectedNodeId={mobileDashboardNodeId}
+            onSelectNode={setMobileDashboardNodeId}
+            onClose={() => setShowDashboardScopePicker(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {!isMobile && <SettingsWidget />}
+
+      {isMobile && mobileSection === 'tasks' && (
+        <button
+          onClick={handleCreateChild}
+          className="fixed right-6 flex h-12 w-12 items-center justify-center rounded-xl text-white transition-all hover:brightness-110"
+          style={{
+            zIndex: Z_MOBILE_FAB,
+            bottom: 'calc(88px + env(safe-area-inset-bottom))',
+            backgroundColor: 'var(--accent)',
+            boxShadow: '0 10px 24px rgba(var(--accent-rgb), 0.35)',
           }}
-        />
-      )}
-      
-      {showImportExport && (
-        <ImportExportModal
-          currentNode={currentNode}
-          onImport={handleImportComplete}
-          onClose={() => setShowImportExport(false)}
-        />
-      )}
-      
-      {showMoveModal && (nodeToMove || currentNode) && (
-        <MoveModal
-          sourceNodeId={nodeToMove ? nodeToMove.id : currentNode.id}
-          onMove={handleMoveNode}
-          onClose={() => {
-            setShowMoveModal(false);
-            setNodeToMove(null);
-          }}
-        />
+          aria-label={t('node.createChild')}
+        >
+          <FiPlus size={24} />
+        </button>
       )}
 
-      {showDashboard && (
-        <DashboardModal
-          initialNodeId={dashboardNodeId || currentNode.id}
-          onClose={() => setShowDashboard(false)}
-        />
-      )}
-      
-      {nodeToDeleteId && (
-        <ConfirmDialog
-          title={t('general.delete')}
-          message={t('node.deleteConfirm')}
-          onConfirm={() => executeDelete(nodeToDeleteId)}
-          onCancel={() => setNodeToDeleteId(null)}
-          isDangerous={true}
-        />
-      )}
-      
-      {/* Виджет настроек - закреплен снизу справа */}
-      <SettingsWidget />
-      
-      {/* Footer */}
-      <Footer />
+      {!isMobile && <Footer />}
+      {isMobile && <MobileBottomNav activeSection={mobileSection} onSectionChange={setMobileSection} />}
     </div>
   );
 }

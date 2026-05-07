@@ -17,6 +17,15 @@ export const Z_HEADER_DECOR = 70;
 /** FAB настроек и его палитра — над ambient, под модалками */
 export const Z_SETTINGS = 85;
 
+/** Нижняя мобильная навигация */
+export const Z_MOBILE_NAV = 82;
+
+/** Мобильная кнопка быстрого добавления */
+export const Z_MOBILE_FAB = 84;
+
+/** Тосты: поверх mobile nav/FAB, но под модалками */
+export const Z_TOAST = 90;
+
 /** Стандартный fullscreen overlay модалок */
 export const Z_MODAL = 100;
 

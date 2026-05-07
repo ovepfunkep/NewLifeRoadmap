@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Node } from '../types';
 import { getRoot, getNode } from '../db';
 import { t } from '../i18n';
-import { Z_MODAL } from '../config/zLayers';
+import { Z_MODAL_HIGH } from '../config/zLayers';
 
 interface ParentPickerModalProps {
   onSelectParent: (parentId: string) => void;
@@ -132,7 +132,7 @@ export function ParentPickerModal({ onSelectParent, onClose }: ParentPickerModal
     return (
       <div
         className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-        style={{ zIndex: Z_MODAL }}
+        style={{ zIndex: Z_MODAL_HIGH }}
       >
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6">
           <p className="text-gray-600 dark:text-gray-400">{t('general.loading')}</p>
@@ -144,7 +144,7 @@ export function ParentPickerModal({ onSelectParent, onClose }: ParentPickerModal
   return (
     <div
       className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      style={{ zIndex: Z_MODAL }}
+      style={{ zIndex: Z_MODAL_HIGH }}
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >

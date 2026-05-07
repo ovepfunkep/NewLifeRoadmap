@@ -4,18 +4,32 @@ import { buildBreadcrumbs, getDeadlineColor, formatDeadline } from '../utils';
 import { getNode } from '../db';
 import { FiX, FiPlus, FiCheck } from 'react-icons/fi';
 import { Z_MODAL } from '../config/zLayers';
+import { motion } from 'framer-motion';
+import { useMotionPreferences } from '../hooks/useMotionPreferences';
+import { motionDurations, motionTransitions } from '../config/motion';
 
 interface DayTasksModalProps {
   date: Date;
   tasks: Node[];
   currentNodeId: string;
   onNavigate: (id: string) => void;
+  onNavigateToTask?: (id: string) => void;
   onMarkCompleted: (id: string, completed: boolean) => void;
   onCreateTask?: (date: Date, recurringPreset?: NodeRecurrence) => void; // Обработчик создания задачи с датой/пресетом
   onClose: () => void;
 }
 
-function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onMarkCompleted, onCreateTask, onClose }: DayTasksModalProps) {
+function DayTasksModal({
+  date,
+  tasks,
+  currentNodeId,
+  onNavigate,
+  onNavigateToTask,
+  onMarkCompleted,
+  onCreateTask,
+  onClose,
+}: DayTasksModalProps) {
+  const { allowEssentialMotion } = useMotionPreferences();
   const [tasksWithBreadcrumbs, setTasksWithBreadcrumbs] = useState<Array<{ node: Node; breadcrumbs: Node[] }>>([]);
   const [localTasks, setLocalTasks] = useState<Node[]>(tasks);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -96,23 +110,40 @@ function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onMarkCompleted
 
   const handleTaskClick = (taskId: string) => {
     onNavigate(taskId);
+    onNavigateToTask?.(taskId);
     onClose();
   };
 
   return (
-    <div 
+    <motion.div 
       className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
       style={{ zIndex: Z_MODAL }}
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={
+        allowEssentialMotion
+          ? motionTransitions.fade
+          : { duration: motionDurations.fast }
+      }
     >
-      <div
+      <motion.div
         ref={modalRef}
         className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col m-4"
         style={{
           boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'
         }}
         onMouseDown={(e) => e.stopPropagation()}
+        initial={allowEssentialMotion ? { y: 18, scale: 0.98, opacity: 0.92 } : { opacity: 1 }}
+        animate={allowEssentialMotion ? { y: 0, scale: 1, opacity: 1 } : { opacity: 1 }}
+        exit={allowEssentialMotion ? { y: 18, scale: 0.98, opacity: 0 } : { opacity: 0 }}
+        transition={
+          allowEssentialMotion
+            ? motionTransitions.modal
+            : { duration: motionDurations.fast }
+        }
       >
         {/* Заголовок */}
         <div className="flex items-center justify-between p-4 border-b border-gray-300 dark:border-gray-700 bg-accent/5">
@@ -204,7 +235,7 @@ function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onMarkCompleted
                       </div>
                       {dateStr && (
                         <span
-                          className="text-xs px-2 py-1 rounded text-white flex-shrink-0 self-center font-normal"
+                          className="flex-shrink-0 self-center rounded-full px-2.5 py-1 text-xs font-semibold text-white"
                           style={{ backgroundColor: deadlineColor }}
                         >
                           {dateStr}
@@ -262,8 +293,8 @@ function DayTasksModal({ date, tasks, currentNodeId, onNavigate, onMarkCompleted
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
