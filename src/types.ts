@@ -1,5 +1,13 @@
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
 
+/** Один интервал дней + время для weekly/monthly (несколько вариантов в одной задаче). */
+export interface RecurrenceScheduleVariant {
+  weekdays?: number[];
+  monthDays?: number[];
+  timeStart?: string | null;
+  timeEnd?: string | null;
+}
+
 export interface NodeRecurrence {
   freq: RecurrenceFrequency;
   // weekly: [0..6], где 0 = Sunday, 1 = Monday ... 6 = Saturday
@@ -10,6 +18,8 @@ export interface NodeRecurrence {
   timeStart?: string | null;
   // HH:mm, optional, should be > timeStart if both are set
   timeEnd?: string | null;
+  /** Если задан и непустой — для weekly/monthly используется вместо плоских полей выше. */
+  scheduleVariants?: RecurrenceScheduleVariant[];
 }
 
 // Тип узла (мапы)

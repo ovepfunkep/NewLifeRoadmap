@@ -1,4 +1,4 @@
-import { Node, NodeRecurrence } from '../types';
+import { Node, NodeRecurrence, RecurrenceScheduleVariant } from '../types';
 
 export interface RecurringScheduleSlot {
   taskId: string;
@@ -50,14 +50,43 @@ function isMatchDaily(_rule: NodeRecurrence): boolean {
   return true;
 }
 
+/** Варианты для weekly/monthly: из scheduleVariants или одна «плоская» запись (старые данные). */
+export function normalizeRecurrenceVariants(rule: NodeRecurrence): RecurrenceScheduleVariant[] {
+  if (rule.freq === 'daily') return [];
+  if (Array.isArray(rule.scheduleVariants) && rule.scheduleVariants.length > 0) {
+    return rule.scheduleVariants;
+  }
+  return [
+    {
+      weekdays: rule.weekdays,
+      monthDays: rule.monthDays,
+      timeStart: rule.timeStart ?? null,
+      timeEnd: rule.timeEnd ?? null,
+    },
+  ];
+}
+
+function findVariantsForDay(rule: NodeRecurrence, day: Date): RecurrenceScheduleVariant[] {
+  const variants = normalizeRecurrenceVariants(rule);
+  if (rule.freq === 'weekly') {
+    return variants.filter(
+      (v) => Array.isArray(v.weekdays) && v.weekdays.length > 0 && v.weekdays.includes(day.getDay())
+    );
+  }
+  if (rule.freq === 'monthly') {
+    return variants.filter(
+      (v) => Array.isArray(v.monthDays) && v.monthDays.length > 0 && v.monthDays.includes(day.getDate())
+    );
+  }
+  return [];
+}
+
 function isMatchWeekly(rule: NodeRecurrence, day: Date): boolean {
-  if (!Array.isArray(rule.weekdays) || rule.weekdays.length === 0) return false;
-  return rule.weekdays.includes(day.getDay());
+  return findVariantsForDay(rule, day).length > 0;
 }
 
 function isMatchMonthly(rule: NodeRecurrence, day: Date): boolean {
-  if (!Array.isArray(rule.monthDays) || rule.monthDays.length === 0) return false;
-  return rule.monthDays.includes(day.getDate());
+  return findVariantsForDay(rule, day).length > 0;
 }
 
 function isRecurringOnDay(rule: NodeRecurrence, day: Date): boolean {
@@ -67,9 +96,9 @@ function isRecurringOnDay(rule: NodeRecurrence, day: Date): boolean {
   return false;
 }
 
-function buildSlot(node: Node, day: Date): RecurringScheduleSlot {
-  const startMinutes = parseTimeToMinutes(node.recurrence?.timeStart ?? null);
-  const endMinutes = parseTimeToMinutes(node.recurrence?.timeEnd ?? null);
+function buildSlotFromVariant(node: Node, day: Date, variant: RecurrenceScheduleVariant): RecurringScheduleSlot {
+  const startMinutes = parseTimeToMinutes(variant.timeStart ?? null);
+  const endMinutes = parseTimeToMinutes(variant.timeEnd ?? null);
   const hasTimedRange = startMinutes !== null && endMinutes !== null && endMinutes > startMinutes;
   const safeEnd = hasTimedRange ? Math.min(endMinutes!, MINUTES_PER_DAY) : null;
 
@@ -83,6 +112,74 @@ function buildSlot(node: Node, day: Date): RecurringScheduleSlot {
     startMinutes: hasTimedRange ? startMinutes : null,
     endMinutes: hasTimedRange ? safeEnd : null,
   };
+}
+
+function buildSlotDaily(node: Node, day: Date): RecurringScheduleSlot {
+  const rule = node.recurrence!;
+  const startMinutes = parseTimeToMinutes(rule.timeStart ?? null);
+  const endMinutes = parseTimeToMinutes(rule.timeEnd ?? null);
+  const hasTimedRange = startMinutes !== null && endMinutes !== null && endMinutes > startMinutes;
+  const safeEnd = hasTimedRange ? Math.min(endMinutes!, MINUTES_PER_DAY) : null;
+
+  return {
+    taskId: node.id,
+    title: node.title,
+    description: node.description,
+    day: toDayStart(day),
+    dayKey: toDayKey(day),
+    isAllDay: !hasTimedRange,
+    startMinutes: hasTimedRange ? startMinutes : null,
+    endMinutes: hasTimedRange ? safeEnd : null,
+  };
+}
+
+/** Два интервала в один календарный день (weekly/monthly варианты) пересекаются по времени. */
+export function recurrenceVariantsTimeOverlapOnSharedDay(
+  freq: 'weekly' | 'monthly',
+  variants: RecurrenceScheduleVariant[]
+): boolean {
+  type Desc = { allDay: true } | { allDay: false; start: number; end: number };
+
+  const describe = (v: RecurrenceScheduleVariant): Desc => {
+    const s = (v.timeStart ?? '').trim();
+    const e = (v.timeEnd ?? '').trim();
+    if (!s && !e) return { allDay: true };
+    const sm = parseTimeToMinutes(s);
+    const em = parseTimeToMinutes(e);
+    if (sm === null || em === null || em <= sm) return { allDay: true };
+    return { allDay: false, start: sm, end: Math.min(em, MINUTES_PER_DAY) };
+  };
+
+  const pairOverlaps = (a: Desc, b: Desc): boolean => {
+    if (a.allDay || b.allDay) return true;
+    return a.start < b.end && b.start < a.end;
+  };
+
+  const listOverlaps = (list: RecurrenceScheduleVariant[]): boolean => {
+    const desc = list.map(describe);
+    for (let i = 0; i < desc.length; i++) {
+      for (let j = i + 1; j < desc.length; j++) {
+        if (pairOverlaps(desc[i], desc[j])) return true;
+      }
+    }
+    return false;
+  };
+
+  if (freq === 'weekly') {
+    for (let wd = 0; wd <= 6; wd++) {
+      const onDay = variants.filter((v) => (v.weekdays ?? []).includes(wd));
+      if (onDay.length < 2) continue;
+      if (listOverlaps(onDay)) return true;
+    }
+    return false;
+  }
+
+  for (let md = 1; md <= 31; md++) {
+    const onDay = variants.filter((v) => (v.monthDays ?? []).includes(md));
+    if (onDay.length < 2) continue;
+    if (listOverlaps(onDay)) return true;
+  }
+  return false;
 }
 
 function buildOneOffSlot(node: Node, deadlineDate: Date): RecurringScheduleSlot {
@@ -140,8 +237,17 @@ export function expandRecurringNodesToSlots(
 
     for (const day of days) {
       if (!isNodeActiveInRange(node, day)) continue;
-      if (!isRecurringOnDay(node.recurrence, day)) continue;
-      slots.push(buildSlot(node, day));
+      const rule = node.recurrence;
+      if (!rule) continue;
+      if (rule.freq === 'daily') {
+        if (!isRecurringOnDay(rule, day)) continue;
+        slots.push(buildSlotDaily(node, day));
+        continue;
+      }
+      const dayVariants = findVariantsForDay(rule, day);
+      for (const v of dayVariants) {
+        slots.push(buildSlotFromVariant(node, day, v));
+      }
     }
   }
 
@@ -165,10 +271,18 @@ export function expandNodesToSlots(
     if (node.completed || node.deletedAt) continue;
 
     if (node.isRecurring && node.recurrence) {
+      const rule = node.recurrence;
       for (const day of days) {
         if (!isNodeActiveInRange(node, day)) continue;
-        if (!isRecurringOnDay(node.recurrence, day)) continue;
-        slots.push(buildSlot(node, day));
+        if (rule.freq === 'daily') {
+          if (!isRecurringOnDay(rule, day)) continue;
+          slots.push(buildSlotDaily(node, day));
+          continue;
+        }
+        const dayVariants = findVariantsForDay(rule, day);
+        for (const v of dayVariants) {
+          slots.push(buildSlotFromVariant(node, day, v));
+        }
       }
       continue;
     }

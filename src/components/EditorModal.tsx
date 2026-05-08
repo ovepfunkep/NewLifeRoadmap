@@ -1,5 +1,5 @@
 import { Fragment, useState, useEffect, useRef } from 'react';
-import { Node, NodeRecurrence, RecurrenceFrequency } from '../types';
+import { Node, NodeRecurrence, RecurrenceFrequency, RecurrenceScheduleVariant } from '../types';
 import { t } from '../i18n';
 import { generateId, buildBreadcrumbs } from '../utils';
 import { FiAlertCircle, FiCalendar, FiClock, FiFolder } from 'react-icons/fi';
@@ -13,10 +13,31 @@ import { AuthRequiredModal } from './AuthRequiredModal';
 import { getCurrentUser } from '../firebase/auth';
 import { getUserSecurityConfig } from '../firebase/security';
 import { AnimatePresence, motion } from 'framer-motion';
-import { expandNodesToSlots } from '../utils/recurrence';
+import {
+  expandNodesToSlots,
+  normalizeRecurrenceVariants,
+  recurrenceVariantsTimeOverlapOnSharedDay,
+} from '../utils/recurrence';
+import { RecurrenceVariantsEditor } from './RecurrenceVariantsEditor';
 import { useMotionPreferences } from '../hooks/useMotionPreferences';
 import { motionDurations, motionTransitions } from '../config/motion';
 import { MobileBottomSheet } from './MobileBottomSheet';
+
+function mapNodeRecurrenceToVariants(rule: NodeRecurrence, freq: 'weekly' | 'monthly'): RecurrenceScheduleVariant[] {
+  const list = normalizeRecurrenceVariants(rule);
+  if (freq === 'weekly') {
+    return list.map((v) => ({
+      weekdays: [...(v.weekdays ?? [])],
+      timeStart: v.timeStart ?? '',
+      timeEnd: v.timeEnd ?? '',
+    }));
+  }
+  return list.map((v) => ({
+    monthDays: [...(v.monthDays ?? [])],
+    timeStart: v.timeStart ?? '',
+    timeEnd: v.timeEnd ?? '',
+  }));
+}
 
 interface EditorModalProps {
   node: Node | null; // null = создание нового
@@ -107,10 +128,26 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
   const [deadlineEndTime, setDeadlineEndTime] = useState(getInitialDeadlineEndTime());
   const [isRecurring, setIsRecurring] = useState(node?.isRecurring || !!initialRecurring);
   const [recurrenceFreq, setRecurrenceFreq] = useState<RecurrenceFrequency>(node?.recurrence?.freq || initialRecurring?.freq || 'daily');
-  const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>(node?.recurrence?.weekdays || initialRecurring?.weekdays || [1]);
-  const [recurrenceMonthDays, setRecurrenceMonthDays] = useState<number[]>(node?.recurrence?.monthDays || initialRecurring?.monthDays || [1]);
-  const [recurrenceTimeStart, setRecurrenceTimeStart] = useState<string>(node?.recurrence?.timeStart || initialRecurring?.timeStart || '');
-  const [recurrenceTimeEnd, setRecurrenceTimeEnd] = useState<string>(node?.recurrence?.timeEnd || initialRecurring?.timeEnd || '');
+  const [recurrenceVariants, setRecurrenceVariants] = useState<RecurrenceScheduleVariant[]>(() => {
+    const r = node?.recurrence ?? initialRecurring;
+    const f = r?.freq ?? 'daily';
+    if (f === 'weekly' && r) return mapNodeRecurrenceToVariants(r, 'weekly');
+    if (f === 'monthly' && r) return mapNodeRecurrenceToVariants(r, 'monthly');
+    if (initialRecurring?.freq === 'weekly') return mapNodeRecurrenceToVariants(initialRecurring, 'weekly');
+    if (initialRecurring?.freq === 'monthly') return mapNodeRecurrenceToVariants(initialRecurring, 'monthly');
+    return [{ weekdays: [1], timeStart: '', timeEnd: '' }];
+  });
+  const [recurrenceVariantIndex, setRecurrenceVariantIndex] = useState(0);
+  const [recurrenceTimeStart, setRecurrenceTimeStart] = useState<string>(() => {
+    const f = node?.recurrence?.freq ?? initialRecurring?.freq ?? 'daily';
+    if (f === 'daily') return node?.recurrence?.timeStart || initialRecurring?.timeStart || '';
+    return '';
+  });
+  const [recurrenceTimeEnd, setRecurrenceTimeEnd] = useState<string>(() => {
+    const f = node?.recurrence?.freq ?? initialRecurring?.freq ?? 'daily';
+    if (f === 'daily') return node?.recurrence?.timeEnd || initialRecurring?.timeEnd || '';
+    return '';
+  });
   const [priority, setPriority] = useState(node?.priority || false);
   const [chosenParentId, setChosenParentId] = useState<string | null>(null);
   const [showParentPicker, setShowParentPicker] = useState(false);
@@ -162,11 +199,26 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
         setDeadlineEndTime('');
       }
       setIsRecurring(node.isRecurring || false);
-      setRecurrenceFreq(node.recurrence?.freq || 'daily');
-      setRecurrenceWeekdays(node.recurrence?.weekdays || [1]);
-      setRecurrenceMonthDays(node.recurrence?.monthDays || [1]);
-      setRecurrenceTimeStart(node.recurrence?.timeStart || '');
-      setRecurrenceTimeEnd(node.recurrence?.timeEnd || '');
+      const rf = node.recurrence?.freq || 'daily';
+      setRecurrenceFreq(rf);
+      if (rf === 'daily') {
+        setRecurrenceTimeStart(node.recurrence?.timeStart || '');
+        setRecurrenceTimeEnd(node.recurrence?.timeEnd || '');
+        setRecurrenceVariants([{ weekdays: [1], timeStart: '', timeEnd: '' }]);
+      } else if (rf === 'weekly' && node.recurrence) {
+        setRecurrenceVariants(mapNodeRecurrenceToVariants(node.recurrence, 'weekly'));
+        setRecurrenceTimeStart('');
+        setRecurrenceTimeEnd('');
+      } else if (rf === 'monthly' && node.recurrence) {
+        setRecurrenceVariants(mapNodeRecurrenceToVariants(node.recurrence, 'monthly'));
+        setRecurrenceTimeStart('');
+        setRecurrenceTimeEnd('');
+      } else {
+        setRecurrenceVariants([{ weekdays: [1], timeStart: '', timeEnd: '' }]);
+        setRecurrenceTimeStart('');
+        setRecurrenceTimeEnd('');
+      }
+      setRecurrenceVariantIndex(0);
       setPriority(node.priority || false);
       setReminders(node.reminders ? node.reminders.map(seconds => {
         if (seconds % 86400 === 0) return { value: seconds / 86400, unit: 'days' };
@@ -181,15 +233,34 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
       setDeadlineTime(hasRecurringPreset ? '' : (initialDeadline ? '12:00' : ''));
       setDeadlineEndTime('');
       setIsRecurring(hasRecurringPreset);
-      setRecurrenceFreq(initialRecurring?.freq || 'daily');
-      setRecurrenceWeekdays(initialRecurring?.weekdays || [1]);
-      setRecurrenceMonthDays(initialRecurring?.monthDays || [1]);
-      setRecurrenceTimeStart(initialRecurring?.timeStart || '');
-      setRecurrenceTimeEnd(initialRecurring?.timeEnd || '');
+      const irf = initialRecurring?.freq || 'daily';
+      setRecurrenceFreq(irf);
+      if (irf === 'daily') {
+        setRecurrenceTimeStart(initialRecurring?.timeStart || '');
+        setRecurrenceTimeEnd(initialRecurring?.timeEnd || '');
+        setRecurrenceVariants([{ weekdays: [1], timeStart: '', timeEnd: '' }]);
+      } else if (irf === 'weekly' && initialRecurring) {
+        setRecurrenceVariants(mapNodeRecurrenceToVariants(initialRecurring, 'weekly'));
+        setRecurrenceTimeStart('');
+        setRecurrenceTimeEnd('');
+      } else if (irf === 'monthly' && initialRecurring) {
+        setRecurrenceVariants(mapNodeRecurrenceToVariants(initialRecurring, 'monthly'));
+        setRecurrenceTimeStart('');
+        setRecurrenceTimeEnd('');
+      } else {
+        setRecurrenceVariants([{ weekdays: [1], timeStart: '', timeEnd: '' }]);
+        setRecurrenceTimeStart('');
+        setRecurrenceTimeEnd('');
+      }
+      setRecurrenceVariantIndex(0);
       setPriority(false);
       setReminders([]);
     }
   }, [node, initialDeadline, initialRecurring]);
+
+  useEffect(() => {
+    setRecurrenceVariantIndex((i) => Math.min(i, Math.max(0, recurrenceVariants.length - 1)));
+  }, [recurrenceVariants.length]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -324,27 +395,61 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     return null;
   };
 
-  const toggleWeekday = (day: number) => {
-    setRecurrenceWeekdays((prev) =>
-      prev.includes(day) ? prev.filter((value) => value !== day) : [...prev, day]
-    );
-  };
-
-  const toggleMonthDay = (day: number) => {
-    setRecurrenceMonthDays((prev) =>
-      prev.includes(day) ? prev.filter((value) => value !== day) : [...prev, day]
-    );
+  const handleRecurrenceFreqChange = (freq: RecurrenceFrequency) => {
+    if (freq === recurrenceFreq) return;
+    if (freq === 'daily') {
+      if (recurrenceFreq === 'weekly' || recurrenceFreq === 'monthly') {
+        const first = recurrenceVariants[0];
+        setRecurrenceTimeStart(first?.timeStart || '');
+        setRecurrenceTimeEnd(first?.timeEnd || '');
+      }
+    } else if (freq === 'weekly') {
+      if (recurrenceFreq === 'daily') {
+        setRecurrenceVariants([{ weekdays: [1], timeStart: recurrenceTimeStart, timeEnd: recurrenceTimeEnd }]);
+      } else {
+        const first = recurrenceVariants[0];
+        setRecurrenceVariants([{ weekdays: [1], timeStart: first?.timeStart || '', timeEnd: first?.timeEnd || '' }]);
+      }
+    } else {
+      if (recurrenceFreq === 'daily') {
+        setRecurrenceVariants([{ monthDays: [1], timeStart: recurrenceTimeStart, timeEnd: recurrenceTimeEnd }]);
+      } else {
+        const first = recurrenceVariants[0];
+        setRecurrenceVariants([{ monthDays: [1], timeStart: first?.timeStart || '', timeEnd: first?.timeEnd || '' }]);
+      }
+    }
+    setRecurrenceVariantIndex(0);
+    setRecurrenceFreq(freq);
   };
 
   const getRecurrenceError = () => {
     if (!isRecurring) return null;
-    if (recurrenceFreq === 'weekly' && recurrenceWeekdays.length === 0) {
-      return t('editor.recurrenceWeeklyRequired');
+    if (recurrenceFreq === 'weekly') {
+      for (const v of recurrenceVariants) {
+        if (!v.weekdays?.length) return t('editor.recurrenceWeeklyRequired');
+        const hs = (v.timeStart || '').trim();
+        const he = (v.timeEnd || '').trim();
+        if ((hs.length > 0) !== (he.length > 0)) return t('editor.recurrenceTimePairRequired');
+        if (hs && he && he <= hs) return t('editor.recurrenceTimeRangeInvalid');
+      }
+      if (recurrenceVariantsTimeOverlapOnSharedDay('weekly', recurrenceVariants)) {
+        return t('editor.recurrenceSharedDayTimeOverlap');
+      }
+      return null;
     }
-    if (recurrenceFreq === 'monthly' && recurrenceMonthDays.length === 0) {
-      return t('editor.recurrenceMonthlyRequired');
+    if (recurrenceFreq === 'monthly') {
+      for (const v of recurrenceVariants) {
+        if (!v.monthDays?.length) return t('editor.recurrenceMonthlyRequired');
+        const hs = (v.timeStart || '').trim();
+        const he = (v.timeEnd || '').trim();
+        if ((hs.length > 0) !== (he.length > 0)) return t('editor.recurrenceTimePairRequired');
+        if (hs && he && he <= hs) return t('editor.recurrenceTimeRangeInvalid');
+      }
+      if (recurrenceVariantsTimeOverlapOnSharedDay('monthly', recurrenceVariants)) {
+        return t('editor.recurrenceSharedDayTimeOverlap');
+      }
+      return null;
     }
-
     const hasTimeStart = recurrenceTimeStart.trim().length > 0;
     const hasTimeEnd = recurrenceTimeEnd.trim().length > 0;
     if (hasTimeStart !== hasTimeEnd) {
@@ -375,11 +480,22 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
 
   const getDraftTimeRange = () => {
     if (isRecurring) {
-      if (!recurrenceTimeStart || !recurrenceTimeEnd) return null;
-      const startMinutes = parseTimeToMinutes(recurrenceTimeStart);
-      const endMinutes = parseTimeToMinutes(recurrenceTimeEnd);
-      if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) return null;
-      return { startMinutes, endMinutes };
+      if (recurrenceFreq === 'daily') {
+        if (!recurrenceTimeStart || !recurrenceTimeEnd) return null;
+        const startMinutes = parseTimeToMinutes(recurrenceTimeStart);
+        const endMinutes = parseTimeToMinutes(recurrenceTimeEnd);
+        if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) return null;
+        return { startMinutes, endMinutes };
+      }
+      if (recurrenceFreq === 'weekly' || recurrenceFreq === 'monthly') {
+        const v = recurrenceVariants[recurrenceVariantIndex];
+        if (!v?.timeStart || !v?.timeEnd) return null;
+        const startMinutes = parseTimeToMinutes(v.timeStart);
+        const endMinutes = parseTimeToMinutes(v.timeEnd);
+        if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) return null;
+        return { startMinutes, endMinutes };
+      }
+      return null;
     }
 
     if (!deadlineDate || !deadlineTime) return null;
@@ -455,8 +571,11 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     deadlineDate,
     deadlineTime,
     deadlineEndTime,
+    recurrenceFreq,
     recurrenceTimeStart,
     recurrenceTimeEnd,
+    recurrenceVariants,
+    recurrenceVariantIndex,
     initialDeadline,
     node,
   ]);
@@ -533,17 +652,54 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
       return;
     }
 
-    const normalizedWeekdays = Array.from(new Set(recurrenceWeekdays)).sort((a, b) => a - b);
-    const normalizedMonthDays = Array.from(new Set(recurrenceMonthDays)).sort((a, b) => a - b);
-    const recurrence = isRecurring
-      ? {
-          freq: recurrenceFreq,
-          ...(recurrenceFreq === 'weekly' ? { weekdays: normalizedWeekdays } : {}),
-          ...(recurrenceFreq === 'monthly' ? { monthDays: normalizedMonthDays } : {}),
-          timeStart: recurrenceTimeStart || null,
-          timeEnd: recurrenceTimeEnd || null,
+    let recurrence: NodeRecurrence | null = null;
+    if (isRecurring) {
+      if (recurrenceFreq === 'daily') {
+        recurrence = {
+          freq: 'daily',
+          timeStart: recurrenceTimeStart.trim() || null,
+          timeEnd: recurrenceTimeEnd.trim() || null,
+        };
+      } else if (recurrenceFreq === 'weekly') {
+        const cleaned = recurrenceVariants.map((v) => ({
+          weekdays: Array.from(new Set(v.weekdays ?? [])).sort((a, b) => a - b),
+          timeStart: v.timeStart?.trim() || null,
+          timeEnd: v.timeEnd?.trim() || null,
+        }));
+        if (cleaned.length === 1) {
+          recurrence = {
+            freq: 'weekly',
+            weekdays: cleaned[0].weekdays,
+            timeStart: cleaned[0].timeStart,
+            timeEnd: cleaned[0].timeEnd,
+          };
+        } else {
+          recurrence = {
+            freq: 'weekly',
+            scheduleVariants: cleaned,
+          };
         }
-      : null;
+      } else {
+        const cleaned = recurrenceVariants.map((v) => ({
+          monthDays: Array.from(new Set(v.monthDays ?? [])).sort((a, b) => a - b),
+          timeStart: v.timeStart?.trim() || null,
+          timeEnd: v.timeEnd?.trim() || null,
+        }));
+        if (cleaned.length === 1) {
+          recurrence = {
+            freq: 'monthly',
+            monthDays: cleaned[0].monthDays,
+            timeStart: cleaned[0].timeStart,
+            timeEnd: cleaned[0].timeEnd,
+          };
+        } else {
+          recurrence = {
+            freq: 'monthly',
+            scheduleVariants: cleaned,
+          };
+        }
+      }
+    }
 
     const newNode: Node = node
       ? {
@@ -603,17 +759,17 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
 
   const editorContent = (
     <>
-        <div className="mb-6 flex min-w-0 items-center gap-3">
+        <div className={`flex min-w-0 items-center gap-3 ${isMobile ? 'mb-3' : 'mb-6'}`}>
           <h2
-            className={`m-0 shrink-0 text-xl font-bold leading-tight text-gray-900 dark:text-gray-100 ${
-              !node ? '-translate-y-0.5' : ''
-            }`}
+            className={`m-0 shrink-0 font-bold leading-tight text-gray-900 dark:text-gray-100 ${
+              isMobile ? 'text-lg' : 'text-xl'
+            } ${!node ? '-translate-y-0.5' : ''}`}
           >
             {node ? t('node.editNode') : t('node.createChild')}
           </h2>
         </div>
         
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className={isMobile ? 'space-y-3' : 'space-y-5'}>
           <div className="flex items-center gap-3">
             <div className="flex-1 relative">
               <input
@@ -649,8 +805,12 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 focus:outline-none focus:border-accent transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 text-sm resize-none"
+              rows={isMobile ? (description.length > 50 ? 3 : 1) : 3}
+              className={`w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 text-sm text-gray-900 transition-all placeholder:text-gray-400 focus:border-accent focus:outline-none dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-600 ${
+                isMobile && description.length <= 50
+                  ? 'resize-none overflow-hidden py-2.5 leading-snug'
+                  : 'resize-none py-3'
+              }`}
               placeholder={t('editor.description')}
             />
           </div>
@@ -740,7 +900,11 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
             </div>
           )}
 
-          <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border-2 border-gray-100 dark:border-gray-800 space-y-4">
+          <div
+            className={`rounded-2xl border-2 border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/50 ${
+              isMobile ? 'space-y-3 p-3' : 'space-y-4 p-4'
+            }`}
+          >
             <div className="flex items-center justify-between gap-3">
               <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
                 {t('editor.recurrenceTitle')}
@@ -784,7 +948,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                     <button
                       key={freq}
                       type="button"
-                      onClick={() => setRecurrenceFreq(freq)}
+                      onClick={() => handleRecurrenceFreqChange(freq)}
                       className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition-all border ${
                         recurrenceFreq === freq
                           ? 'text-white border-transparent'
@@ -798,57 +962,34 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                 </div>
 
                 {recurrenceFreq === 'weekly' && (
-                  <div className="space-y-1.5">
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">{t('editor.recurrenceWeekdays')}</p>
-                    <div className="grid grid-cols-7 gap-1">
-                      {weekdayOptions.map((day) => {
-                        const active = recurrenceWeekdays.includes(day.value);
-                        return (
-                          <button
-                            key={day.value}
-                            type="button"
-                            onClick={() => toggleWeekday(day.value)}
-                            className={`rounded-md py-1 text-[11px] font-semibold transition-all border ${
-                              active
-                                ? 'text-white border-transparent'
-                                : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'
-                            }`}
-                            style={active ? { backgroundColor: 'var(--accent)' } : undefined}
-                          >
-                            {day.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <RecurrenceVariantsEditor
+                    frequency="weekly"
+                    variants={recurrenceVariants}
+                    onVariantsChange={setRecurrenceVariants}
+                    activeIndex={recurrenceVariantIndex}
+                    onActiveIndexChange={setRecurrenceVariantIndex}
+                    isMobile={isMobile}
+                    allowEssentialMotion={allowEssentialMotion}
+                    openInputPicker={openInputPicker}
+                    weekdayOptions={weekdayOptions}
+                  />
                 )}
 
                 {recurrenceFreq === 'monthly' && (
-                  <div className="space-y-1.5">
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">{t('editor.recurrenceMonthDays')}</p>
-                    <div className="grid grid-cols-8 gap-1 max-h-28 overflow-y-auto pr-1">
-                      {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => {
-                        const active = recurrenceMonthDays.includes(day);
-                        return (
-                          <button
-                            key={day}
-                            type="button"
-                            onClick={() => toggleMonthDay(day)}
-                            className={`rounded-md py-1 text-[11px] font-semibold transition-all border ${
-                              active
-                                ? 'text-white border-transparent'
-                                : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'
-                            }`}
-                            style={active ? { backgroundColor: 'var(--accent)' } : undefined}
-                          >
-                            {day}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <RecurrenceVariantsEditor
+                    frequency="monthly"
+                    variants={recurrenceVariants}
+                    onVariantsChange={setRecurrenceVariants}
+                    activeIndex={recurrenceVariantIndex}
+                    onActiveIndexChange={setRecurrenceVariantIndex}
+                    isMobile={isMobile}
+                    allowEssentialMotion={allowEssentialMotion}
+                    openInputPicker={openInputPicker}
+                    weekdayOptions={weekdayOptions}
+                  />
                 )}
 
+                {recurrenceFreq === 'daily' && (
                 <div className="grid grid-cols-2 gap-2">
                   <label className="space-y-1">
                     <span className="block text-[11px] text-gray-500 dark:text-gray-400">
@@ -897,6 +1038,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                     </div>
                   </label>
                 </div>
+                )}
 
                 {recurrenceError && (
                   <p className="text-[10px] text-red-500 px-1 font-medium">{recurrenceError}</p>
@@ -1025,7 +1167,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
             </div>
           )}
           
-          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+          <div className={`flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end ${isMobile ? 'sm:pt-2' : 'pt-2'}`}>
             <button
               type="button"
               onClick={onClose}
@@ -1049,8 +1191,8 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
   return (
     <>
       {isMobile ? (
-        <MobileBottomSheet isOpen={true} onClose={onClose}>
-          <div className="max-h-[80vh] overflow-y-auto px-1 pb-1">
+        <MobileBottomSheet isOpen={true} onClose={onClose} compact>
+          <div className="max-h-[88vh] overflow-y-auto px-0.5 pb-0.5 [-webkit-overflow-scrolling:touch]">
             {editorContent}
           </div>
         </MobileBottomSheet>

@@ -823,66 +823,61 @@ export function NodeCard({
             <div
               className={`flex min-w-0 flex-1 flex-col p-0 ${isMobile ? 'pr-16' : ''}`}
             >
-              <div className="flex items-start justify-between p-4 pb-1">
-                <button
-                  type="button"
-                  onClick={handleNavigateClick}
-                  className="group min-w-0 flex-1 text-left"
-                >
-                  <div className="space-y-1.5">
-                    <h3 className="m-0 line-clamp-2 text-lg font-bold leading-snug text-gray-900 transition-opacity group-hover:opacity-75 dark:text-gray-100" style={{ color: 'var(--accent)' }}>
-                      {node.title}
-                    </h3>
-                    {deadlineDisplay && (
-                      <div className="pt-0.5">
-                        <span
-                          className="whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
-                          style={{
-                            borderColor: '#f97316',
-                            color: 'white',
-                            backgroundColor: '#f97316',
-                          }}
-                        >
-                          {deadlineDisplay}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </button>
-
-                {!isMobile && (
-                  <div className="flex-shrink-0 ml-2 relative z-10 pt-1">
-                    <div className="flex items-center gap-1.5">
-                      {actions.map((action) => (
-                        <Tooltip key={action.id} text={action.label}>
-                          <motion.button
-                            type="button"
-                            data-card-action="true"
-                            onClick={(e) => { e.stopPropagation(); action.action(); }}
-                            whileTap={allowDecorativeMotion ? { scale: 0.94 } : undefined}
-                            className={`rounded-lg border p-2.5 shadow-sm transition-all hover:scale-110 ${action.active ? 'border-transparent' : 'border-current hover:bg-accent/10'}`}
-                            style={{ color: action.color, backgroundColor: action.active ? action.color : 'transparent' }}
+              <div className="flex min-h-0 flex-1 flex-col justify-center">
+                <div className="flex items-center justify-between gap-2 px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={handleNavigateClick}
+                    className="group min-w-0 flex-1 text-left"
+                  >
+                    <div className="flex flex-col gap-1.5">
+                      <h3 className="m-0 line-clamp-2 text-lg font-bold leading-snug text-gray-900 transition-opacity group-hover:opacity-75 dark:text-gray-100" style={{ color: 'var(--accent)' }}>
+                        {node.title}
+                      </h3>
+                      {node.description && (
+                        <div className="line-clamp-2 text-[12px] font-normal leading-[1.45] text-gray-500 dark:text-gray-400">
+                          {node.description}
+                        </div>
+                      )}
+                      {deadlineDisplay && (
+                        <div className={node.description ? 'pt-0.5' : undefined}>
+                          <span
+                            className="inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                            style={{
+                              borderColor: '#f97316',
+                              color: 'white',
+                              backgroundColor: '#f97316',
+                            }}
                           >
-                            {React.createElement(action.icon, { size: 20, style: { color: action.active ? 'white' : action.color } })}
-                          </motion.button>
-                        </Tooltip>
-                      ))}
+                            {deadlineDisplay}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
-              </div>
+                  </button>
 
-              <button
-                type="button"
-                onClick={handleNavigateClick}
-                className="flex min-h-[40px] w-full flex-1 px-4 pb-4 text-left"
-              >
-                {node.description && (
-                  <div className="line-clamp-2 text-[12px] font-normal leading-[1.45] text-gray-500 dark:text-gray-400">
-                    {node.description}
-                  </div>
-                )}
-              </button>
+                  {!isMobile && (
+                    <div className="relative z-10 ml-2 flex shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        {actions.map((action) => (
+                          <Tooltip key={action.id} text={action.label}>
+                            <motion.button
+                              type="button"
+                              data-card-action="true"
+                              onClick={(e) => { e.stopPropagation(); action.action(); }}
+                              whileTap={allowDecorativeMotion ? { scale: 0.94 } : undefined}
+                              className={`rounded-lg border p-2.5 shadow-sm transition-all hover:scale-110 ${action.active ? 'border-transparent' : 'border-current hover:bg-accent/10'}`}
+                              style={{ color: action.color, backgroundColor: action.active ? action.color : 'transparent' }}
+                            >
+                              {React.createElement(action.icon, { size: 20, style: { color: action.active ? 'white' : action.color } })}
+                            </motion.button>
+                          </Tooltip>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Барабан для мобильных - центрирован по высоте контента без прогресс-бара */}

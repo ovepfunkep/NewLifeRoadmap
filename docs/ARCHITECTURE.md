@@ -18,6 +18,7 @@ Key points:
 - persisted in flat form (`id`, `parentId`)
 - tree is rebuilt in memory for rendering/navigation
 - optional scheduling fields are carried through local + cloud + compare paths
+- recurring tasks: `Node.recurrence` may use flat `weekdays` / `monthDays` plus one `timeStart` / `timeEnd` pair, or for weekly/monthly multi-interval rules a non-empty `scheduleVariants` array (each entry: days + time range); the same weekday or month-day may appear in several variants if the time ranges do not overlap; `normalizeRecurrenceVariants` in `src/utils/recurrence.ts` resolves legacy vs new shape when expanding to schedule slots
 
 ## Main Modules
 

@@ -9,9 +9,11 @@ interface MobileBottomSheetProps {
   title?: string;
   onClose: () => void;
   children: React.ReactNode;
+  /** Меньше отступы у ручки и контента (редактор и т.п.) */
+  compact?: boolean;
 }
 
-export function MobileBottomSheet({ isOpen, title, onClose, children }: MobileBottomSheetProps) {
+export function MobileBottomSheet({ isOpen, title, onClose, children, compact }: MobileBottomSheetProps) {
   const { allowEssentialMotion } = useMotionPreferences();
   const dragControls = useDragControls();
 
@@ -50,7 +52,9 @@ export function MobileBottomSheet({ isOpen, title, onClose, children }: MobileBo
           }
         >
           <motion.div
-            className="w-full rounded-t-2xl border border-gray-200 bg-white px-4 pb-6 pt-3 shadow-xl dark:border-gray-700 dark:bg-gray-800"
+            className={`w-full rounded-t-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800 ${
+              compact ? 'px-3 pb-4 pt-2' : 'px-4 pb-6 pt-3'
+            }`}
             onMouseDown={(event) => event.stopPropagation()}
             initial={allowEssentialMotion ? { y: '100%', opacity: 0.9 } : { opacity: 1 }}
             animate={allowEssentialMotion ? { y: 0, opacity: 1 } : { opacity: 1 }}
@@ -73,7 +77,7 @@ export function MobileBottomSheet({ isOpen, title, onClose, children }: MobileBo
                 if (!allowEssentialMotion) return;
                 dragControls.start(event);
               }}
-              className="mb-4 flex w-full cursor-grab justify-center touch-none active:cursor-grabbing"
+              className={`${compact ? 'mb-2' : 'mb-4'} flex w-full cursor-grab justify-center touch-none active:cursor-grabbing`}
               aria-label="Drag down to close"
             >
               <span className="h-1.5 w-12 rounded-full bg-gray-300 dark:bg-gray-600" />
