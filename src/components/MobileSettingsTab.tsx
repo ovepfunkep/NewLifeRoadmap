@@ -11,6 +11,7 @@ import { useToast } from '../hooks/useToast';
 import { getCurrentUser, onAuthChange, signInWithGoogle, signOutUser } from '../firebase/auth';
 import { setupSecurity } from '../utils/securityManager';
 import { SecurityChoiceModal } from './SecurityChoiceModal';
+import { CopyrightNotice } from './CopyrightNotice';
 
 export function MobileSettingsTab() {
   const { theme, setTheme } = useTheme();
@@ -224,6 +225,8 @@ export function MobileSettingsTab() {
       {showSecurityModal && (
         <SecurityChoiceModal onChoice={handleSecurityChoice} />
       )}
+
+      <CopyrightNotice className="mt-6 text-center" />
     </section>
   );
 }

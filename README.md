@@ -64,6 +64,10 @@ npm run verify
 - CI-проверки (`tests + build`): `.github/workflows/ci.yml`
 - Scheduled notifications: `.github/workflows/notify.yml`
 
+## Лицензия
+
+Распространяется по [лицензии MIT](LICENSE) (Copyright © Тябин Иван Алексеевич).
+
 ## Статус
 
 Проект находится в активной разработке, с упором на:

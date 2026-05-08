@@ -2,6 +2,7 @@ import { FiGithub, FiSettings } from 'react-icons/fi';
 import { FaTelegram } from 'react-icons/fa';
 import { Tooltip } from './Tooltip';
 import { AuthAvatar } from './AuthAvatar';
+import { CopyrightNotice } from './CopyrightNotice';
 import { t } from '../i18n';
 import { useEffect, useState } from 'react';
 
@@ -83,6 +84,7 @@ export function Footer({ onOpenSettings }: FooterProps) {
             </div>
           )}
         </div>
+        <CopyrightNotice className="mt-3 text-center sm:text-left" />
       </div>
     </footer>
   );
