@@ -129,7 +129,7 @@ export function Header({
             >
               {AMBIENT_SEASON === 'winter' && <Garland />}
               {AMBIENT_SEASON === 'spring' && !isMobile && <SpringTrees />}
-              <div className="container relative mx-auto w-full max-w-full pb-6 pt-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
+              <div className="container relative mx-auto w-full max-w-full pb-6 pt-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] lg:pl-[max(0.5rem,env(safe-area-inset-left))] lg:pr-[max(0.5rem,env(safe-area-inset-right))] xl:pl-[max(1rem,env(safe-area-inset-left))] xl:pr-[max(1rem,env(safe-area-inset-right))]">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   {/* Хлебные крошки */}

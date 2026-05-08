@@ -291,14 +291,16 @@ export function WeekScheduleView({
               style={isToday ? { borderColor: 'var(--accent)' } : undefined}
             >
               <div
-                className={`relative flex min-h-[48px] flex-col justify-center px-1 text-center text-[10px] font-bold uppercase tracking-wider ${
+                className={`relative flex min-h-[48px] w-full min-w-0 flex-col items-center justify-center px-0.5 text-center text-[10px] font-bold ${
                   isWeekend && !isToday ? '' : 'text-gray-500 dark:text-gray-400'
                 }`}
                 style={isWeekend && !isToday ? { color: 'var(--accent)' } : undefined}
               >
-                <div>{day.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'short' })}</div>
+                <div className="w-full max-w-full text-center uppercase tracking-wide leading-none">
+                  {day.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'short' })}
+                </div>
                 <div
-                  className={`text-[11px] normal-case font-medium ${
+                  className={`mt-0.5 w-full max-w-full text-center text-[10px] font-medium tabular-nums tracking-normal normal-case leading-none ${
                     isWeekend && !isToday ? 'opacity-90' : 'text-gray-600 dark:text-gray-300'
                   }`}
                 >

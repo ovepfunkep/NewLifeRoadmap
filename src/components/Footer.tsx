@@ -23,7 +23,7 @@ export function Footer({ onOpenSettings }: FooterProps) {
 
   return (
     <footer className="border-t border-gray-200 dark:border-gray-700 mt-auto bg-transparent">
-      <div className="container mx-auto px-4 py-4">
+      <div className="container mx-auto px-4 py-4 lg:px-2 xl:px-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-2 sm:gap-4">
             <AuthAvatar />

@@ -3,7 +3,7 @@ import { Node } from '../types';
 import { t } from '../i18n';
 import { NodeCard } from './NodeCard';
 import { Tooltip } from './Tooltip';
-import { FiCalendar, FiSliders } from 'react-icons/fi';
+import { FiCalendar, FiPlus, FiSliders } from 'react-icons/fi';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { useEffects } from '../hooks/useEffects';
 import { MobileBottomSheet } from './MobileBottomSheet';
@@ -34,6 +34,8 @@ interface StepsListProps {
   currentNodeId?: string;
   animatingBurnId?: string | null;
   animatingMoveId?: string | null;
+  /** Desktop: plus in header row; mobile uses FAB on NodePage */
+  onAddStep?: () => void;
 }
 
 export function StepsList({ 
@@ -56,7 +58,8 @@ export function StepsList({
   onFilterChange,
   currentNodeId,
   animatingBurnId,
-  animatingMoveId
+  animatingMoveId,
+  onAddStep,
 }: StepsListProps) {
   const { effectsEnabled } = useEffects();
   const { allowDecorativeMotion } = useMotionPreferences();
@@ -184,37 +187,28 @@ export function StepsList({
                 <FiSliders size={15} />
               </motion.button>
             </Tooltip>
-          ) : (
-            <div className="flex min-h-9 shrink-0 items-center gap-1">
-              {sortOptions.map((option) => (
-                <Tooltip key={option.key} text={option.label}>
-                  <button
-                    type="button"
-                    onClick={() => onSortChange(option.key)}
-                    className={`rounded-lg border px-2 py-1.5 text-xs font-semibold transition-all ${
-                      sortType === option.key
-                        ? 'border-transparent text-white'
-                        : 'border-current'
-                    }`}
-                    style={{
-                      color: sortType === option.key ? 'white' : 'var(--accent)',
-                      backgroundColor: sortType === option.key ? 'var(--accent)' : 'transparent',
-                    }}
-                  >
-                    {option.key === 'deadline' ? <FiCalendar size={13} /> : option.label}
-                  </button>
-                </Tooltip>
-              ))}
-            </div>
-          )}
+          ) : onAddStep ? (
+            <Tooltip text={t('node.createChild')}>
+              <button
+                type="button"
+                onClick={onAddStep}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white transition-all hover:brightness-110"
+                style={{ backgroundColor: 'var(--accent)' }}
+                aria-label={t('node.createChild')}
+              >
+                <FiPlus size={20} />
+              </button>
+            </Tooltip>
+          ) : null}
         </div>
 
-        <div className="relative mb-4 min-h-9 min-w-0">
-          <LayoutGroup id="steps-filter-chips">
-            <div
-              ref={filterScrollRef}
-              className="flex min-h-9 min-w-0 items-center gap-1 overflow-x-auto custom-scrollbar"
-            >
+        <div className="mb-4 flex min-h-9 min-w-0 items-center gap-2">
+          <div className="relative min-h-9 min-w-0 flex-1">
+            <LayoutGroup id="steps-filter-chips">
+              <div
+                ref={filterScrollRef}
+                className="flex min-h-9 min-w-0 items-center gap-1 overflow-x-auto custom-scrollbar"
+              >
             {filterChips.map((chip) => {
               const active = filterType === chip.key;
               return (
@@ -251,20 +245,42 @@ export function StepsList({
                 </motion.button>
               );
             })}
+              </div>
+            </LayoutGroup>
+            <div
+              className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-slate-100 to-transparent transition-opacity duration-200 dark:from-gray-900 ${
+                filterScrollFade.left ? 'opacity-100' : 'opacity-0'
+              }`}
+              aria-hidden
+            />
+            <div
+              className={`pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-slate-100 to-transparent transition-opacity duration-200 dark:from-gray-900 ${
+                filterScrollFade.right ? 'opacity-100' : 'opacity-0'
+              }`}
+              aria-hidden
+            />
+          </div>
+          {!isMobile && (
+            <div className="flex min-h-9 shrink-0 items-center gap-1">
+              {sortOptions.map((option) => (
+                <Tooltip key={option.key} text={option.label}>
+                  <button
+                    type="button"
+                    onClick={() => onSortChange(option.key)}
+                    className={`rounded-lg border px-2 py-1.5 text-xs font-semibold transition-all ${
+                      sortType === option.key ? 'border-transparent text-white' : 'border-current'
+                    }`}
+                    style={{
+                      color: sortType === option.key ? 'white' : 'var(--accent)',
+                      backgroundColor: sortType === option.key ? 'var(--accent)' : 'transparent',
+                    }}
+                  >
+                    {option.key === 'deadline' ? <FiCalendar size={13} /> : option.label}
+                  </button>
+                </Tooltip>
+              ))}
             </div>
-          </LayoutGroup>
-          <div
-            className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-slate-100 to-transparent transition-opacity duration-200 dark:from-gray-900 ${
-              filterScrollFade.left ? 'opacity-100' : 'opacity-0'
-            }`}
-            aria-hidden
-          />
-          <div
-            className={`pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-slate-100 to-transparent transition-opacity duration-200 dark:from-gray-900 ${
-              filterScrollFade.right ? 'opacity-100' : 'opacity-0'
-            }`}
-            aria-hidden
-          />
+          )}
         </div>
 
         {children.length === 0 ? (

@@ -1249,7 +1249,7 @@ export function NodePage() {
             />
           )}
 
-          <main className={`container mx-auto px-4 py-6 ${isMobile ? 'pb-[calc(88px+env(safe-area-inset-bottom))]' : ''}`}>
+          <main className={`container mx-auto px-4 py-6 lg:px-2 xl:px-4 ${isMobile ? 'pb-[calc(88px+env(safe-area-inset-bottom))]' : ''}`}>
             {!isMobile && (
               <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3">
                 <div className="lg:col-span-1 lg:order-2">
@@ -1287,6 +1287,7 @@ export function NodePage() {
                     currentNodeId={currentNode.id}
                     animatingBurnId={animatingBurnId}
                     animatingMoveId={animatingMoveId}
+                    onAddStep={handleCreateChild}
                   />
                 </div>
               </div>
