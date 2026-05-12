@@ -2,6 +2,7 @@ import { Fragment, useState, useEffect, useRef } from 'react';
 import { Node, NodeRecurrence, RecurrenceFrequency, RecurrenceScheduleVariant } from '../types';
 import { t } from '../i18n';
 import { generateId, buildBreadcrumbs } from '../utils';
+import { openNativeDateTimePickerFromOverlay } from '../utils/nativeDateTimePicker';
 import { FiAlertCircle, FiCalendar, FiClock, FiFolder } from 'react-icons/fi';
 import { getAllNodesFlat, getNode } from '../db';
 import { Tooltip } from './Tooltip';
@@ -585,20 +586,6 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     window.location.hash = `#/node/${taskId}`;
   };
 
-  const openInputPicker = (inputId: string) => {
-    const input = document.getElementById(inputId) as HTMLInputElement | null;
-    if (!input) return;
-    try {
-      if (typeof input.showPicker === 'function') {
-        input.showPicker();
-        return;
-      }
-    } catch {
-      // Fallback for browsers that block showPicker without gesture.
-    }
-    input.focus();
-  };
-
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = e.target.value;
     setDeadlineDate(newDate);
@@ -819,59 +806,60 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
             <div className="space-y-2">
               <div className="grid grid-cols-3 gap-2">
                 <div className="relative group">
-                  <div 
-                    className="relative cursor-pointer"
-                    onClick={() => openInputPicker('deadlineDateInput')}
+                  {/* Tap hits native input (iOS Safari ignores showPicker/focus на «мёртвом» overlay). */}
+                  <div
+                    className="relative h-[48px]"
+                    onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
                   >
-                    <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                    <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl border-2 border-gray-100 bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
                       {deadlineDate ? new Date(deadlineDate).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' }) : <span className="text-gray-400 dark:text-gray-600">{t('editor.date')}</span>}
                     </div>
-                    <FiCalendar className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                    <FiCalendar className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent" size={18} />
                     <input
                       id="deadlineDateInput"
                       type="date"
                       value={deadlineDate}
                       onChange={handleDateChange}
                       lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                      className="absolute inset-0 opacity-0 pointer-events-none"
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                     />
                   </div>
                 </div>
                 <div className="relative group">
-                  <div 
-                    className="relative cursor-pointer"
-                    onClick={() => openInputPicker('deadlineTimeInput')}
+                  <div
+                    className="relative h-[48px]"
+                    onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
                   >
-                    <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                    <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl border-2 border-gray-100 bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
                       {deadlineTime || <span className="text-gray-400 dark:text-gray-600">{t('editor.timeStart')}</span>}
                     </div>
-                    <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                    <FiClock className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent" size={18} />
                     <input
                       id="deadlineTimeInput"
                       type="time"
                       value={deadlineTime}
                       onChange={(e) => setDeadlineTime(e.target.value)}
                       lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                      className="absolute inset-0 opacity-0 pointer-events-none"
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                     />
                   </div>
                 </div>
                 <div className="relative group">
-                  <div 
-                    className="relative cursor-pointer"
-                    onClick={() => openInputPicker('deadlineEndTimeInput')}
+                  <div
+                    className="relative h-[48px]"
+                    onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
                   >
-                    <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                    <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl border-2 border-gray-100 bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
                       {deadlineEndTime || <span className="text-gray-400 dark:text-gray-600">{t('editor.timeEndOptional')}</span>}
                     </div>
-                    <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                    <FiClock className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent" size={18} />
                     <input
                       id="deadlineEndTimeInput"
                       type="time"
                       value={deadlineEndTime}
                       onChange={(e) => setDeadlineEndTime(e.target.value)}
                       lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                      className="absolute inset-0 opacity-0 pointer-events-none"
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                     />
                   </div>
                 </div>
@@ -970,7 +958,6 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                     onActiveIndexChange={setRecurrenceVariantIndex}
                     isMobile={isMobile}
                     allowEssentialMotion={allowEssentialMotion}
-                    openInputPicker={openInputPicker}
                     weekdayOptions={weekdayOptions}
                   />
                 )}
@@ -984,7 +971,6 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                     onActiveIndexChange={setRecurrenceVariantIndex}
                     isMobile={isMobile}
                     allowEssentialMotion={allowEssentialMotion}
-                    openInputPicker={openInputPicker}
                     weekdayOptions={weekdayOptions}
                   />
                 )}
@@ -996,20 +982,20 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                       {t('editor.recurrenceTimeStart')}
                     </span>
                     <div
-                      className="relative cursor-pointer"
-                      onClick={() => openInputPicker('recurrenceTimeStartInput')}
-                    >
-                      <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                    className="relative h-[48px]"
+                    onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
+                  >
+                      <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:bg-gray-900 dark:text-gray-100">
                         {recurrenceTimeStart || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
                       </div>
-                      <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                      <FiClock className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent" size={18} />
                       <input
                         id="recurrenceTimeStartInput"
                         type="time"
                         value={recurrenceTimeStart}
                         onChange={(e) => setRecurrenceTimeStart(e.target.value)}
                         lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                        className="absolute inset-0 opacity-0 pointer-events-none"
+                        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                         aria-label={t('editor.recurrenceTimeStart')}
                       />
                     </div>
@@ -1019,20 +1005,20 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                       {t('editor.recurrenceTimeEnd')}
                     </span>
                     <div
-                      className="relative cursor-pointer"
-                      onClick={() => openInputPicker('recurrenceTimeEndInput')}
-                    >
-                      <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+                    className="relative h-[48px]"
+                    onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
+                  >
+                      <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:bg-gray-900 dark:text-gray-100">
                         {recurrenceTimeEnd || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
                       </div>
-                      <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+                      <FiClock className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent" size={18} />
                       <input
                         id="recurrenceTimeEndInput"
                         type="time"
                         value={recurrenceTimeEnd}
                         onChange={(e) => setRecurrenceTimeEnd(e.target.value)}
                         lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                        className="absolute inset-0 opacity-0 pointer-events-none"
+                        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                         aria-label={t('editor.recurrenceTimeEnd')}
                       />
                     </div>

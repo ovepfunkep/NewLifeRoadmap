@@ -8,6 +8,9 @@ const base = process.env.GITHUB_PAGES_BASE || '/';
 
 export default defineConfig({
   base,
+  // Иначе `npm run dev` слушает только localhost — iPhone по Wi‑Fi до сервера не достучится.
+  server: { host: true, port: 5173 },
+  preview: { host: true, port: 4173 },
   plugins: [
     react(),
     VitePWA({

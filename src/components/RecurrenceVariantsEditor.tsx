@@ -4,6 +4,7 @@ import { FiChevronLeft, FiChevronRight, FiClock, FiPlus, FiTrash2 } from 'react-
 import type { RecurrenceScheduleVariant } from '../types';
 import { t } from '../i18n';
 import { motionDurations, motionEasing } from '../config/motion';
+import { openNativeDateTimePickerFromOverlay } from '../utils/nativeDateTimePicker';
 import { useLanguage } from '../contexts/LanguageContext';
 
 const MAX_VARIANTS = 12;
@@ -16,7 +17,6 @@ export interface RecurrenceVariantsEditorProps {
   onActiveIndexChange: (i: number) => void;
   isMobile: boolean;
   allowEssentialMotion: boolean;
-  openInputPicker: (inputId: string) => void;
   weekdayOptions: { value: number; label: string }[];
 }
 
@@ -32,7 +32,6 @@ export function RecurrenceVariantsEditor({
   onActiveIndexChange,
   isMobile,
   allowEssentialMotion,
-  openInputPicker,
   weekdayOptions,
 }: RecurrenceVariantsEditorProps) {
   const { language } = useLanguage();
@@ -217,36 +216,42 @@ export function RecurrenceVariantsEditor({
       <div className="grid grid-cols-2 gap-2">
         <label className="space-y-1">
           <span className="block text-[11px] text-gray-500 dark:text-gray-400">{t('editor.recurrenceTimeStart')}</span>
-          <div className="relative cursor-pointer" onClick={() => openInputPicker(startId)}>
-            <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+          <div
+            className="relative h-[48px]"
+            onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
+          >
+            <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:bg-gray-900 dark:text-gray-100">
               {v.timeStart || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
             </div>
-            <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+            <FiClock className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent" size={18} />
             <input
               id={startId}
               type="time"
               value={v.timeStart || ''}
               onChange={(e) => patchVariant(pageIndex, { timeStart: e.target.value })}
               lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-              className="absolute inset-0 opacity-0 pointer-events-none"
+              className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
               aria-label={t('editor.recurrenceTimeStart')}
             />
           </div>
         </label>
         <label className="space-y-1">
           <span className="block text-[11px] text-gray-500 dark:text-gray-400">{t('editor.recurrenceTimeEnd')}</span>
-          <div className="relative cursor-pointer" onClick={() => openInputPicker(endId)}>
-            <div className="w-full pl-10 pr-2 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-900 dark:text-gray-100 transition-all text-sm flex items-center h-[48px] whitespace-nowrap overflow-hidden">
+          <div
+            className="relative h-[48px]"
+            onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
+          >
+            <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:bg-gray-900 dark:text-gray-100">
               {v.timeEnd || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
             </div>
-            <FiClock className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-accent" size={18} />
+            <FiClock className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent" size={18} />
             <input
               id={endId}
               type="time"
               value={v.timeEnd || ''}
               onChange={(e) => patchVariant(pageIndex, { timeEnd: e.target.value })}
               lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-              className="absolute inset-0 opacity-0 pointer-events-none"
+              className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
               aria-label={t('editor.recurrenceTimeEnd')}
             />
           </div>
@@ -266,18 +271,21 @@ export function RecurrenceVariantsEditor({
             <span className="block truncate text-[10px] text-gray-500 dark:text-gray-400">
               {t('editor.recurrenceTimeStart')}
             </span>
-            <div className="relative h-10 cursor-pointer" onClick={() => openInputPicker(startId)}>
-              <div className="flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-lg border border-gray-100 bg-gray-50 pl-8 pr-1.5 text-xs text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+            <div
+              className="relative h-10"
+              onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
+            >
+              <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-lg border border-gray-100 bg-gray-50 pl-8 pr-1.5 text-xs text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
                 {v.timeStart || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
               </div>
-              <FiClock className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-accent" />
+              <FiClock className="pointer-events-none absolute left-2 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-accent" />
               <input
                 id={startId}
                 type="time"
                 value={v.timeStart || ''}
                 onChange={(e) => patchVariant(pageIndex, { timeStart: e.target.value })}
                 lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                className="pointer-events-none absolute inset-0 opacity-0"
+                className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                 aria-label={t('editor.recurrenceTimeStart')}
               />
             </div>
@@ -286,18 +294,21 @@ export function RecurrenceVariantsEditor({
             <span className="block truncate text-[10px] text-gray-500 dark:text-gray-400">
               {t('editor.recurrenceTimeEnd')}
             </span>
-            <div className="relative h-10 cursor-pointer" onClick={() => openInputPicker(endId)}>
-              <div className="flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-lg border border-gray-100 bg-gray-50 pl-8 pr-1.5 text-xs text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+            <div
+              className="relative h-10"
+              onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
+            >
+              <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-lg border border-gray-100 bg-gray-50 pl-8 pr-1.5 text-xs text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
                 {v.timeEnd || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
               </div>
-              <FiClock className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-accent" />
+              <FiClock className="pointer-events-none absolute left-2 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-accent" />
               <input
                 id={endId}
                 type="time"
                 value={v.timeEnd || ''}
                 onChange={(e) => patchVariant(pageIndex, { timeEnd: e.target.value })}
                 lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                className="pointer-events-none absolute inset-0 opacity-0"
+                className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                 aria-label={t('editor.recurrenceTimeEnd')}
               />
             </div>
