@@ -53,7 +53,7 @@ function chain<E extends { nativeEvent: unknown }>(
 
 /** Общий вид «карточки» подсказки (как у радиального виджета настроек) */
 const tooltipSurfaceClass =
-  'text-xs font-medium text-gray-700 dark:text-gray-200 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm px-2.5 py-1.5 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600';
+  'text-xs font-medium text-gray-700 dark:text-gray-200 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm px-2.5 py-1.5 rounded-lg shadow-lg';
 
 export function Tooltip({
   text,

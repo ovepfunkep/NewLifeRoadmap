@@ -331,7 +331,7 @@ export function WeekScheduleView({
               </div>
 
               <div
-                className={`relative rounded-lg border border-gray-200 bg-gray-50/60 dark:border-gray-700 dark:bg-gray-900/40 overflow-hidden ${onCreateTask ? 'cursor-copy' : ''}`}
+                className={`relative overflow-hidden rounded-lg bg-gray-50/90 shadow-sm dark:bg-gray-900/55 ${onCreateTask ? 'cursor-copy' : ''}`}
                 onClick={(event) => handleCreateFromTimeline(day, event)}
                 style={{
                   height: `${timelineHeight}px`,
@@ -393,7 +393,7 @@ export function WeekScheduleView({
           <button
             type="button"
             onClick={() => onShiftDays?.(-1)}
-            className="p-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="rounded-lg bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200/90 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
             style={{ color: 'var(--accent)' }}
             title={t('schedule.previousDay')}
             aria-label={t('schedule.previousDay')}
@@ -403,7 +403,7 @@ export function WeekScheduleView({
           <button
             type="button"
             onClick={onResetToday}
-            className="p-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="rounded-lg bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200/90 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
             style={{ color: 'var(--accent)' }}
             title={t('schedule.today')}
             aria-label={t('schedule.today')}
@@ -413,7 +413,7 @@ export function WeekScheduleView({
           <button
             type="button"
             onClick={() => onShiftDays?.(1)}
-            className="p-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="rounded-lg bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200/90 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
             style={{ color: 'var(--accent)' }}
             title={t('schedule.nextDay')}
             aria-label={t('schedule.nextDay')}

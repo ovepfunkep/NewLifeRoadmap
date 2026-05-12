@@ -3,6 +3,7 @@ import { AnimatePresence, motion, PanInfo, useDragControls } from 'framer-motion
 import { createPortal } from 'react-dom';
 import { motionDurations, motionTransitions } from '../config/motion';
 import { useMotionPreferences } from '../hooks/useMotionPreferences';
+import { Z_MODAL } from '../config/zLayers';
 
 interface MobileBottomSheetProps {
   isOpen: boolean;
@@ -40,7 +41,8 @@ export function MobileBottomSheet({ isOpen, title, onClose, children, compact }:
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-[110] flex items-end bg-black/40 backdrop-blur-[1px]"
+          className="fixed inset-0 flex items-end bg-black/40 backdrop-blur-[1px]"
+          style={{ zIndex: Z_MODAL }}
           onMouseDown={onClose}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -52,7 +54,7 @@ export function MobileBottomSheet({ isOpen, title, onClose, children, compact }:
           }
         >
           <motion.div
-            className={`w-full rounded-t-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800 ${
+            className={`w-full rounded-t-2xl bg-white shadow-xl dark:bg-gray-800 ${
               compact ? 'px-3 pb-4 pt-2' : 'px-4 pb-6 pt-3'
             }`}
             onMouseDown={(event) => event.stopPropagation()}

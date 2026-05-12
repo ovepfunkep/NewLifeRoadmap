@@ -18,7 +18,7 @@ export function SupportAuthorModal({ onClose }: SupportAuthorModalProps) {
       role="presentation"
     >
       <div
-        className="animate-in zoom-in-95 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl duration-200 dark:border-gray-700 dark:bg-gray-800"
+        className="animate-in zoom-in-95 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl duration-200 dark:bg-gray-800"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-labelledby="support-modal-title"
@@ -30,7 +30,7 @@ export function SupportAuthorModal({ onClose }: SupportAuthorModalProps) {
           {t('support.modalTitle')}
         </h2>
         <p className="mb-5 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{t('support.modalBody')}</p>
-        <div className="mb-6 flex justify-center rounded-xl border border-gray-100 bg-white p-3 dark:border-gray-600 dark:bg-gray-900/50">
+        <div className="mb-6 flex justify-center rounded-xl bg-white p-3 dark:bg-gray-900/50">
           <img
             src={qrSrc}
             alt=""

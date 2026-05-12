@@ -17,7 +17,7 @@ export function TelegramLinkModal({ onClose }: TelegramLinkModalProps) {
       className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
       style={{ zIndex: Z_MODAL_HIGH }}
     >
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md animate-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md animate-in zoom-in-95 duration-200">
         <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
           <span className="text-2xl">🤖</span> {t('telegram.linking')}
         </h2>
@@ -27,7 +27,7 @@ export function TelegramLinkModal({ onClose }: TelegramLinkModalProps) {
             {t('telegram.modalInfo1') || 'Для получения уведомлений необходимо привязать ваш Telegram аккаунт.'}
           </p>
           
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800">
+          <div className="rounded-xl bg-blue-50 p-4 dark:bg-blue-900/20">
             <p className="text-xs font-medium text-blue-800 dark:text-blue-300 mb-2">
               ⚠️ {t('telegram.modalWarningTitle') || 'Важная информация:'}
             </p>

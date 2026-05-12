@@ -1212,8 +1212,10 @@ export function NodePage() {
   const activeDeadlinesNode = mobileDeadlinesNode ?? currentNode;
 
   return (
-    <div className="flex min-h-screen w-full flex-col overflow-x-hidden bg-slate-100 dark:bg-gray-900">
+    <>
+      {/* Fixed + inside overflow-x вызывает привязку к скроллу в iOS Safari — выносим из обёртки страницы */}
       {isMobile && AMBIENT_SEASON === 'spring' && <SpringTrees />}
+      <div className="flex min-h-screen w-full flex-col overflow-x-hidden bg-slate-100 dark:bg-gray-900">
 
       {/* Конфетти эффект */}
       <ConfettiEffect trigger={confettiTrigger} childCount={confettiChildCount} />
@@ -1262,33 +1264,36 @@ export function NodePage() {
                   />
                 </div>
 
-                <div className="lg:col-span-2 lg:order-1">
-                  <StepsList
-                    children={sortedChildren}
-                    onNavigate={navigateToNode}
-                    onMarkCompleted={handleMarkCompleted}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    onTogglePriority={handleTogglePriority}
-                    onMove={(node) => {
-                      setNodeToMove(node);
-                      setShowMoveModal(true);
-                    }}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    draggedNode={draggedNode}
-                    dragOverNodeId={dragOverNodeId}
-                    sortType={sortType}
-                    onSortChange={setSortType}
-                    filterType={filterType}
-                    onFilterChange={setFilterType}
-                    currentNodeId={currentNode.id}
-                    animatingBurnId={animatingBurnId}
-                    animatingMoveId={animatingMoveId}
-                    onAddStep={handleCreateChild}
-                  />
+                <div className="min-w-0 lg:col-span-2 lg:order-1">
+                  {/* Та же визуальная «карточка», что у DeadlineList на lg+ */}
+                  <div className="flex min-h-[140px] flex-col rounded-lg bg-white py-4 shadow-sm transition-all md:p-5 dark:bg-gray-800">
+                    <StepsList
+                      children={sortedChildren}
+                      onNavigate={navigateToNode}
+                      onMarkCompleted={handleMarkCompleted}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      onTogglePriority={handleTogglePriority}
+                      onMove={(node) => {
+                        setNodeToMove(node);
+                        setShowMoveModal(true);
+                      }}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      draggedNode={draggedNode}
+                      dragOverNodeId={dragOverNodeId}
+                      sortType={sortType}
+                      onSortChange={setSortType}
+                      filterType={filterType}
+                      onFilterChange={setFilterType}
+                      currentNodeId={currentNode.id}
+                      animatingBurnId={animatingBurnId}
+                      animatingMoveId={animatingMoveId}
+                      onAddStep={handleCreateChild}
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -1473,5 +1478,6 @@ export function NodePage() {
       {!isMobile && <Footer />}
       {isMobile && <MobileBottomNav activeSection={mobileSection} onSectionChange={setMobileSection} />}
     </div>
+    </>
   );
 }

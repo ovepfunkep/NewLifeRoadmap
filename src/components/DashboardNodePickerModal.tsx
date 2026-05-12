@@ -175,7 +175,7 @@ export function DashboardNodePickerModal({ selectedNodeId, onSelectNode, onClose
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-200/90 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600/90"
           >
             {t('general.cancel')}
           </button>

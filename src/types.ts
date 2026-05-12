@@ -1,10 +1,13 @@
-export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
-/** Один интервал дней + время для weekly/monthly (несколько вариантов в одной задаче). */
+/** Один интервал дней + время для weekly/monthly/yearly (несколько вариантов в одной задаче). */
 export interface RecurrenceScheduleVariant {
   weekdays?: number[];
   monthDays?: number[];
+  yearlyMonth?: number;
+  yearlyMonthDay?: number;
   timeStart?: string | null;
+  /** Если пусто при заданном timeStart — считается блок +60 минут от начала */
   timeEnd?: string | null;
 }
 
@@ -14,11 +17,13 @@ export interface NodeRecurrence {
   weekdays?: number[];
   // monthly: [1..31]
   monthDays?: number[];
-  // HH:mm, optional
+  /** yearly: календарный месяц 1–12 и число 1–31 (один раз в год) */
+  yearlyMonth?: number;
+  yearlyMonthDay?: number;
+  // HH:mm — «по» необязательно: пусто означает блок +60 мин после «с»
   timeStart?: string | null;
-  // HH:mm, optional, should be > timeStart if both are set
   timeEnd?: string | null;
-  /** Если задан и непустой — для weekly/monthly используется вместо плоских полей выше. */
+  /** Несколько интервалов: weekly/monthly/yearly — вместо плоских полей выше. */
   scheduleVariants?: RecurrenceScheduleVariant[];
 }
 

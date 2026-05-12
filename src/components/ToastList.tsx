@@ -54,10 +54,10 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   const showProgressBar = !isPersistent && !toast.isLoading; // Показываем прогресс для всех не persistent тостов
 
   const typeStyles = {
-    success: 'border-accent bg-accent/5 dark:bg-accent/10 shadow-accent/10',
-    warning: 'border-yellow-500/50 bg-yellow-50 dark:bg-yellow-900/10 shadow-yellow-500/10',
-    error: 'border-red-500/50 bg-red-50 dark:bg-red-900/10 shadow-red-500/10',
-    default: 'border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md'
+    success: 'bg-accent/5 shadow-lg shadow-accent/10 dark:bg-accent/10 dark:shadow-accent/10',
+    warning: 'bg-yellow-50 shadow-lg shadow-yellow-500/15 dark:bg-yellow-900/15 dark:shadow-yellow-500/10',
+    error: 'bg-red-50 shadow-lg shadow-red-500/15 dark:bg-red-900/15 dark:shadow-red-500/15',
+    default: 'bg-white/95 shadow-lg backdrop-blur-md dark:bg-gray-800/95',
   };
 
   const typeColors = {
@@ -114,7 +114,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
 
   return (
     <div 
-      className={`relative rounded-2xl shadow-lg border min-w-[300px] max-w-[400px] flex flex-col overflow-hidden transition-shadow duration-300 ${
+      className={`relative min-w-[300px] max-w-[400px] flex flex-col overflow-hidden rounded-2xl shadow-lg transition-shadow duration-300 ${
         typeStyles[currentType]
       } ${
         !isPersistent && !toast.isLoading ? 'cursor-pointer hover:shadow-xl' : ''

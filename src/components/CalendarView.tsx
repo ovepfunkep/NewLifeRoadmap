@@ -127,7 +127,7 @@ export function CalendarView({ deadlines, onDayClick, onCreateTask }: CalendarVi
           {!isCurrentMonth && (
             <button
               onClick={handleReset}
-              className="p-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              className="rounded-lg bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200/90 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
               style={{ color: 'var(--accent)' }}
               title="К сегодняшнему дню"
             >
@@ -136,14 +136,14 @@ export function CalendarView({ deadlines, onDayClick, onCreateTask }: CalendarVi
           )}
           <button
             onClick={handlePreviousMonth}
-            className="p-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="rounded-lg bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200/90 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
             style={{ color: 'var(--accent)' }}
           >
             <FiChevronLeft size={20} />
           </button>
           <button
             onClick={handleNextMonth}
-            className="p-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="rounded-lg bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200/90 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
             style={{ color: 'var(--accent)' }}
           >
             <FiChevronRight size={20} />
@@ -152,7 +152,7 @@ export function CalendarView({ deadlines, onDayClick, onCreateTask }: CalendarVi
       </div>
 
       {/* Сетка календаря */}
-      <div className="flex flex-col border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+      <div className="flex flex-col overflow-hidden rounded-xl bg-white shadow-sm md:border md:border-gray-200 md:dark:border-gray-700 dark:bg-gray-800">
         {/* Заголовки дней недели */}
         <div className="grid grid-cols-7 bg-gray-50/80 dark:bg-gray-900/80 border-b border-gray-200 dark:border-gray-700 backdrop-blur-sm">
           {weekdays.map(wd => (

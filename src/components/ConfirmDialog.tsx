@@ -71,7 +71,7 @@ export function ConfirmDialog({
           <div className="mt-10 flex flex-col sm:flex-row gap-3">
             <button
               onClick={onCancel}
-              className="flex-1 px-6 py-3 rounded-2xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all font-semibold border border-gray-200 dark:border-gray-700"
+              className="flex-1 rounded-2xl px-6 py-3 font-semibold text-gray-700 transition-all hover:bg-gray-200/90 dark:text-gray-300 dark:hover:bg-gray-600/65"
             >
               {cancelText || t('general.cancel')}
             </button>

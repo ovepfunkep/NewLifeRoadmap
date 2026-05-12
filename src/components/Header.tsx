@@ -120,7 +120,105 @@ export function Header({
     setShowActionsSheet(false);
   };
 
-    return (
+  const toolbarContent = (
+    <>
+      {onMarkCompleted && node.id !== 'root-node' && (
+        <Tooltip text={node.completed ? t('node.markIncomplete') : t('node.markCompleted')}>
+          <button
+            type="button"
+            onClick={() => onMarkCompleted(node.id, !node.completed)}
+            className={`p-3 sm:p-2 rounded-lg transition-all border hover:brightness-150 ${
+              node.completed ? 'border-transparent' : 'border-current hover:bg-accent/10'
+            }`}
+            style={{
+              color: 'var(--accent)',
+              backgroundColor: node.completed ? 'var(--accent)' : 'transparent',
+            }}
+          >
+            <FiCheck size={20} className="sm:w-4 sm:h-4" style={{ color: node.completed ? 'white' : 'var(--accent)' }} />
+          </button>
+        </Tooltip>
+      )}
+      {onTogglePriority && node.id !== 'root-node' && (
+        <Tooltip text={node.priority ? t('tooltip.removePriority') : t('tooltip.priority')}>
+          <button
+            type="button"
+            onClick={() => onTogglePriority(node.id, !node.priority)}
+            className={`p-3 sm:p-2 rounded-lg transition-all border hover:brightness-150 ${
+              node.priority ? 'border-transparent' : 'border-current hover:bg-accent/10'
+            }`}
+            style={{
+              color: 'var(--accent)',
+              backgroundColor: node.priority ? 'var(--accent)' : 'transparent',
+            }}
+          >
+            <FiArrowUp size={20} className="sm:w-4 sm:h-4" style={{ color: node.priority ? 'white' : 'var(--accent)' }} />
+          </button>
+        </Tooltip>
+      )}
+      {onEdit && (
+        <Tooltip text={t('general.edit')}>
+          <button
+            type="button"
+            onClick={() => onEdit(node)}
+            className="rounded-lg border border-current p-3 transition-all hover:bg-accent/10 hover:brightness-150 sm:p-2"
+            style={{ color: 'var(--accent)' }}
+          >
+            <FiEdit2 size={20} className="sm:w-4 sm:h-4" />
+          </button>
+        </Tooltip>
+      )}
+      {onImportExport && (
+        <Tooltip text={`${t('importExport.import')} / ${t('importExport.export')}`}>
+          <button
+            type="button"
+            onClick={onImportExport}
+            className="rounded-lg border border-current p-3 transition-all hover:bg-accent/10 hover:brightness-150 sm:p-2"
+            style={{ color: 'var(--accent)' }}
+          >
+            <FiDownload size={20} className="sm:w-4 sm:h-4" />
+          </button>
+        </Tooltip>
+      )}
+      {onOpenDashboard && (
+        <Tooltip text={t('dashboard.open')}>
+          <button
+            type="button"
+            onClick={onOpenDashboard}
+            className="rounded-lg border border-current p-3 transition-all hover:bg-accent/10 hover:brightness-150 sm:p-2"
+            style={{ color: 'var(--accent)' }}
+          >
+            <FiBarChart2 size={20} className="sm:w-4 sm:h-4" />
+          </button>
+        </Tooltip>
+      )}
+      {onMove && node.id !== 'root-node' && (
+        <Tooltip text={t('node.move')}>
+          <button
+            type="button"
+            onClick={onMove}
+            className="rounded-lg border border-current p-3 transition-all hover:bg-accent/10 hover:brightness-150 sm:p-2"
+            style={{ color: 'var(--accent)' }}
+          >
+            <FiMove size={20} className="sm:w-4 sm:h-4" />
+          </button>
+        </Tooltip>
+      )}
+      {onDelete && node.id !== 'root-node' && (
+        <Tooltip text={t('general.delete')}>
+          <button
+            type="button"
+            onClick={() => onDelete(node.id)}
+            className="rounded-lg border border-red-500 p-3 text-red-500 transition-all hover:bg-red-50 hover:brightness-150 dark:hover:bg-red-900/20 sm:p-2"
+          >
+            <FiTrash2 size={20} className="sm:w-4 sm:h-4" />
+          </button>
+        </Tooltip>
+      )}
+    </>
+  );
+
+  return (
             <header 
               className="sticky top-0 z-50 overflow-visible border-b border-slate-200 bg-white/90 backdrop-blur-md transition-all dark:border-gray-800 dark:bg-gray-900/85"
               style={{
@@ -129,12 +227,11 @@ export function Header({
             >
               {AMBIENT_SEASON === 'winter' && <Garland />}
               {AMBIENT_SEASON === 'spring' && !isMobile && <SpringTrees />}
-              <div className="container relative mx-auto w-full max-w-full pb-6 pt-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] lg:pl-[max(0.5rem,env(safe-area-inset-left))] lg:pr-[max(0.5rem,env(safe-area-inset-right))] xl:pl-[max(1rem,env(safe-area-inset-left))] xl:pr-[max(1rem,env(safe-area-inset-right))]">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  {/* Хлебные крошки */}
+              {/* Match main `container`: no max-w-full override (would stretch to full viewport) */}
+              <div className="container relative mx-auto px-4 pb-6 pt-8 lg:px-2 xl:px-4">
+              <div className="flex flex-col gap-2 lg:grid lg:grid-cols-3 lg:items-start lg:gap-x-6 lg:gap-y-2">
                   {showBreadcrumbs && (
-                  <nav className="mb-2 flex flex-wrap items-center justify-between gap-1 text-sm text-gray-600 dark:text-gray-400">
+                  <nav className="flex flex-wrap items-center justify-between gap-1 text-sm text-gray-600 dark:text-gray-400 lg:col-span-3">
                     <div className="flex flex-wrap items-center gap-1">
               {breadcrumbs.map((crumb, idx) => {
                 // Запрещаем перетаскивание в текущий узел
@@ -192,11 +289,10 @@ export function Header({
               </div>
             </nav>
                   )}
-            
-                  {/* Заголовок, прогресс, описание */}
-                  <div className="flex items-start gap-3 relative">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3">
+
+                  {/* Same grid as NodePage main: lg: tasks col 1–2, actions col 3 (above deadlines). */}
+                  <div className="min-w-0 lg:col-span-2">
+                  <div className="flex items-start gap-4">
                         <div className="flex min-w-0 flex-1 flex-col gap-1">
                           <div className="flex items-start justify-between gap-2">
                             <motion.h1
@@ -226,98 +322,8 @@ export function Header({
                           </div>
                         </div>
 
-                <div className="hidden flex-shrink-0 items-center gap-1 sm:gap-2 md:flex">
-                  {onMarkCompleted && node.id !== 'root-node' && (
-                    <Tooltip text={node.completed ? t('node.markIncomplete') : t('node.markCompleted')}>
-                      <button
-                        onClick={() => onMarkCompleted(node.id, !node.completed)}
-                        className={`p-3 sm:p-2 rounded-lg transition-all border hover:brightness-150 ${
-                          node.completed
-                            ? 'border-transparent'
-                            : 'border-current hover:bg-accent/10'
-                        }`}
-                        style={{ 
-                          color: 'var(--accent)',
-                          backgroundColor: node.completed ? 'var(--accent)' : 'transparent'
-                        }}
-                      >
-                        <FiCheck size={20} className="sm:w-4 sm:h-4" style={{ color: node.completed ? 'white' : 'var(--accent)' }} />
-                      </button>
-                    </Tooltip>
-                  )}
-                  {onTogglePriority && node.id !== 'root-node' && (
-                    <Tooltip text={node.priority ? t('tooltip.removePriority') : t('tooltip.priority')}>
-                      <button
-                        onClick={() => onTogglePriority(node.id, !node.priority)}
-                        className={`p-3 sm:p-2 rounded-lg transition-all border hover:brightness-150 ${
-                          node.priority
-                            ? 'border-transparent'
-                            : 'border-current hover:bg-accent/10'
-                        }`}
-                        style={{ 
-                          color: 'var(--accent)',
-                          backgroundColor: node.priority ? 'var(--accent)' : 'transparent'
-                        }}
-                      >
-                        <FiArrowUp size={20} className="sm:w-4 sm:h-4" style={{ color: node.priority ? 'white' : 'var(--accent)' }} />
-                      </button>
-                    </Tooltip>
-                  )}
-                  {onEdit && (
-                    <Tooltip text={t('general.edit')}>
-                      <button
-                        onClick={() => onEdit(node)}
-                        className="p-3 sm:p-2 rounded-lg border border-current transition-all hover:bg-accent/10 hover:brightness-150"
-                        style={{ color: 'var(--accent)' }}
-                      >
-                        <FiEdit2 size={20} className="sm:w-4 sm:h-4" />
-                      </button>
-                    </Tooltip>
-                  )}
-                  {onImportExport && (
-                    <Tooltip text={`${t('importExport.import')} / ${t('importExport.export')}`}>
-                      <button
-                        onClick={onImportExport}
-                        className="p-3 sm:p-2 rounded-lg border border-current transition-all hover:bg-accent/10 hover:brightness-150"
-                        style={{ color: 'var(--accent)' }}
-                      >
-                        <FiDownload size={20} className="sm:w-4 sm:h-4" />
-                      </button>
-                    </Tooltip>
-                  )}
-                  {onOpenDashboard && (
-                    <Tooltip text={t('dashboard.open')}>
-                      <button
-                        onClick={onOpenDashboard}
-                        className="p-3 sm:p-2 rounded-lg border border-current transition-all hover:bg-accent/10 hover:brightness-150"
-                        style={{ color: 'var(--accent)' }}
-                      >
-                        <FiBarChart2 size={20} className="sm:w-4 sm:h-4" />
-                      </button>
-                    </Tooltip>
-                  )}
-                  {onMove && node.id !== 'root-node' && (
-                    <Tooltip text={t('node.move')}>
-                      <button
-                        onClick={onMove}
-                        className="p-3 sm:p-2 rounded-lg border border-current transition-all hover:bg-accent/10 hover:brightness-150"
-                        style={{ color: 'var(--accent)' }}
-                      >
-                        <FiMove size={20} className="sm:w-4 sm:h-4" />
-                      </button>
-                    </Tooltip>
-                  )}
-                  {onDelete && node.id !== 'root-node' && (
-                    <Tooltip text={t('general.delete')}>
-                      <button
-                        onClick={() => onDelete(node.id)}
-                        className="p-3 sm:p-2 rounded-lg border border-red-500 text-red-500 transition-all hover:bg-red-50 dark:hover:bg-red-900/20 hover:brightness-150"
-                      >
-                        <FiTrash2 size={20} className="sm:w-4 sm:h-4" />
-                      </button>
-                    </Tooltip>
-                  )}
-                </div>
+                {/* Toolbar next to title between md and lg; from lg+ lives in third grid column */}
+                <div className="hidden shrink-0 items-center gap-1 sm:gap-2 md:flex lg:hidden">{toolbarContent}</div>
               </div>
               
                 {node.description && (
@@ -328,7 +334,7 @@ export function Header({
                 {node.deadline && !node.completed && (
                   <div className={`${node.description ? 'mt-2' : 'mt-1'}`}>
                     <span 
-                      className="whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider"
+                      className="whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider"
                       style={{
                         borderColor: '#f97316',
                         color: 'white',
@@ -340,10 +346,11 @@ export function Header({
                   </div>
                 )}
               </div>
+                  <div className="hidden min-h-px min-w-0 shrink-0 self-start lg:col-span-1 lg:flex lg:justify-end">
+                    <div className="flex shrink-0 items-center gap-1 sm:gap-2">{toolbarContent}</div>
+                  </div>
             </div>
           </div>
-        </div>
-      </div>
 
       <MobileBottomSheet
         isOpen={showActionsSheet && isMobile}
@@ -428,9 +435,9 @@ export function Header({
         </div>
       </MobileBottomSheet>
         
-      {/* Прогресс бар в самом низу хедера, во всю ширину */}
+      {/* Full viewport width strip under boxed header */}
       {node.children.length > 0 && (
-        <div className="w-full h-6 bg-gray-100 dark:bg-gray-800 relative overflow-hidden flex-shrink-0 border-t border-gray-200 dark:border-gray-700">
+        <div className="relative h-6 w-full flex-shrink-0 overflow-hidden border-t border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800">
           <motion.div
             className={`h-full transition-all duration-500 ${isBlinking ? 'animate-pulse' : ''}`}
             animate={{ width: `${progress}%` }}
@@ -443,7 +450,7 @@ export function Header({
               backgroundColor: progress === 100 ? 'var(--accent)' : 'rgba(var(--accent-rgb), 0.3)',
             }}
           />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>
               {getProgressCounts(node).completed} / {getProgressCounts(node).total}
             </span>

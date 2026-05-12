@@ -18,13 +18,14 @@ import {
   expandNodesToSlots,
   normalizeRecurrenceVariants,
   recurrenceVariantsTimeOverlapOnSharedDay,
+  computeNextOccurrenceStartMs,
 } from '../utils/recurrence';
 import { RecurrenceVariantsEditor } from './RecurrenceVariantsEditor';
 import { useMotionPreferences } from '../hooks/useMotionPreferences';
 import { motionDurations, motionTransitions } from '../config/motion';
 import { MobileBottomSheet } from './MobileBottomSheet';
 
-function mapNodeRecurrenceToVariants(rule: NodeRecurrence, freq: 'weekly' | 'monthly'): RecurrenceScheduleVariant[] {
+function mapNodeRecurrenceToVariants(rule: NodeRecurrence, freq: 'weekly' | 'monthly' | 'yearly'): RecurrenceScheduleVariant[] {
   const list = normalizeRecurrenceVariants(rule);
   if (freq === 'weekly') {
     return list.map((v) => ({
@@ -33,8 +34,16 @@ function mapNodeRecurrenceToVariants(rule: NodeRecurrence, freq: 'weekly' | 'mon
       timeEnd: v.timeEnd ?? '',
     }));
   }
+  if (freq === 'monthly') {
+    return list.map((v) => ({
+      monthDays: [...(v.monthDays ?? [])],
+      timeStart: v.timeStart ?? '',
+      timeEnd: v.timeEnd ?? '',
+    }));
+  }
   return list.map((v) => ({
-    monthDays: [...(v.monthDays ?? [])],
+    yearlyMonth: v.yearlyMonth ?? 1,
+    yearlyMonthDay: v.yearlyMonthDay ?? 1,
     timeStart: v.timeStart ?? '',
     timeEnd: v.timeEnd ?? '',
   }));
@@ -134,8 +143,10 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     const f = r?.freq ?? 'daily';
     if (f === 'weekly' && r) return mapNodeRecurrenceToVariants(r, 'weekly');
     if (f === 'monthly' && r) return mapNodeRecurrenceToVariants(r, 'monthly');
+    if (f === 'yearly' && r) return mapNodeRecurrenceToVariants(r, 'yearly');
     if (initialRecurring?.freq === 'weekly') return mapNodeRecurrenceToVariants(initialRecurring, 'weekly');
     if (initialRecurring?.freq === 'monthly') return mapNodeRecurrenceToVariants(initialRecurring, 'monthly');
+    if (initialRecurring?.freq === 'yearly') return mapNodeRecurrenceToVariants(initialRecurring, 'yearly');
     return [{ weekdays: [1], timeStart: '', timeEnd: '' }];
   });
   const [recurrenceVariantIndex, setRecurrenceVariantIndex] = useState(0);
@@ -206,6 +217,10 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
         setRecurrenceTimeStart(node.recurrence?.timeStart || '');
         setRecurrenceTimeEnd(node.recurrence?.timeEnd || '');
         setRecurrenceVariants([{ weekdays: [1], timeStart: '', timeEnd: '' }]);
+      } else if (rf === 'yearly' && node.recurrence) {
+        setRecurrenceVariants(mapNodeRecurrenceToVariants(node.recurrence, 'yearly'));
+        setRecurrenceTimeStart('');
+        setRecurrenceTimeEnd('');
       } else if (rf === 'weekly' && node.recurrence) {
         setRecurrenceVariants(mapNodeRecurrenceToVariants(node.recurrence, 'weekly'));
         setRecurrenceTimeStart('');
@@ -240,6 +255,10 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
         setRecurrenceTimeStart(initialRecurring?.timeStart || '');
         setRecurrenceTimeEnd(initialRecurring?.timeEnd || '');
         setRecurrenceVariants([{ weekdays: [1], timeStart: '', timeEnd: '' }]);
+      } else if (irf === 'yearly' && initialRecurring) {
+        setRecurrenceVariants(mapNodeRecurrenceToVariants(initialRecurring, 'yearly'));
+        setRecurrenceTimeStart('');
+        setRecurrenceTimeEnd('');
       } else if (irf === 'weekly' && initialRecurring) {
         setRecurrenceVariants(mapNodeRecurrenceToVariants(initialRecurring, 'weekly'));
         setRecurrenceTimeStart('');
@@ -375,22 +394,104 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     setReminders(prev => [...prev, { value: newValue, unit: newUnit }]);
   };
 
+  const composeRecurrenceRule = (): NodeRecurrence | null => {
+    if (!isRecurring) return null;
+    if (recurrenceFreq === 'daily') {
+      return {
+        freq: 'daily',
+        timeStart: recurrenceTimeStart.trim() || null,
+        timeEnd: recurrenceTimeEnd.trim() || null,
+      };
+    }
+    if (recurrenceFreq === 'yearly') {
+      const cleaned = recurrenceVariants.map((v) => ({
+        yearlyMonth: v.yearlyMonth ?? 1,
+        yearlyMonthDay: v.yearlyMonthDay ?? 1,
+        timeStart: v.timeStart?.trim() || null,
+        timeEnd: v.timeEnd?.trim() || null,
+      }));
+      if (cleaned.length === 1) {
+        const c = cleaned[0];
+        return {
+          freq: 'yearly',
+          yearlyMonth: c.yearlyMonth,
+          yearlyMonthDay: c.yearlyMonthDay,
+          timeStart: c.timeStart,
+          timeEnd: c.timeEnd,
+        };
+      }
+      return {
+        freq: 'yearly',
+        scheduleVariants: cleaned,
+      };
+    }
+    if (recurrenceFreq === 'weekly') {
+      const cleaned = recurrenceVariants.map((v) => ({
+        weekdays: Array.from(new Set(v.weekdays ?? [])).sort((a, b) => a - b),
+        timeStart: v.timeStart?.trim() || null,
+        timeEnd: v.timeEnd?.trim() || null,
+      }));
+      if (cleaned.length === 1) {
+        return {
+          freq: 'weekly',
+          weekdays: cleaned[0].weekdays,
+          timeStart: cleaned[0].timeStart,
+          timeEnd: cleaned[0].timeEnd,
+        };
+      }
+      return {
+        freq: 'weekly',
+        scheduleVariants: cleaned,
+      };
+    }
+    const cleaned = recurrenceVariants.map((v) => ({
+      monthDays: Array.from(new Set(v.monthDays ?? [])).sort((a, b) => a - b),
+      timeStart: v.timeStart?.trim() || null,
+      timeEnd: v.timeEnd?.trim() || null,
+    }));
+    if (cleaned.length === 1) {
+      return {
+        freq: 'monthly',
+        monthDays: cleaned[0].monthDays,
+        timeStart: cleaned[0].timeStart,
+        timeEnd: cleaned[0].timeEnd,
+      };
+    }
+    return {
+      freq: 'monthly',
+      scheduleVariants: cleaned,
+    };
+  };
+
   const getReminderError = (rem: { value: number; unit: 'hours' | 'days' }) => {
-    if (!deadlineDate || !deadlineTime) return null;
-    
-    const deadline = new Date(`${deadlineDate}T${deadlineTime}`);
+    const recErr = getRecurrenceError();
+    if (isRecurring && recErr) return null;
+
+    let deadline: Date;
+
+    if (isRecurring) {
+      const rule = composeRecurrenceRule();
+      if (!rule) return null;
+      const createdAt = node?.createdAt ?? new Date().toISOString();
+      const anchorMs = computeNextOccurrenceStartMs(rule, createdAt, new Date());
+      if (anchorMs === null) return t('telegram.errorPast');
+      deadline = new Date(anchorMs);
+    } else {
+      if (!deadlineDate || !deadlineTime) return null;
+      deadline = new Date(`${deadlineDate}T${deadlineTime}`);
+    }
+
     const intervalSeconds = rem.unit === 'days' ? rem.value * 86400 : rem.value * 3600;
     const reminderTime = new Date(deadline.getTime() - intervalSeconds * 1000);
     const now = new Date();
 
     if (intervalSeconds < 3600) return t('telegram.errorTooLate');
     if (reminderTime <= now) return t('telegram.errorPast');
-    
-    // Проверка на дубликаты
-    const sameIntervalsCount = reminders.filter(r => 
-      (r.unit === 'days' ? r.value * 86400 : r.value * 3600) === intervalSeconds
+
+    const sameIntervalsCount = reminders.filter(
+      (r) => (r.unit === 'days' ? r.value * 86400 : r.value * 3600) === intervalSeconds
     ).length;
-    
+
     if (sameIntervalsCount > 1) return t('telegram.errorDuplicate');
 
     return null;
@@ -398,26 +499,54 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
 
   const handleRecurrenceFreqChange = (freq: RecurrenceFrequency) => {
     if (freq === recurrenceFreq) return;
+    const fromVariantsGrid =
+      recurrenceFreq === 'weekly' || recurrenceFreq === 'monthly' || recurrenceFreq === 'yearly';
+    const anchor = initialDeadline ?? new Date();
+
     if (freq === 'daily') {
-      if (recurrenceFreq === 'weekly' || recurrenceFreq === 'monthly') {
+      if (fromVariantsGrid) {
         const first = recurrenceVariants[0];
         setRecurrenceTimeStart(first?.timeStart || '');
         setRecurrenceTimeEnd(first?.timeEnd || '');
       }
+      setRecurrenceVariants([{ weekdays: [1], timeStart: '', timeEnd: '' }]);
+    } else if (freq === 'yearly') {
+      const ts =
+        recurrenceFreq === 'daily' ? recurrenceTimeStart : recurrenceVariants[0]?.timeStart || '';
+      const te =
+        recurrenceFreq === 'daily' ? recurrenceTimeEnd : recurrenceVariants[0]?.timeEnd || '';
+      setRecurrenceVariants([
+        {
+          yearlyMonth: anchor.getMonth() + 1,
+          yearlyMonthDay: anchor.getDate(),
+          timeStart: ts,
+          timeEnd: te,
+        },
+      ]);
+      setRecurrenceTimeStart('');
+      setRecurrenceTimeEnd('');
     } else if (freq === 'weekly') {
-      if (recurrenceFreq === 'daily') {
-        setRecurrenceVariants([{ weekdays: [1], timeStart: recurrenceTimeStart, timeEnd: recurrenceTimeEnd }]);
+      if (recurrenceFreq === 'daily' || recurrenceFreq === 'yearly') {
+        const ts = recurrenceFreq === 'daily' ? recurrenceTimeStart : recurrenceVariants[0]?.timeStart || '';
+        const te = recurrenceFreq === 'daily' ? recurrenceTimeEnd : recurrenceVariants[0]?.timeEnd || '';
+        setRecurrenceVariants([{ weekdays: [1], timeStart: ts, timeEnd: te }]);
       } else {
         const first = recurrenceVariants[0];
         setRecurrenceVariants([{ weekdays: [1], timeStart: first?.timeStart || '', timeEnd: first?.timeEnd || '' }]);
       }
-    } else {
-      if (recurrenceFreq === 'daily') {
-        setRecurrenceVariants([{ monthDays: [1], timeStart: recurrenceTimeStart, timeEnd: recurrenceTimeEnd }]);
+      setRecurrenceTimeStart('');
+      setRecurrenceTimeEnd('');
+    } else if (freq === 'monthly') {
+      if (recurrenceFreq === 'daily' || recurrenceFreq === 'yearly') {
+        const ts = recurrenceFreq === 'daily' ? recurrenceTimeStart : recurrenceVariants[0]?.timeStart || '';
+        const te = recurrenceFreq === 'daily' ? recurrenceTimeEnd : recurrenceVariants[0]?.timeEnd || '';
+        setRecurrenceVariants([{ monthDays: [1], timeStart: ts, timeEnd: te }]);
       } else {
         const first = recurrenceVariants[0];
         setRecurrenceVariants([{ monthDays: [1], timeStart: first?.timeStart || '', timeEnd: first?.timeEnd || '' }]);
       }
+      setRecurrenceTimeStart('');
+      setRecurrenceTimeEnd('');
     }
     setRecurrenceVariantIndex(0);
     setRecurrenceFreq(freq);
@@ -430,7 +559,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
         if (!v.weekdays?.length) return t('editor.recurrenceWeeklyRequired');
         const hs = (v.timeStart || '').trim();
         const he = (v.timeEnd || '').trim();
-        if ((hs.length > 0) !== (he.length > 0)) return t('editor.recurrenceTimePairRequired');
+        if (he.length > 0 && hs.length === 0) return t('editor.recurrenceTimeEndNeedsStart');
         if (hs && he && he <= hs) return t('editor.recurrenceTimeRangeInvalid');
       }
       if (recurrenceVariantsTimeOverlapOnSharedDay('weekly', recurrenceVariants)) {
@@ -443,7 +572,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
         if (!v.monthDays?.length) return t('editor.recurrenceMonthlyRequired');
         const hs = (v.timeStart || '').trim();
         const he = (v.timeEnd || '').trim();
-        if ((hs.length > 0) !== (he.length > 0)) return t('editor.recurrenceTimePairRequired');
+        if (he.length > 0 && hs.length === 0) return t('editor.recurrenceTimeEndNeedsStart');
         if (hs && he && he <= hs) return t('editor.recurrenceTimeRangeInvalid');
       }
       if (recurrenceVariantsTimeOverlapOnSharedDay('monthly', recurrenceVariants)) {
@@ -451,13 +580,34 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
       }
       return null;
     }
-    const hasTimeStart = recurrenceTimeStart.trim().length > 0;
-    const hasTimeEnd = recurrenceTimeEnd.trim().length > 0;
-    if (hasTimeStart !== hasTimeEnd) {
-      return t('editor.recurrenceTimePairRequired');
+    if (recurrenceFreq === 'yearly') {
+      for (const v of recurrenceVariants) {
+        const m = v.yearlyMonth ?? 0;
+        const md = v.yearlyMonthDay ?? 0;
+        if (m < 1 || m > 12 || md < 1 || md > 31) {
+          return t('editor.recurrenceYearInvalid');
+        }
+        const probe = new Date(2024, m - 1, md);
+        if (probe.getMonth() !== m - 1 || probe.getDate() !== md) {
+          return t('editor.recurrenceYearInvalid');
+        }
+        const hs = (v.timeStart || '').trim();
+        const he = (v.timeEnd || '').trim();
+        if (he.length > 0 && hs.length === 0) return t('editor.recurrenceTimeEndNeedsStart');
+        if (hs && he && he <= hs) return t('editor.recurrenceTimeRangeInvalid');
+      }
+      if (recurrenceVariantsTimeOverlapOnSharedDay('yearly', recurrenceVariants)) {
+        return t('editor.recurrenceSharedDayTimeOverlap');
+      }
+      return null;
     }
-    if (hasTimeStart && hasTimeEnd && recurrenceTimeEnd <= recurrenceTimeStart) {
-      return t('editor.recurrenceTimeRangeInvalid');
+    if (recurrenceFreq === 'daily') {
+      const hs = recurrenceTimeStart.trim();
+      const he = recurrenceTimeEnd.trim();
+      if (he.length > 0 && hs.length === 0) return t('editor.recurrenceTimeEndNeedsStart');
+      if (hs.length > 0 && he.length > 0 && recurrenceTimeEnd <= recurrenceTimeStart) {
+        return t('editor.recurrenceTimeRangeInvalid');
+      }
     }
     return null;
   };
@@ -482,19 +632,48 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
   const getDraftTimeRange = () => {
     if (isRecurring) {
       if (recurrenceFreq === 'daily') {
-        if (!recurrenceTimeStart || !recurrenceTimeEnd) return null;
+        const hs = recurrenceTimeStart.trim();
+        const he = recurrenceTimeEnd.trim();
+        if (he.length > 0 && hs.length === 0) return null;
         const startMinutes = parseTimeToMinutes(recurrenceTimeStart);
         const endMinutes = parseTimeToMinutes(recurrenceTimeEnd);
-        if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) return null;
-        return { startMinutes, endMinutes };
+        if (startMinutes !== null && endMinutes === null) {
+          return { startMinutes, endMinutes: Math.min(startMinutes + 60, 24 * 60) };
+        }
+        if (startMinutes !== null && endMinutes !== null && endMinutes > startMinutes) {
+          return { startMinutes, endMinutes };
+        }
+        return null;
+      }
+      if (recurrenceFreq === 'yearly') {
+        const v = recurrenceVariants[recurrenceVariantIndex];
+        const hs = (v?.timeStart || '').trim();
+        const he = (v?.timeEnd || '').trim();
+        if (he.length > 0 && hs.length === 0) return null;
+        const startMinutes = parseTimeToMinutes(v?.timeStart ?? '');
+        const endMinutes = parseTimeToMinutes(v?.timeEnd ?? '');
+        if (startMinutes !== null && endMinutes === null) {
+          return { startMinutes, endMinutes: Math.min(startMinutes + 60, 24 * 60) };
+        }
+        if (startMinutes !== null && endMinutes !== null && endMinutes > startMinutes) {
+          return { startMinutes, endMinutes };
+        }
+        return null;
       }
       if (recurrenceFreq === 'weekly' || recurrenceFreq === 'monthly') {
         const v = recurrenceVariants[recurrenceVariantIndex];
-        if (!v?.timeStart || !v?.timeEnd) return null;
-        const startMinutes = parseTimeToMinutes(v.timeStart);
-        const endMinutes = parseTimeToMinutes(v.timeEnd);
-        if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) return null;
-        return { startMinutes, endMinutes };
+        const hs = (v?.timeStart || '').trim();
+        const he = (v?.timeEnd || '').trim();
+        if (he.length > 0 && hs.length === 0) return null;
+        const startMinutes = parseTimeToMinutes(v?.timeStart ?? '');
+        const endMinutes = parseTimeToMinutes(v?.timeEnd ?? '');
+        if (startMinutes !== null && endMinutes === null) {
+          return { startMinutes, endMinutes: Math.min(startMinutes + 60, 24 * 60) };
+        }
+        if (startMinutes !== null && endMinutes !== null && endMinutes > startMinutes) {
+          return { startMinutes, endMinutes };
+        }
+        return null;
       }
       return null;
     }
@@ -628,65 +807,15 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     }
 
     const now = new Date().toISOString();
-    const remindersInSeconds = isRecurring
-      ? []
-      : Array.from(new Set(
-          reminders.map(r => r.unit === 'days' ? r.value * 86400 : r.value * 3600)
-        )).sort((a, b) => a - b);
+    const remindersInSeconds = Array.from(
+      new Set(reminders.map((r) => (r.unit === 'days' ? r.value * 86400 : r.value * 3600)))
+    ).sort((a, b) => a - b);
 
-    // Проверка на наличие ошибок
-    if (!isRecurring && reminders.some(rem => getReminderError(rem) !== null)) {
+    if (reminders.some((rem) => getReminderError(rem) !== null)) {
       return;
     }
 
-    let recurrence: NodeRecurrence | null = null;
-    if (isRecurring) {
-      if (recurrenceFreq === 'daily') {
-        recurrence = {
-          freq: 'daily',
-          timeStart: recurrenceTimeStart.trim() || null,
-          timeEnd: recurrenceTimeEnd.trim() || null,
-        };
-      } else if (recurrenceFreq === 'weekly') {
-        const cleaned = recurrenceVariants.map((v) => ({
-          weekdays: Array.from(new Set(v.weekdays ?? [])).sort((a, b) => a - b),
-          timeStart: v.timeStart?.trim() || null,
-          timeEnd: v.timeEnd?.trim() || null,
-        }));
-        if (cleaned.length === 1) {
-          recurrence = {
-            freq: 'weekly',
-            weekdays: cleaned[0].weekdays,
-            timeStart: cleaned[0].timeStart,
-            timeEnd: cleaned[0].timeEnd,
-          };
-        } else {
-          recurrence = {
-            freq: 'weekly',
-            scheduleVariants: cleaned,
-          };
-        }
-      } else {
-        const cleaned = recurrenceVariants.map((v) => ({
-          monthDays: Array.from(new Set(v.monthDays ?? [])).sort((a, b) => a - b),
-          timeStart: v.timeStart?.trim() || null,
-          timeEnd: v.timeEnd?.trim() || null,
-        }));
-        if (cleaned.length === 1) {
-          recurrence = {
-            freq: 'monthly',
-            monthDays: cleaned[0].monthDays,
-            timeStart: cleaned[0].timeStart,
-            timeEnd: cleaned[0].timeEnd,
-          };
-        } else {
-          recurrence = {
-            freq: 'monthly',
-            scheduleVariants: cleaned,
-          };
-        }
-      }
-    }
+    const recurrence: NodeRecurrence | null = isRecurring ? composeRecurrenceRule() : null;
 
     const newNode: Node = node
       ? {
@@ -773,15 +902,16 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
               <button
                 type="button"
                 onClick={() => setPriority(!priority)}
-                className={`p-3 rounded-xl transition-all border-2 ${
+                className={`p-3 rounded-xl transition-all ${
                   priority
-                    ? 'border-transparent shadow-lg shadow-accent/20'
-                    : 'border-gray-100 dark:border-gray-800 hover:border-accent/30'
+                    ? 'shadow-lg shadow-accent/20'
+                    : 'bg-gray-100 dark:bg-gray-800 hover:bg-accent/10'
                 }`}
-                style={{ 
-                  color: priority ? 'white' : 'var(--accent)',
-                  backgroundColor: priority ? 'var(--accent)' : 'transparent'
-                }}
+                style={
+                  priority
+                    ? { color: 'white', backgroundColor: 'var(--accent)' }
+                    : { color: 'var(--accent)' }
+                }
               >
                 <FiAlertCircle size={20} />
               </button>
@@ -811,7 +941,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                     className="relative h-[48px]"
                     onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
                   >
-                    <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl border-2 border-gray-100 bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+                    <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:bg-gray-900 dark:text-gray-100">
                       {deadlineDate ? new Date(deadlineDate).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' }) : <span className="text-gray-400 dark:text-gray-600">{t('editor.date')}</span>}
                     </div>
                     <FiCalendar className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent" size={18} />
@@ -830,7 +960,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                     className="relative h-[48px]"
                     onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
                   >
-                    <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl border-2 border-gray-100 bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+                    <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:bg-gray-900 dark:text-gray-100">
                       {deadlineTime || <span className="text-gray-400 dark:text-gray-600">{t('editor.timeStart')}</span>}
                     </div>
                     <FiClock className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent" size={18} />
@@ -849,7 +979,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                     className="relative h-[48px]"
                     onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
                   >
-                    <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl border-2 border-gray-100 bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+                    <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:bg-gray-900 dark:text-gray-100">
                       {deadlineEndTime || <span className="text-gray-400 dark:text-gray-600">{t('editor.timeEndOptional')}</span>}
                     </div>
                     <FiClock className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent" size={18} />
@@ -889,7 +1019,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
           )}
 
           <div
-            className={`rounded-2xl border-2 border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/50 ${
+            className={`rounded-2xl bg-gray-50 dark:bg-gray-900/50 ${
               isMobile ? 'space-y-3 p-3' : 'space-y-4 p-4'
             }`}
           >
@@ -906,7 +1036,6 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                       setDeadlineDate('');
                       setDeadlineTime('');
                       setDeadlineEndTime('');
-                      setReminders([]);
                     }
                     return next;
                   })
@@ -914,7 +1043,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                 className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                   isRecurring
                     ? 'text-white'
-                    : 'text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700'
+                    : 'text-gray-500 dark:text-gray-400 bg-gray-200/80 dark:bg-gray-700/70'
                 }`}
                 style={isRecurring ? { backgroundColor: 'var(--accent)' } : undefined}
               >
@@ -931,16 +1060,16 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                 exit={{ opacity: 0, y: -8, height: 0 }}
                 transition={{ duration: 0.2 }}
               >
-                <div className="grid grid-cols-3 gap-2">
-                  {(['daily', 'weekly', 'monthly'] as RecurrenceFrequency[]).map((freq) => (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {(['daily', 'weekly', 'monthly', 'yearly'] as RecurrenceFrequency[]).map((freq) => (
                     <button
                       key={freq}
                       type="button"
                       onClick={() => handleRecurrenceFreqChange(freq)}
-                      className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition-all border ${
+                      className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition-all ${
                         recurrenceFreq === freq
-                          ? 'text-white border-transparent'
-                          : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-accent/50'
+                          ? 'text-white'
+                          : 'text-gray-600 dark:text-gray-300 bg-gray-200/80 dark:bg-gray-700/70 hover:bg-accent/15'
                       }`}
                       style={recurrenceFreq === freq ? { backgroundColor: 'var(--accent)' } : undefined}
                     >
@@ -975,55 +1104,82 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                   />
                 )}
 
+                {recurrenceFreq === 'yearly' && (
+                  <RecurrenceVariantsEditor
+                    frequency="yearly"
+                    variants={recurrenceVariants}
+                    onVariantsChange={setRecurrenceVariants}
+                    activeIndex={recurrenceVariantIndex}
+                    onActiveIndexChange={setRecurrenceVariantIndex}
+                    isMobile={isMobile}
+                    allowEssentialMotion={allowEssentialMotion}
+                    weekdayOptions={weekdayOptions}
+                  />
+                )}
+
                 {recurrenceFreq === 'daily' && (
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="space-y-1">
-                    <span className="block text-[11px] text-gray-500 dark:text-gray-400">
-                      {t('editor.recurrenceTimeStart')}
-                    </span>
-                    <div
-                    className="relative h-[48px]"
-                    onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
-                  >
-                      <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:bg-gray-900 dark:text-gray-100">
-                        {recurrenceTimeStart || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
-                      </div>
-                      <FiClock className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent" size={18} />
-                      <input
-                        id="recurrenceTimeStartInput"
-                        type="time"
-                        value={recurrenceTimeStart}
-                        onChange={(e) => setRecurrenceTimeStart(e.target.value)}
-                        lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                        aria-label={t('editor.recurrenceTimeStart')}
-                      />
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="space-y-1">
+                        <span className="block text-[11px] text-gray-500 dark:text-gray-400">
+                          {t('editor.recurrenceTimeStart')}
+                        </span>
+                        <div
+                          className="relative h-[48px]"
+                          onPointerDownCapture={(ev) =>
+                            openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)
+                          }
+                        >
+                          <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:bg-gray-900 dark:text-gray-100">
+                            {recurrenceTimeStart || (
+                              <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>
+                            )}
+                          </div>
+                          <FiClock
+                            className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent"
+                            size={18}
+                          />
+                          <input
+                            id="recurrenceTimeStartInput"
+                            type="time"
+                            value={recurrenceTimeStart}
+                            onChange={(e) => setRecurrenceTimeStart(e.target.value)}
+                            lang={language === 'ru' ? 'ru-RU' : 'en-US'}
+                            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                            aria-label={t('editor.recurrenceTimeStart')}
+                          />
+                        </div>
+                      </label>
+                      <label className="space-y-1">
+                        <span className="block text-[11px] text-gray-500 dark:text-gray-400">
+                          {t('editor.timeEndOptional')}
+                        </span>
+                        <div
+                          className="relative h-[48px]"
+                          onPointerDownCapture={(ev) =>
+                            openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)
+                          }
+                        >
+                          <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:bg-gray-900 dark:text-gray-100">
+                            {recurrenceTimeEnd || (
+                              <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>
+                            )}
+                          </div>
+                          <FiClock
+                            className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent"
+                            size={18}
+                          />
+                          <input
+                            id="recurrenceTimeEndInput"
+                            type="time"
+                            value={recurrenceTimeEnd}
+                            onChange={(e) => setRecurrenceTimeEnd(e.target.value)}
+                            lang={language === 'ru' ? 'ru-RU' : 'en-US'}
+                            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                            aria-label={t('editor.timeEndOptional')}
+                          />
+                        </div>
+                      </label>
                     </div>
-                  </label>
-                  <label className="space-y-1">
-                    <span className="block text-[11px] text-gray-500 dark:text-gray-400">
-                      {t('editor.recurrenceTimeEnd')}
-                    </span>
-                    <div
-                    className="relative h-[48px]"
-                    onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
-                  >
-                      <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-xl bg-gray-50 px-2 py-3 pl-10 text-sm text-gray-900 transition-all dark:bg-gray-900 dark:text-gray-100">
-                        {recurrenceTimeEnd || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
-                      </div>
-                      <FiClock className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-accent" size={18} />
-                      <input
-                        id="recurrenceTimeEndInput"
-                        type="time"
-                        value={recurrenceTimeEnd}
-                        onChange={(e) => setRecurrenceTimeEnd(e.target.value)}
-                        lang={language === 'ru' ? 'ru-RU' : 'en-US'}
-                        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                        aria-label={t('editor.recurrenceTimeEnd')}
-                      />
-                    </div>
-                  </label>
-                </div>
                 )}
 
                 {recurrenceError && (
@@ -1053,8 +1209,8 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
           </div>
           
           {/* Блок уведомлений Telegram */}
-          {deadlineDate && !isRecurring && (
-            <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border-2 border-gray-100 dark:border-gray-800 space-y-4">
+          {((!isRecurring && deadlineDate) || isRecurring) && (
+            <div className="space-y-4 rounded-2xl bg-gray-50 p-4 dark:bg-gray-900/50">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
                   {t('telegram.title')}
@@ -1137,7 +1293,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
                 <button
                   type="button"
                   onClick={() => setShowParentPicker(true)}
-                  className="flex w-full min-w-0 items-center gap-2 rounded-xl border-2 border-gray-300 px-2.5 py-2 text-left transition-colors hover:border-accent/50 dark:border-gray-600"
+                  className="flex w-full min-w-0 items-center gap-2 rounded-xl bg-gray-100 px-2.5 py-2 text-left transition-colors hover:bg-gray-200/80 dark:bg-gray-700/50 dark:hover:bg-gray-600/50"
                   aria-label={t('editor.pickParentTooltip')}
                 >
                   <FiFolder
@@ -1157,13 +1313,17 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
             <button
               type="button"
               onClick={onClose}
-              className="w-full px-6 py-2.5 text-sm font-bold rounded-xl border-2 border-gray-100 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-all sm:w-auto"
+              className="w-full rounded-xl px-6 py-2.5 text-sm font-bold text-gray-500 transition-all hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-900 sm:w-auto"
             >
               {t('general.cancel')}
             </button>
             <button
               type="submit"
-              disabled={(!isRecurring && reminders.some(rem => getReminderError(rem) !== null)) || recurrenceError !== null || deadlineError !== null}
+              disabled={
+                reminders.some((rem) => getReminderError(rem) !== null) ||
+                recurrenceError !== null ||
+                deadlineError !== null
+              }
               className="w-full px-8 py-2.5 text-sm font-bold rounded-xl text-white transition-all shadow-lg shadow-accent/20 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 active:scale-95 sm:w-auto"
               style={{ backgroundColor: 'var(--accent)' }}
             >
@@ -1199,7 +1359,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
         >
           <motion.div
             ref={modalRef}
-            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md mx-4"
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4"
             onClick={(e) => e.stopPropagation()}
             initial={allowEssentialMotion ? { y: 20, scale: 0.98, opacity: 0.92 } : { opacity: 1 }}
             animate={allowEssentialMotion ? { y: 0, scale: 1, opacity: 1 } : { opacity: 1 }}

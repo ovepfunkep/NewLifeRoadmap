@@ -62,6 +62,9 @@ async function run() {
         reminders: data.reminders,
         sentReminders: data.sentReminders,
         completed: data.completed,
+        isRecurring: data.isRecurring,
+        recurrence: data.recurrence ?? null,
+        createdAt: data.createdAt,
       });
 
       const normalizedNextReminderAt = nextReminderAt ?? 0;

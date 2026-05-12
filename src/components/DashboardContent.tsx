@@ -143,7 +143,7 @@ function ChartCard({
   chartHeightClassName = 'h-56 sm:h-64',
 }: ChartCardProps) {
   return (
-    <section className={`rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800 ${className}`}>
+    <section className={`rounded-2xl bg-white px-4 py-3 shadow-sm dark:bg-gray-800 ${className}`}>
       <h3 className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
       <div className={`min-h-0 ${chartHeightClassName}`}>{children}</div>
     </section>
@@ -456,10 +456,10 @@ export function DashboardContent({
   };
 
   const jumpChipClass = (active: boolean) =>
-    `rounded-lg border px-2 py-2 text-center text-xs font-semibold transition-colors sm:px-3 scroll-my-24 ${
+    `rounded-lg px-2 py-2 text-center text-xs font-semibold transition-colors sm:px-3 scroll-my-24 ${
       active
-        ? 'border-transparent text-white ring-2 ring-[rgba(var(--accent-rgb),0.45)] ring-offset-2 ring-offset-white dark:ring-offset-gray-800'
-        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700/80'
+        ? 'text-white ring-2 ring-[rgba(var(--accent-rgb),0.45)] ring-offset-2 ring-offset-white dark:ring-offset-gray-800'
+        : 'bg-gray-200/80 text-gray-700 hover:bg-gray-300/65 dark:bg-gray-700/80 dark:text-gray-200 dark:hover:bg-gray-600/65'
     }`;
 
   const accentFillStyle = { backgroundColor: 'var(--accent)', boxShadow: '0 4px 16px rgba(var(--accent-rgb), 0.38)' } as const;
@@ -486,7 +486,7 @@ export function DashboardContent({
 
   return (
     <>
-      <div className={className ?? 'flex h-full w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-gray-700 dark:bg-slate-900'}>
+      <div className={className ?? 'flex h-full w-full flex-col overflow-hidden rounded-2xl bg-slate-100 dark:bg-slate-900'}>
         <div
           className={`space-y-3 px-0 py-3 sm:px-5 sm:py-4 ${
             isMobile ? '' : 'border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
@@ -498,7 +498,7 @@ export function DashboardContent({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-200/80 text-gray-600 transition-colors hover:bg-gray-300/70 dark:bg-gray-600/55 dark:text-gray-300 dark:hover:bg-gray-500/55"
                 aria-label={t('general.close')}
               >
                 <FiX size={16} />
@@ -510,7 +510,7 @@ export function DashboardContent({
             <button
               type="button"
               onClick={() => setShowPicker(true)}
-              className="flex w-full min-w-0 items-center gap-2 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:border-accent/50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+              className="flex w-full min-w-0 items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100/90 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700/85"
               title={t('dashboard.chooseNodeTooltip')}
             >
               <FiFolder size={16} className="shrink-0" />
@@ -518,7 +518,7 @@ export function DashboardContent({
             </button>
           )}
 
-          <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+          <div className="rounded-xl bg-white p-3 shadow-sm dark:bg-gray-800">
             <div className="flex w-full min-w-0 items-center gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-700/60">
               {PERIODS.map((item) => (
                 <button
@@ -541,7 +541,7 @@ export function DashboardContent({
               <button
                 type="button"
                 onClick={() => handleShiftPeriod(-1)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-300 p-0 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-200/85 p-0 text-gray-600 transition-colors hover:bg-gray-300/70 dark:bg-gray-600/55 dark:text-gray-300 dark:hover:bg-gray-500/55"
                 title={t('dashboard.periodBack')}
               >
                 <FiChevronLeft size={15} />
@@ -549,7 +549,7 @@ export function DashboardContent({
               <button
                 type="button"
                 onClick={openPeriodJumpSheet}
-                className="flex h-9 min-h-9 min-w-0 flex-1 items-center justify-center rounded-lg border border-gray-300 bg-white px-2 text-center text-xs font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700/80"
+                className="flex h-9 min-h-9 min-w-0 flex-1 items-center justify-center rounded-lg bg-white px-2 text-center text-xs font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700/80"
                 title={t('dashboard.periodJumpOpenHint')}
               >
                 <span className="truncate">{currentPeriodLabel}</span>
@@ -557,7 +557,7 @@ export function DashboardContent({
               <button
                 type="button"
                 onClick={() => handleShiftPeriod(1)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-300 p-0 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-200/85 p-0 text-gray-600 transition-colors hover:bg-gray-300/70 dark:bg-gray-600/55 dark:text-gray-300 dark:hover:bg-gray-500/55"
                 title={t('dashboard.periodForward')}
               >
                 <FiChevronRight size={15} />
@@ -583,7 +583,7 @@ export function DashboardContent({
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
-              <section className="rounded-2xl border border-slate-200 bg-white p-2 xl:col-span-4 dark:border-gray-700 dark:bg-gray-800">
+              <section className="rounded-2xl bg-white p-2 shadow-sm xl:col-span-4 dark:bg-gray-800">
                 <div className="overflow-x-auto">
                   <div className="grid min-w-[640px] grid-cols-4 divide-x divide-gray-200 dark:divide-gray-700">
                     {kpis.map((item) => (
@@ -742,7 +742,7 @@ export function DashboardContent({
                 </ResponsiveContainer>
               </ChartCard>
 
-              <section className="rounded-2xl border border-slate-200 bg-white p-4 xl:col-span-4 dark:border-gray-700 dark:bg-gray-800">
+              <section className="rounded-2xl bg-white p-4 shadow-sm xl:col-span-4 dark:bg-gray-800">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
                     {t('dashboard.chartProjectsTreemap')}
@@ -798,7 +798,7 @@ export function DashboardContent({
             <button
               type="button"
               onClick={() => setPickerYear((y) => Math.max(1990, y - 1))}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-200/85 text-gray-700 transition-colors hover:bg-gray-300/70 dark:bg-gray-600/55 dark:text-gray-200 dark:hover:bg-gray-500/55"
               aria-label={t('dashboard.periodJumpPrevYear')}
             >
               <FiChevronLeft size={18} />
@@ -809,7 +809,7 @@ export function DashboardContent({
             <button
               type="button"
               onClick={() => setPickerYear((y) => Math.min(2100, y + 1))}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-200/85 text-gray-700 transition-colors hover:bg-gray-300/70 dark:bg-gray-600/55 dark:text-gray-200 dark:hover:bg-gray-500/55"
               aria-label={t('dashboard.periodJumpNextYear')}
             >
               <FiChevronRight size={18} />

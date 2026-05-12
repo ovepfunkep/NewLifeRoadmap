@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useEffects } from '../hooks/useEffects';
 import { useTheme } from '../hooks/useTheme';
 import { Z_AMBIENT } from '../config/zLayers';
@@ -183,11 +184,12 @@ export function SpringPetals() {
     return null;
   }
 
-  return (
+  return createPortal(
     <canvas
       ref={canvasRef}
-      className="fixed top-0 left-0 pointer-events-none"
+      className="pointer-events-none fixed inset-x-0 top-0 h-[100dvh] w-screen max-w-none"
       style={{ zIndex: Z_AMBIENT }}
-    />
+    />,
+    document.body,
   );
 }

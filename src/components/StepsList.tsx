@@ -156,8 +156,8 @@ export function StepsList({
 
   const filterChips: Array<{ key: FilterType; label: string; count: number }> = [
     { key: 'all', label: t('filter.all'), count: counts.all },
-    { key: 'completed', label: t('filter.completed'), count: counts.completed },
     { key: 'incomplete', label: t('filter.incomplete'), count: counts.incomplete },
+    { key: 'completed', label: t('filter.completed'), count: counts.completed },
   ];
 
   const sortOptions: Array<{ key: SortType; label: string }> = [
@@ -216,10 +216,10 @@ export function StepsList({
                   key={chip.key}
                   type="button"
                   onClick={() => onFilterChange(chip.key)}
-                  className={`relative flex items-center gap-1 rounded-full border-0 px-3 py-1.5 text-xs font-semibold shadow-none ring-0 transition-all outline-none focus-visible:ring-2 focus-visible:ring-accent/35 ${
+                  className={`relative flex shrink-0 items-center gap-1 rounded-full border-0 px-3 py-1.5 text-xs font-semibold ring-0 transition-all outline-none focus-visible:ring-2 focus-visible:ring-accent/35 ${
                     active
-                      ? 'text-white'
-                      : 'bg-white text-gray-700 dark:bg-gray-800 dark:text-gray-200'
+                      ? 'text-white shadow-sm'
+                      : 'bg-white text-gray-800 shadow-sm ring-0 ring-inset md:ring-1 md:ring-inset md:ring-gray-200 hover:bg-gray-50 dark:bg-gray-700/80 dark:text-gray-100 dark:ring-0 dark:shadow-sm dark:hover:bg-gray-600/85'
                   }`}
                   style={{
                     backgroundColor: active && !allowDecorativeMotion ? 'var(--accent)' : undefined,
@@ -237,7 +237,9 @@ export function StepsList({
                   <span className="relative z-10 min-w-0 truncate">{chip.label}</span>
                   <span
                     className={`relative z-10 min-w-[1.8rem] shrink-0 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold tabular-nums ${
-                      active ? 'bg-white/20 text-white' : 'bg-[#F4F4F6] text-gray-700 dark:bg-[#2e2e34] dark:text-gray-200'
+                      active
+                        ? 'bg-white/20 text-white'
+                        : 'bg-gray-100 text-gray-700 dark:bg-black/25 dark:text-gray-100'
                     }`}
                   >
                     {chip.count}
@@ -248,13 +250,13 @@ export function StepsList({
               </div>
             </LayoutGroup>
             <div
-              className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-slate-100 to-transparent transition-opacity duration-200 dark:from-gray-900 ${
+              className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-white to-transparent transition-opacity duration-200 dark:from-gray-800 ${
                 filterScrollFade.left ? 'opacity-100' : 'opacity-0'
               }`}
               aria-hidden
             />
             <div
-              className={`pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-slate-100 to-transparent transition-opacity duration-200 dark:from-gray-900 ${
+              className={`pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-white to-transparent transition-opacity duration-200 dark:from-gray-800 ${
                 filterScrollFade.right ? 'opacity-100' : 'opacity-0'
               }`}
               aria-hidden
@@ -267,12 +269,13 @@ export function StepsList({
                   <button
                     type="button"
                     onClick={() => onSortChange(option.key)}
-                    className={`rounded-lg border px-2 py-1.5 text-xs font-semibold transition-all ${
-                      sortType === option.key ? 'border-transparent text-white' : 'border-current'
+                    className={`rounded-lg px-2 py-1.5 text-xs font-semibold shadow-sm transition-all ${
+                      sortType === option.key
+                        ? 'text-white shadow-accent/25'
+                        : 'bg-white text-accent ring-1 ring-inset ring-gray-200 hover:bg-gray-50 dark:bg-gray-700/80 dark:text-gray-100 dark:ring-0 dark:hover:bg-gray-600/85'
                     }`}
                     style={{
-                      color: sortType === option.key ? 'white' : 'var(--accent)',
-                      backgroundColor: sortType === option.key ? 'var(--accent)' : 'transparent',
+                      ...(sortType === option.key ? { color: 'white', backgroundColor: 'var(--accent)' } : {}),
                     }}
                   >
                     {option.key === 'deadline' ? <FiCalendar size={13} /> : option.label}

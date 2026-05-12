@@ -768,6 +768,12 @@ export function NodeCard({
     onNavigate(node.id);
   };
 
+  const peerDropHint = !!(
+    draggedNode &&
+    draggedNode.id !== node.id &&
+    (!currentNodeId || node.id !== currentNodeId)
+  );
+
   return (
     <>
       <div className="relative">
@@ -784,10 +790,12 @@ export function NodeCard({
             opacity: { duration: isMovingOut ? (effectsEnabled ? 0.4 : 0) : motionTransitions.fade.duration },
           }}
           whileTap={allowDecorativeMotion && !isDrumActive ? { scale: 0.995 } : undefined}
-          className={`relative flex min-h-[140px] flex-col overflow-hidden rounded-2xl bg-white transition-[border-color,box-shadow] duration-300 ease-out dark:bg-gray-800 ${
+          className={`relative flex min-h-[140px] flex-col overflow-hidden rounded-2xl bg-white transition-[box-shadow] duration-300 ease-out dark:bg-gray-800 ${
             node.priority
               ? 'border-2'
-              : 'border border-gray-300 dark:border-gray-700'
+              : peerDropHint
+                ? 'border border-accent/80'
+                : 'border border-gray-200 dark:border-gray-700'
           } ${
             isDragOver ? 'ring-2 ring-offset-2' : ''
           } ${
@@ -805,10 +813,7 @@ export function NodeCard({
                 ? 'var(--card-shadow-priority)'
                 : 'var(--card-shadow-soft)',
             ...(isDragOver ? { transition: 'all 0.3s ease' } : {}),
-            ...(draggedNode && draggedNode.id !== node.id && (!currentNodeId || node.id !== currentNodeId) ? {
-              borderColor: 'var(--accent)',
-              opacity: 0.7
-            } : {}),
+            ...(peerDropHint ? { opacity: 0.7 } : {}),
             visibility: isBurning && effectsEnabled ? 'hidden' : 'visible',
             pointerEvents: isDrumActive ? 'none' : 'auto'
           }}
@@ -842,7 +847,7 @@ export function NodeCard({
                       {deadlineDisplay && (
                         <div className={node.description ? 'pt-0.5' : undefined}>
                           <span
-                            className="inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                            className="inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
                             style={{
                               borderColor: '#f97316',
                               color: 'white',
@@ -940,7 +945,14 @@ export function NodeCard({
 
           {/* Прогресс подзадач */}
           {node.children.length > 0 && (
-            <div className="relative mt-auto h-7 overflow-hidden bg-slate-100 dark:bg-gray-700/50">
+            <div
+              className="relative mt-auto h-7 overflow-hidden dark:bg-gray-700/50"
+              style={
+                theme === 'light'
+                  ? { backgroundColor: 'rgba(var(--accent-rgb), 0.11)' }
+                  : undefined
+              }
+            >
               <div
                 className={`h-full transition-all duration-500 ${isBlinking ? 'animate-pulse' : ''}`}
                 style={{
@@ -983,7 +995,7 @@ export function NodeCard({
 
             {/* Левая половина */}
             <motion.div
-              className="absolute inset-y-0 left-0 w-1/2 bg-white dark:bg-gray-800 border-y border-l border-gray-300 dark:border-gray-700 rounded-l-lg shadow-xl"
+              className="absolute inset-y-0 left-0 w-1/2 rounded-l-lg bg-white shadow-xl dark:bg-gray-800"
               style={{ 
                 clipPath: 'polygon(0% 0%, 100% 0%, 85% 20%, 100% 40%, 80% 60%, 100% 80%, 90% 100%, 0% 100%)',
                 backgroundColor: node.completed ? 'rgba(var(--accent-rgb), 0.05)' : undefined
@@ -1008,7 +1020,7 @@ export function NodeCard({
 
             {/* Правая половина */}
             <motion.div
-              className="absolute inset-y-0 right-0 w-1/2 bg-white dark:bg-gray-800 border-y border-r border-gray-300 dark:border-gray-700 rounded-r-lg shadow-xl"
+              className="absolute inset-y-0 right-0 w-1/2 rounded-r-lg bg-white shadow-xl dark:bg-gray-800"
               style={{ 
                 clipPath: 'polygon(15% 0%, 100% 0%, 100% 100%, 10% 100%, 20% 80%, 0% 60%, 15% 40%, 0% 20%)',
                 backgroundColor: node.completed ? 'rgba(var(--accent-rgb), 0.05)' : undefined
@@ -1045,7 +1057,7 @@ export function NodeCard({
             width: '300px'
           }}
         >
-          <div className="bg-white dark:bg-gray-800 rounded-lg border-2 border-gray-300 dark:border-gray-700 shadow-xl p-3">
+          <div className="rounded-lg bg-white p-3 shadow-xl dark:bg-gray-800">
             <div className="font-semibold text-gray-900 dark:text-gray-100 truncate" style={{ color: 'var(--accent)' }}>
               {node.title}
             </div>

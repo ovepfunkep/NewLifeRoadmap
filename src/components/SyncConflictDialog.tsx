@@ -259,7 +259,7 @@ export function SyncConflictDialog({
     >
       <div
         ref={modalRef}
-        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700"
+        className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-800"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-accent/5">
@@ -283,7 +283,7 @@ export function SyncConflictDialog({
             {(!isMobile || activeTab === 'local') && (
               <div className="flex flex-col h-full min-h-0">
                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">На устройстве</h3>
-                <div ref={localScrollRef} onScroll={() => handleScroll('local')} className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 bg-gray-50 dark:bg-gray-900/50 flex-1 overflow-y-auto custom-scrollbar">
+                <div ref={localScrollRef} onScroll={() => handleScroll('local')} className="flex-1 overflow-y-auto rounded-xl bg-gray-50 p-4 shadow-sm dark:bg-gray-900/50 custom-scrollbar">
                   <TreeNode node={localRoot} level={0} diff={diff} source="local" expandedNodes={expandedNodes} toggleExpand={toggleExpand} />
                 </div>
               </div>
@@ -291,7 +291,7 @@ export function SyncConflictDialog({
             {(!isMobile || activeTab === 'cloud') && (
               <div className="flex flex-col h-full min-h-0">
                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">В облаке</h3>
-                <div ref={cloudScrollRef} onScroll={() => handleScroll('cloud')} className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 bg-gray-50 dark:bg-gray-900/50 flex-1 overflow-y-auto custom-scrollbar">
+                <div ref={cloudScrollRef} onScroll={() => handleScroll('cloud')} className="flex-1 overflow-y-auto rounded-xl bg-gray-50 p-4 shadow-sm dark:bg-gray-900/50 custom-scrollbar">
                   <TreeNode node={cloudRoot} level={0} diff={diff} source="cloud" expandedNodes={expandedNodes} toggleExpand={toggleExpand} />
                 </div>
               </div>

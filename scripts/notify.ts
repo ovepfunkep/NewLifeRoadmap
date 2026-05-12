@@ -2,6 +2,8 @@ import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { webcrypto } from 'node:crypto';
 import { computeNextReminderAt } from '../src/utils';
+import { listOccurrenceAnchorsInRange } from '../src/utils/recurrence';
+import type { NodeRecurrence } from '../src/types';
 
 const crypto = webcrypto as unknown as Crypto;
 
@@ -81,6 +83,34 @@ async function getTelegramUpdates(offset?: number) {
   }
 }
 
+async function resolveNodeTitle(
+  node: Record<string, unknown>,
+  canDecrypt: boolean,
+  syncKey: string | null | undefined
+): Promise<string> {
+  let title = 'Задача без названия';
+
+  if (node.isEncrypted && node.encryptedData) {
+    if (canDecrypt && syncKey) {
+      const decrypted = await decryptData(node.encryptedData as string, syncKey);
+      if (decrypted && decrypted.title) title = decrypted.title;
+    } else {
+      title = '🔒 Зашифрованная задача (название недоступно)';
+    }
+  } else if (node.isTitleEncrypted || node.isFieldsEncrypted) {
+    if (canDecrypt && syncKey && typeof node.title === 'string') {
+      const decrypted = await decryptData(node.title, syncKey);
+      if (decrypted) title = decrypted;
+    } else {
+      title = '🔒 Зашифрованная задача (название недоступно)';
+    }
+  } else if (typeof node.title === 'string') {
+    title = node.title;
+  }
+
+  return title;
+}
+
 // --- Main Logic ---
 
 // Initialize Firebase Admin
@@ -153,13 +183,12 @@ async function run() {
     .where('nextReminderAt', '<=', scanUntilMs)
     .get();
 
-  console.log(`Found ${nodesSnapshot.docs.length} incomplete tasks with deadlines.`);
+  console.log(`Found ${nodesSnapshot.docs.length} incomplete tasks with scheduled reminders.`);
 
   for (const doc of nodesSnapshot.docs) {
-    const node = doc.data();
-    if (!node.deadline || !node.reminders || node.reminders.length === 0) continue;
+    const node = doc.data() as Record<string, unknown>;
+    if (!node.reminders || !Array.isArray(node.reminders) || node.reminders.length === 0) continue;
 
-    const deadline = new Date(node.deadline);
     const userId = doc.ref.parent.parent?.id;
     if (!userId) continue;
 
@@ -172,66 +201,99 @@ async function run() {
     const mode = userConfig.mode; // 'gdrive' or 'firestore'
     const syncKey = userConfig.syncKey; // May be null if using GDrive mode
     const userTimezone = userConfig.timezone || 'UTC'; // NEW: Get user timezone
+    const canDecrypt = mode === 'firestore' && !!syncKey;
+
     const sentReminders = Array.isArray(node.sentReminders)
       ? node.sentReminders.filter((item: unknown): item is string => typeof item === 'string')
       : [];
     const sentSet = new Set(sentReminders);
     const newlySent: string[] = [];
 
-    for (const intervalSeconds of node.reminders) {
-      const reminderTime = new Date(deadline.getTime() - intervalSeconds * 1000);
-      const reminderId = `${intervalSeconds}_${node.deadline}`;
+    const rawIntervals = (node.reminders as unknown[]).filter(
+      (s): s is number => typeof s === 'number' && Number.isFinite(s) && s > 0
+    );
 
-      // Отправляем, если до времени напоминания осталось 10 минут или оно уже прошло
-      if (now.getTime() >= (reminderTime.getTime() - sendWindowMs) && !sentSet.has(reminderId)) {
-        console.log(`Sending reminder for node ${doc.id} to user ${userId}`);
+    const isRecurringNoDeadline = Boolean(node.isRecurring && node.recurrence && !node.deadline);
 
-        let title = 'Задача без названия';
-        
-        // Решаем, имеем ли мы право расшифровывать
-        const canDecrypt = mode === 'firestore' && !!syncKey;
+    if (isRecurringNoDeadline) {
+      const rule = node.recurrence as NodeRecurrence;
+      const createdAtIso =
+        typeof node.createdAt === 'string' ? node.createdAt : '1970-01-01T00:00:00.000Z';
+      const recurringIntervals = rawIntervals.filter((s) => s >= 3600);
+      const maxSec = recurringIntervals.length ? Math.max(...recurringIntervals) : 0;
+      const padMs = maxSec * 1000 + sendWindowMs + 800 * 86400000;
+      const scanBack = new Date(now.getTime() - padMs);
+      const scanFwd = new Date(now.getTime() + padMs);
+      const events = listOccurrenceAnchorsInRange(rule, createdAtIso, scanBack, scanFwd);
 
-        if (node.isEncrypted && node.encryptedData) {
-          // Старый формат (полное шифрование объекта)
-          if (canDecrypt) {
-            const decrypted = await decryptData(node.encryptedData, syncKey);
-            if (decrypted && decrypted.title) title = decrypted.title;
-          } else {
-            title = '🔒 Зашифрованная задача (название недоступно)';
+      let titleResolved: string | null = null;
+
+      for (const { eventMs, eventIso } of events) {
+        for (const intervalSeconds of recurringIntervals) {
+          const reminderId = `${intervalSeconds}_${eventIso}`;
+          const reminderTime = new Date(eventMs - intervalSeconds * 1000);
+          if (now.getTime() >= reminderTime.getTime() - sendWindowMs && !sentSet.has(reminderId)) {
+            console.log(`Sending recurring reminder for node ${doc.id} to user ${userId}`);
+            if (titleResolved === null) {
+              titleResolved = await resolveNodeTitle(node, canDecrypt, syncKey ?? null);
+            }
+            const whenStr = new Date(eventMs).toLocaleString('ru-RU', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+              timeZone: userTimezone,
+            });
+            const text = `⏰ <b>Напоминание о повторяющейся задаче!</b>\n\n📌 <b>${titleResolved}</b>\n📅 Ближайшее время: ${whenStr}`;
+            await sendTelegramMessage(chatId, text);
+
+            sentSet.add(reminderId);
+            newlySent.push(reminderId);
           }
-        } else if (node.isTitleEncrypted || node.isFieldsEncrypted) {
-          // Новый формат (шифрован только заголовок или заголовок + описание)
-          if (canDecrypt) {
-            const decrypted = await decryptData(node.title, syncKey);
-            if (decrypted) title = decrypted;
-          } else {
-            title = '🔒 Зашифрованная задача (название недоступно)';
-          }
-        } else {
-          title = node.title;
         }
+      }
+    } else {
+      if (!node.deadline) continue;
 
-        const deadlineStr = deadline.toLocaleString('ru-RU', { 
-          day: '2-digit', month: '2-digit', year: 'numeric', 
-          hour: '2-digit', minute: '2-digit',
-          hour12: false,
-          timeZone: userTimezone // NEW: Use user timezone
-        });
-        
-        const text = `⏰ <b>Напоминание о дедлайне!</b>\n\n📌 <b>${title}</b>\n📅 Срок: ${deadlineStr}`;
-        
-        await sendTelegramMessage(chatId, text);
+      const deadline = new Date(node.deadline as string);
+      for (const intervalSeconds of rawIntervals) {
+        const reminderTime = new Date(deadline.getTime() - intervalSeconds * 1000);
+        const reminderId = `${intervalSeconds}_${node.deadline}`;
 
-        sentSet.add(reminderId);
-        newlySent.push(reminderId);
+        // Отправляем, если до времени напоминания осталось 10 минут или оно уже прошло
+        if (now.getTime() >= reminderTime.getTime() - sendWindowMs && !sentSet.has(reminderId)) {
+          console.log(`Sending reminder for node ${doc.id} to user ${userId}`);
+          const title = await resolveNodeTitle(node, canDecrypt, syncKey ?? null);
+
+          const deadlineStr = deadline.toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZone: userTimezone,
+          });
+
+          const text = `⏰ <b>Напоминание о дедлайне!</b>\n\n📌 <b>${title}</b>\n📅 Срок: ${deadlineStr}`;
+          await sendTelegramMessage(chatId, text);
+
+          sentSet.add(reminderId);
+          newlySent.push(reminderId);
+        }
       }
     }
 
     const nextReminderAt = computeNextReminderAt({
-      deadline: node.deadline,
-      reminders: node.reminders,
+      deadline: (node.deadline as string | null | undefined) ?? null,
+      reminders: node.reminders as number[],
       sentReminders: Array.from(sentSet),
-      completed: node.completed,
+      completed: node.completed as boolean,
+      isRecurring: node.isRecurring as boolean | undefined,
+      recurrence: (node.recurrence as NodeRecurrence | null | undefined) ?? null,
+      createdAt: node.createdAt as string | undefined,
     });
 
     const currentNextReminderAt = node.nextReminderAt ?? null;

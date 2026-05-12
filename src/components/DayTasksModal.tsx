@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { Node, NodeRecurrence } from '../types';
-import { buildBreadcrumbs, getDeadlineColor, formatDeadline } from '../utils';
+import { buildBreadcrumbs } from '../utils';
 import { getNode } from '../db';
-import { FiX, FiPlus, FiCheck } from 'react-icons/fi';
+import { FiX, FiPlus } from 'react-icons/fi';
 import { Z_MODAL } from '../config/zLayers';
 import { motion } from 'framer-motion';
 import { useMotionPreferences } from '../hooks/useMotionPreferences';
 import { motionDurations, motionTransitions } from '../config/motion';
+import { DeadlineTaskRow } from './DeadlineTaskRow';
 
 interface DayTasksModalProps {
   date: Date;
@@ -54,8 +55,13 @@ function DayTasksModal({
         result.push({ node: task, breadcrumbs: relevantBreadcrumbs });
       }
 
-      // Сортируем по названию
-      result.sort((a, b) => a.node.title.localeCompare(b.node.title));
+      // Как в списке дедлайнов: по времени дедлайна (при равенстве — по названию)
+      result.sort((a, b) => {
+        const ta = a.node.deadline ? new Date(a.node.deadline).getTime() : Number.MAX_SAFE_INTEGER;
+        const tb = b.node.deadline ? new Date(b.node.deadline).getTime() : Number.MAX_SAFE_INTEGER;
+        if (ta !== tb) return ta - tb;
+        return a.node.title.localeCompare(b.node.title);
+      });
       
       setTasksWithBreadcrumbs(result);
     };
@@ -131,7 +137,7 @@ function DayTasksModal({
     >
       <motion.div
         ref={modalRef}
-        className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col m-4"
+        className="m-4 flex max-h-[80vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-800"
         style={{
           boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'
         }}
@@ -194,76 +200,15 @@ function DayTasksModal({
               )
             ) : (
               <>
-                {tasksWithBreadcrumbs.map(({ node: task, breadcrumbs }) => {
-                const deadlineColor = getDeadlineColor(task);
-                const dateStr = formatDeadline(task.deadline, task.deadlineEnd);
-
-                return (
-                  <div
+                {tasksWithBreadcrumbs.map(({ node: task, breadcrumbs }) => (
+                  <DeadlineTaskRow
                     key={task.id}
-                    onClick={() => handleTaskClick(task.id)}
-                    className="w-full text-left p-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all cursor-pointer"
-                    style={{
-                      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.08)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
-                    }}
-                    role="button"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex-1 min-w-0 flex items-center gap-2">
-                        <div className="flex-1 min-w-0">
-                          {/* Breadcrumbs */}
-                          {breadcrumbs.length > 0 && (
-                            <div className="text-[10px] text-gray-400 dark:text-gray-500 opacity-60 mb-0.5 truncate">
-                              {breadcrumbs.map((b, idx) => (
-                                <span key={b.id}>
-                                  {b.title}
-                                  {idx < breadcrumbs.length - 1 && ' / '}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          <span className="font-medium text-gray-900 dark:text-gray-100">
-                            {task.title}
-                          </span>
-                        </div>
-                      </div>
-                      {dateStr && (
-                        <span
-                          className="flex-shrink-0 self-center rounded-full px-2.5 py-1 text-xs font-semibold text-white"
-                          style={{ backgroundColor: deadlineColor }}
-                        >
-                          {dateStr}
-                        </span>
-                      )}
-                      <div
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleCompleted(task.id, !task.completed);
-                        }}
-                        className={`p-3 sm:p-2 rounded-lg transition-all border hover:brightness-150 flex-shrink-0 cursor-pointer ${
-                          task.completed
-                            ? 'border-transparent'
-                            : 'border-current hover:bg-accent/10'
-                        }`}
-                        style={{ 
-                          color: 'var(--accent)',
-                          backgroundColor: task.completed ? 'var(--accent)' : 'transparent'
-                        }}
-                        title={task.completed ? 'Отметить как невыполненную' : 'Отметить как выполненную'}
-                        role="button"
-                      >
-                        <FiCheck size={20} className="sm:w-4 sm:h-4" style={{ color: task.completed ? 'white' : 'var(--accent)' }} />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    task={task}
+                    breadcrumbs={breadcrumbs}
+                    onOpen={() => handleTaskClick(task.id)}
+                    onToggleCompleted={(id, completed) => handleToggleCompleted(id, completed)}
+                  />
+                ))}
               {/* Кнопка создания задачи в конце списка */}
               {onCreateTask && (
                 <div
@@ -271,7 +216,7 @@ function DayTasksModal({
                     onCreateTask(date);
                     onClose();
                   }}
-                  className="w-full text-left p-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all flex items-center gap-2 cursor-pointer"
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-lg bg-gray-50 p-3 text-left transition-all hover:bg-gray-200/85 dark:bg-gray-700/50 dark:hover:bg-gray-600/55"
                   style={{
                     boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
                   }}

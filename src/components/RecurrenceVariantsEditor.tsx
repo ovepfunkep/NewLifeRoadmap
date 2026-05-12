@@ -10,7 +10,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 const MAX_VARIANTS = 12;
 
 export interface RecurrenceVariantsEditorProps {
-  frequency: 'weekly' | 'monthly';
+  frequency: 'weekly' | 'monthly' | 'yearly';
   variants: RecurrenceScheduleVariant[];
   onVariantsChange: (next: RecurrenceScheduleVariant[]) => void;
   activeIndex: number;
@@ -70,7 +70,14 @@ export function RecurrenceVariantsEditor({
     const blank: RecurrenceScheduleVariant =
       frequency === 'weekly'
         ? { weekdays: [], timeStart: '', timeEnd: '' }
-        : { monthDays: [], timeStart: '', timeEnd: '' };
+        : frequency === 'monthly'
+          ? { monthDays: [], timeStart: '', timeEnd: '' }
+          : {
+              yearlyMonth: variants[variants.length - 1]?.yearlyMonth ?? new Date().getMonth() + 1,
+              yearlyMonthDay: variants[variants.length - 1]?.yearlyMonthDay ?? new Date().getDate(),
+              timeStart: '',
+              timeEnd: '',
+            };
     markProgrammaticScroll();
     onVariantsChange([...variants, blank]);
     setNavDir(1);
@@ -165,10 +172,10 @@ export function RecurrenceVariantsEditor({
                   key={day.value}
                   type="button"
                   onClick={() => toggleWeekday(pageIndex, day.value)}
-                  className={`rounded-md py-1 text-[11px] font-semibold transition-all border ${
+                  className={`rounded-md py-1 text-[11px] font-semibold transition-all ${
                     active
-                      ? 'text-white border-transparent'
-                      : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+                      ? 'text-white'
+                      : 'text-gray-600 dark:text-gray-300 bg-gray-200/80 dark:bg-gray-700/70'
                   }`}
                   style={active ? { backgroundColor: 'var(--accent)' } : undefined}
                 >
@@ -176,6 +183,54 @@ export function RecurrenceVariantsEditor({
                 </button>
               );
             })}
+          </div>
+        </>
+      );
+    }
+
+    if (frequency === 'yearly') {
+      const ym = v.yearlyMonth ?? new Date().getMonth() + 1;
+      const ymd = v.yearlyMonthDay ?? new Date().getDate();
+      return (
+        <>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400">{t('editor.recurrenceYearDate')}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="space-y-1">
+              <span className="block text-[11px] text-gray-500 dark:text-gray-400">
+                {t('editor.recurrenceYearMonth')}
+              </span>
+              <select
+                value={ym}
+                onChange={(e) => patchVariant(pageIndex, { yearlyMonth: Number(e.target.value) })}
+                className="h-[48px] w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-3 text-sm text-gray-900 transition-all dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                  <option key={m} value={m}>
+                    {language === 'ru'
+                      ? new Date(2024, m - 1, 1).toLocaleDateString('ru-RU', { month: 'long' })
+                      : new Date(2024, m - 1, 1).toLocaleDateString('en-US', { month: 'long' })}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="block text-[11px] text-gray-500 dark:text-gray-400">
+                {t('editor.recurrenceYearDay')}
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={31}
+                value={ymd}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  patchVariant(pageIndex, {
+                    yearlyMonthDay: Number.isFinite(n) ? Math.min(31, Math.max(1, n)) : 1,
+                  });
+                }}
+                className="h-[48px] w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-3 text-sm text-gray-900 transition-all dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+              />
+            </label>
           </div>
         </>
       );
@@ -192,10 +247,10 @@ export function RecurrenceVariantsEditor({
                 key={day}
                 type="button"
                 onClick={() => toggleMonthDay(pageIndex, day)}
-                className={`rounded-md py-1 text-[11px] font-semibold transition-all border ${
+                className={`rounded-md py-1 text-[11px] font-semibold transition-all ${
                   active
-                    ? 'text-white border-transparent'
-                    : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+                    ? 'text-white'
+                    : 'text-gray-600 dark:text-gray-300 bg-gray-200/80 dark:bg-gray-700/70'
                 }`}
                 style={active ? { backgroundColor: 'var(--accent)' } : undefined}
               >
@@ -236,7 +291,7 @@ export function RecurrenceVariantsEditor({
           </div>
         </label>
         <label className="space-y-1">
-          <span className="block text-[11px] text-gray-500 dark:text-gray-400">{t('editor.recurrenceTimeEnd')}</span>
+          <span className="block text-[11px] text-gray-500 dark:text-gray-400">{t('editor.timeEndOptional')}</span>
           <div
             className="relative h-[48px]"
             onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
@@ -252,7 +307,7 @@ export function RecurrenceVariantsEditor({
               onChange={(e) => patchVariant(pageIndex, { timeEnd: e.target.value })}
               lang={language === 'ru' ? 'ru-RU' : 'en-US'}
               className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-              aria-label={t('editor.recurrenceTimeEnd')}
+              aria-label={t('editor.timeEndOptional')}
             />
           </div>
         </label>
@@ -275,7 +330,7 @@ export function RecurrenceVariantsEditor({
               className="relative h-10"
               onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
             >
-              <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-lg border border-gray-100 bg-gray-50 pl-8 pr-1.5 text-xs text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+              <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-lg bg-gray-50 pl-8 pr-1.5 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-100">
                 {v.timeStart || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
               </div>
               <FiClock className="pointer-events-none absolute left-2 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-accent" />
@@ -292,13 +347,13 @@ export function RecurrenceVariantsEditor({
           </label>
           <label className="min-w-0 space-y-0.5">
             <span className="block truncate text-[10px] text-gray-500 dark:text-gray-400">
-              {t('editor.recurrenceTimeEnd')}
+              {t('editor.timeEndOptional')}
             </span>
             <div
               className="relative h-10"
               onPointerDownCapture={(ev) => openNativeDateTimePickerFromOverlay(ev.currentTarget, ev)}
             >
-              <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-lg border border-gray-100 bg-gray-50 pl-8 pr-1.5 text-xs text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+              <div className="pointer-events-none flex h-full w-full items-center overflow-hidden whitespace-nowrap rounded-lg bg-gray-50 pl-8 pr-1.5 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-100">
                 {v.timeEnd || <span className="text-gray-400 dark:text-gray-600">{t('editor.time')}</span>}
               </div>
               <FiClock className="pointer-events-none absolute left-2 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-accent" />
@@ -309,7 +364,7 @@ export function RecurrenceVariantsEditor({
                 onChange={(e) => patchVariant(pageIndex, { timeEnd: e.target.value })}
                 lang={language === 'ru' ? 'ru-RU' : 'en-US'}
                 className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                aria-label={t('editor.recurrenceTimeEnd')}
+                aria-label={t('editor.timeEndOptional')}
               />
             </div>
           </label>
@@ -320,7 +375,7 @@ export function RecurrenceVariantsEditor({
             onClick={addVariant}
             disabled={variants.length >= MAX_VARIANTS}
             title={variants.length >= MAX_VARIANTS ? t('editor.recurrenceMaxVariants') : t('editor.recurrenceAddVariant')}
-            className={`flex w-full min-h-0 items-center justify-center rounded-lg border border-gray-200 text-accent disabled:opacity-40 dark:border-gray-700 ${
+            className={`flex w-full min-h-0 items-center justify-center rounded-lg bg-gray-100 text-accent hover:bg-gray-200/90 disabled:opacity-40 dark:bg-gray-700/60 dark:hover:bg-gray-600/60 ${
               variants.length > 1 ? 'flex-1 basis-0' : 'flex-1'
             }`}
             aria-label={t('editor.recurrenceAddVariant')}
@@ -331,7 +386,7 @@ export function RecurrenceVariantsEditor({
             <button
               type="button"
               onClick={() => removeVariantAt(pageIndex)}
-              className="flex min-h-0 w-full flex-1 basis-0 items-center justify-center rounded-lg border border-red-200 text-red-600 dark:border-red-900/50 dark:text-red-400"
+              className="flex min-h-0 w-full flex-1 basis-0 items-center justify-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100/90 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
               aria-label={t('editor.recurrenceRemoveVariant')}
             >
               <FiTrash2 size={16} />
@@ -356,7 +411,7 @@ export function RecurrenceVariantsEditor({
               type="button"
               onClick={goPrev}
               disabled={activeIndex <= 0}
-              className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-30"
+              className="rounded-lg bg-gray-100 p-1.5 transition-colors hover:bg-gray-200/90 disabled:opacity-30 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
               aria-label={t('editor.recurrencePrevPage')}
             >
               <FiChevronLeft size={18} />
@@ -365,7 +420,7 @@ export function RecurrenceVariantsEditor({
               type="button"
               onClick={goNext}
               disabled={activeIndex >= variants.length - 1}
-              className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-30"
+              className="rounded-lg bg-gray-100 p-1.5 transition-colors hover:bg-gray-200/90 disabled:opacity-30 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
               aria-label={t('editor.recurrenceNextPage')}
             >
               <FiChevronRight size={18} />
@@ -377,7 +432,7 @@ export function RecurrenceVariantsEditor({
           onClick={addVariant}
           disabled={variants.length >= MAX_VARIANTS}
           title={variants.length >= MAX_VARIANTS ? t('editor.recurrenceMaxVariants') : t('editor.recurrenceAddVariant')}
-          className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-40 text-accent"
+          className="rounded-lg bg-gray-100 p-1.5 text-accent transition-colors hover:bg-gray-200/90 disabled:opacity-40 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
           aria-label={t('editor.recurrenceAddVariant')}
         >
           <FiPlus size={18} />
@@ -386,7 +441,7 @@ export function RecurrenceVariantsEditor({
           <button
             type="button"
             onClick={removeVariant}
-            className="p-1.5 rounded-lg border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400"
+            className="rounded-lg bg-red-50 p-1.5 text-red-600 transition-colors hover:bg-red-100/90 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/45"
             aria-label={t('editor.recurrenceRemoveVariant')}
           >
             <FiTrash2 size={16} />

@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Node, NodeRecurrence } from '../types';
 import { t } from '../i18n';
-import { collectDeadlines, sortByDeadlineAsc, getDeadlineColor, buildBreadcrumbs, formatDeadline, walkSubtree } from '../utils';
+import { collectDeadlines, sortByDeadlineAsc, buildBreadcrumbs, walkSubtree } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { getNode } from '../db';
 import { FiList, FiCalendar, FiClock } from 'react-icons/fi';
 import { CalendarView } from './CalendarView';
 import DayTasksModal from './DayTasksModal';
+import { DeadlineTaskRow } from './DeadlineTaskRow';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { expandNodesToSlots, RecurringScheduleSlot } from '../utils/recurrence';
 import { WeekScheduleView } from './WeekScheduleView';
@@ -259,7 +260,7 @@ export function DeadlineList({ node, onNavigate, onNavigateToTask, onMarkComplet
     <>
       <div
         className={`flex min-h-[140px] flex-col py-4 transition-all md:p-5 ${
-          isMobile ? '' : 'rounded-lg border border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-800'
+          isMobile ? '' : 'rounded-lg bg-white shadow-sm dark:bg-gray-800'
         }`}
       >
         {/* Режимы дедлайнов */}
@@ -269,7 +270,11 @@ export function DeadlineList({ node, onNavigate, onNavigateToTask, onMarkComplet
           </h2>
           <LayoutGroup id="deadline-view-chips">
           <div
-            className="mt-1 flex w-full items-center gap-2 rounded-xl border border-gray-200 bg-white p-1 dark:border-gray-700 dark:bg-gray-800"
+            className={`mt-1 flex w-full items-center gap-2 rounded-xl p-1 ${
+              isMobile
+                ? 'bg-white shadow-sm dark:bg-gray-800'
+                : 'bg-gray-100 dark:bg-gray-900/55'
+            }`}
           >
             <button
               onClick={() => setViewMode('list')}
@@ -371,62 +376,32 @@ export function DeadlineList({ node, onNavigate, onNavigateToTask, onMarkComplet
               transition={motionTransitions.fade}
               className="relative h-full flex flex-col"
             >
-              {!isMobile && (
-                <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-white dark:from-gray-800 to-transparent z-10 pointer-events-none" />
-              )}
-
               <div
-                className={`space-y-3 overflow-y-auto px-1 custom-scrollbar ${
+                className={`space-y-2 overflow-y-auto px-1 custom-scrollbar ${
                   isMobile ? 'flex-1 min-h-0 py-1' : 'max-h-[435px] py-4'
                 }`}
               >
                 <AnimatePresence mode="popLayout">
-                  {deadlinesWithBreadcrumbs.map(({ node: dl, breadcrumbs }) => {
-                    const dateStr = formatDeadline(dl.deadline, dl.deadlineEnd);
-                    const deadlineColor = getDeadlineColor(dl);
-                    
-                    return (
-                      <motion.button
+                  {deadlinesWithBreadcrumbs.map(({ node: dl, breadcrumbs }) => (
+                      <motion.div
                         key={dl.id}
                         initial={allowDecorativeMotion ? { opacity: 0, y: 10 } : false}
                         animate={{ opacity: 1, y: 0 }}
                         exit={allowDecorativeMotion ? { opacity: 0, scale: 0.95 } : { opacity: 0 }}
                         transition={motionTransitions.fade}
-                        onClick={() => {
-                          onNavigate(dl.id);
-                          onNavigateToTask?.(dl.id);
-                        }}
-                        className="w-full rounded-xl border border-gray-300 bg-white p-3.5 text-left transition-all dark:border-gray-700 dark:bg-gray-800"
+                        className="w-full"
                       >
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="min-w-0 flex-1">
-                            {breadcrumbs.length > 0 && (
-                              <div className="mb-1 truncate text-[10px] font-medium text-gray-400 opacity-70 dark:text-gray-500">
-                                {breadcrumbs.map((b, idx) => (
-                                  <span key={b.id}>
-                                    {b.title}
-                                    {idx < breadcrumbs.length - 1 && ' / '}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            <span className="block break-words text-sm font-semibold text-gray-900 dark:text-gray-100">
-                              {dl.title}
-                            </span>
-                          </div>
-                          <span
-                            className="inline-flex max-w-full flex-shrink-0 self-start rounded-full px-2.5 py-1 text-xs font-semibold sm:self-center"
-                            style={{ 
-                              backgroundColor: deadlineColor,
-                              color: 'white'
-                            }}
-                          >
-                            {dateStr}
-                          </span>
-                        </div>
-                      </motion.button>
-                    );
-                  })}
+                        <DeadlineTaskRow
+                          task={dl}
+                          breadcrumbs={breadcrumbs}
+                          onOpen={() => {
+                            onNavigate(dl.id);
+                            onNavigateToTask?.(dl.id);
+                          }}
+                          onToggleCompleted={onMarkCompleted}
+                        />
+                      </motion.div>
+                    ))}
                 </AnimatePresence>
                 {deadlinesWithBreadcrumbs.length === 0 && (
                   <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
@@ -434,10 +409,6 @@ export function DeadlineList({ node, onNavigate, onNavigateToTask, onMarkComplet
                   </p>
                 )}
               </div>
-
-              {!isMobile && (
-                <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white dark:from-gray-800 to-transparent z-10 pointer-events-none" />
-              )}
             </motion.div>
           ) : viewMode === 'calendar' ? (
             <motion.div

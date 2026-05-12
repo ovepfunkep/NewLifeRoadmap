@@ -1,4 +1,5 @@
 import { Node, DeadlineStatus } from './types';
+import { computeNextOccurrenceStartMs } from './utils/recurrence';
 
 // Обход поддерева узла
 export function walkSubtree(node: Node, callback: (n: Node) => void): void {
@@ -140,18 +141,48 @@ export function deadlineStatus(node: Node): DeadlineStatus {
   return 'future';
 }
 
-export type ReminderSource = Pick<Node, 'deadline' | 'reminders' | 'sentReminders' | 'completed'>;
+export type ReminderSource = Pick<
+  Node,
+  'deadline' | 'reminders' | 'sentReminders' | 'completed' | 'isRecurring' | 'recurrence' | 'createdAt'
+>;
 
 // Compute the next reminder time in epoch ms for a node.
 export function computeNextReminderAt(node: ReminderSource): number | null {
   if (node.completed) return null;
-  if (!node.deadline) return null;
   if (!node.reminders || node.reminders.length === 0) return null;
+
+  const sent = new Set(node.sentReminders || []);
+
+  const isRecurringReminder = Boolean(node.isRecurring && node.recurrence && !node.deadline);
+
+  if (isRecurringReminder && node.recurrence) {
+    const rule = node.recurrence;
+    const createdAt = typeof node.createdAt === 'string' ? node.createdAt : new Date().toISOString();
+    let searchAfter = new Date(0);
+    for (let guard = 0; guard < 500; guard++) {
+      const occurrenceMs = computeNextOccurrenceStartMs(rule, createdAt, searchAfter);
+      if (occurrenceMs === null) return null;
+      const occurrenceIso = new Date(occurrenceMs).toISOString();
+      let bestFire: number | null = null;
+      for (const intervalSeconds of node.reminders) {
+        if (!Number.isFinite(intervalSeconds) || intervalSeconds < 3600) continue;
+        const reminderId = `${intervalSeconds}_${occurrenceIso}`;
+        if (sent.has(reminderId)) continue;
+        const fireMs = occurrenceMs - intervalSeconds * 1000;
+        if (!Number.isFinite(fireMs)) continue;
+        if (bestFire === null || fireMs < bestFire) bestFire = fireMs;
+      }
+      if (bestFire !== null) return bestFire;
+      searchAfter = new Date(occurrenceMs + 1);
+    }
+    return null;
+  }
+
+  if (!node.deadline) return null;
 
   const deadlineMs = new Date(node.deadline).getTime();
   if (!Number.isFinite(deadlineMs)) return null;
 
-  const sent = new Set(node.sentReminders || []);
   let nextReminderMs: number | null = null;
 
   for (const intervalSeconds of node.reminders) {

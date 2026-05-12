@@ -412,7 +412,7 @@ export function SettingsWidget({
             onClick={() => setShowPalette(false)}
           />
           <div 
-            className="absolute bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-lg shadow-xl border border-gray-200 dark:border-gray-700"
+            className="absolute rounded-lg bg-white/80 shadow-xl backdrop-blur-md dark:bg-gray-800/80"
             onClick={(e) => e.stopPropagation()}
             onMouseEnter={() => {
               if (timeoutRef.current !== null && !isMobile) {

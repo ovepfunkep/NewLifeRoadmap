@@ -11,7 +11,7 @@ export function SecurityChoiceModal({ onChoice }: SecurityChoiceModalProps) {
       className="fixed inset-0 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
       style={{ zIndex: Z_MODAL }}
     >
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full overflow-hidden animate-in zoom-in duration-300 border border-gray-100 dark:border-gray-700">
+      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl animate-in zoom-in duration-300 dark:bg-gray-800">
         <div className="p-6">
           <div className="flex items-center gap-4 mb-8">
             <div className="w-12 h-12 bg-accent/10 rounded-full flex items-center justify-center shrink-0" style={{ color: 'var(--accent)' }}>
@@ -31,7 +31,7 @@ export function SecurityChoiceModal({ onChoice }: SecurityChoiceModalProps) {
               <div className="absolute -inset-0.5 bg-gradient-to-r from-accent via-blue-400 to-accent rounded-xl blur opacity-30 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-pulse"></div>
               <button
                 onClick={() => onChoice('firestore')}
-                className="relative w-full flex items-center gap-4 p-4 text-left rounded-xl border-2 border-accent/50 bg-white dark:bg-gray-800 hover:bg-accent/5 hover:border-accent transition-all group"
+                className="relative flex w-full items-center gap-4 rounded-xl border-2 border-accent/50 bg-white p-4 text-left transition-all hover:bg-accent/5 hover:border-accent group dark:bg-gray-800"
               >
                 <div className="w-10 h-10 rounded-lg bg-accent/10 dark:bg-accent/20 flex items-center justify-center shadow-sm text-accent group-hover:scale-110 transition-transform" style={{ color: 'var(--accent)' }}>
                   <FiLock size={20} />
@@ -49,7 +49,7 @@ export function SecurityChoiceModal({ onChoice }: SecurityChoiceModalProps) {
             {/* Вариант 2: Google Drive (Усиленная) */}
             <button
               onClick={() => onChoice('gdrive')}
-              className="w-full flex items-center gap-4 p-4 text-left rounded-xl border-2 border-transparent bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all group opacity-80 hover:opacity-100"
+              className="group w-full rounded-xl bg-gray-50 p-4 text-left opacity-80 transition-all hover:bg-gray-100 hover:opacity-100 dark:bg-gray-700/50 dark:hover:bg-gray-700 flex items-center gap-4"
             >
               <div className="w-10 h-10 rounded-lg bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm text-gray-400 group-hover:text-accent transition-colors">
                 <FiHardDrive size={20} />
