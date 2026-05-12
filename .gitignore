@@ -32,7 +32,6 @@ dist-ssr
 coverage
 
 GOOGLE_SYNC_PLAN.md
-.cursor/*
-!.cursor/rules/
-!.cursor/rules/**
-.cursor/plans/
+
+# Cursor IDE — правила, планы, кэш агента (локально, не в репо)
+.cursor/

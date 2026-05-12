@@ -67,27 +67,20 @@ VITE_FIREBASE_APP_ID=1:123456789:web:abc123
 
 ## Шаг 6: Настройка правил безопасности Firestore
 
-1. В Firebase Console перейдите в **Firestore Database** → **Rules**
-2. Замените правила на:
+Источник правды в репозитории: файл [`firestore.rules`](firestore.rules) (включает пути `nodes`, `settings`, `security` для синка и ключей).
 
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Пользователь может читать/писать только свои данные узлов
-    match /users/{userId}/nodes/{nodeId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    
-    // Пользователь может читать/писать только свои настройки
-    match /users/{userId}/settings/{settingsId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-  }
-}
+1. Откройте файл и при необходимости скорректируйте под свой проект.
+2. В [Firebase Console](https://console.firebase.google.com/) → **Firestore Database** → **Rules** вставьте содержимое `firestore.rules` (без комментария «РЕЖИМ ОБСЛУЖИВАНИЯ» внизу — это справка) и нажмите **Publish**.
+
+Либо из корня проекта (при установленном [Firebase CLI](https://firebase.google.com/docs/cli)):
+
+```bash
+firebase deploy --only firestore:rules
 ```
 
-1. Нажмите "Publish"
+(используется [`firebase.json`](firebase.json).)
+
+**Режим обслуживания:** в конце `firestore.rules` в комментарии описан вариант с `allow read, write: if false` для всей БД — временно замените правила этим блоком и опубликуйте; данные не удаляются. Клиент покажет одноразовую модалку о недоступности облака (см. `docs/ARCHITECTURE.md`).
 
 ## Шаг 7: Проверка работы
 

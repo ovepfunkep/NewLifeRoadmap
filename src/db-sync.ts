@@ -1,4 +1,6 @@
 import type { Node } from './types';
+import { isCloudAccessFailure } from './utils/cloudFirestoreHealth';
+import { markLocalCloudPushPending } from './utils/localCloudPushPending';
 
 // Debounce для синхронизации
 let syncTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -85,6 +87,9 @@ export async function syncNodeNow(node: Node): Promise<void> {
     await syncNodeToFirestore(node);
   } catch (error) {
     console.error('Sync error:', error);
+    if (isCloudAccessFailure(error)) {
+      markLocalCloudPushPending();
+    }
     throw error;
   }
 }

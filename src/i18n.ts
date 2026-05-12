@@ -152,6 +152,14 @@ export const i18n: Record<Language, Record<string, any>> = {
       supportLinkCopied: 'Boosty link copied to clipboard',
       supportLinkCopyFail: 'Could not copy — paste manually from the modal',
     },
+    cloud: {
+      unavailableTitle: 'Cloud sync unavailable',
+      unavailableBody:
+        'The app cannot reach cloud storage right now (network issue, maintenance, or quota). Your tasks stay on this device; sync will resume when the cloud is reachable again.',
+      restoredTitle: 'Cloud sync is back',
+      restoredBody: 'Connection to cloud storage was restored. Sync will continue automatically.',
+      ok: 'OK',
+    },
     sync: {
       signIn: 'Sign in with Google',
       signOut: 'Sign out',
@@ -446,6 +454,14 @@ export const i18n: Record<Language, Record<string, any>> = {
       syncChecking: 'Проверка синхронизации данных...',
       supportLinkCopied: 'Ссылка на Boosty скопирована',
       supportLinkCopyFail: 'Не удалось скопировать — открой ссылку из модалки',
+    },
+    cloud: {
+      unavailableTitle: 'Облачная синхронизация недоступна',
+      unavailableBody:
+        'Сейчас нет доступа к облаку (сеть, обслуживание или лимиты). Задачи остаются на этом устройстве; синхронизация возобновится, когда облако снова будет доступно.',
+      restoredTitle: 'Облако снова доступно',
+      restoredBody: 'Связь с облачным хранилищем восстановлена. Синхронизация продолжится автоматически.',
+      ok: 'Понятно',
     },
     sync: {
       signIn: 'Войти через Google',

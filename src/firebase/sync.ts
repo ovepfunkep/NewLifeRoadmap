@@ -5,6 +5,8 @@ import { Node } from '../types';
 import { getActiveSyncKey } from '../utils/securityManager';
 import { encryptData, decryptData } from '../utils/crypto';
 import { computeNextReminderAt } from '../utils';
+import { isCloudAccessFailure, reportCloudFirestoreFailure, reportCloudFirestoreSuccess } from '../utils/cloudFirestoreHealth';
+import { clearLocalCloudPushPending, markLocalCloudPushPending } from '../utils/localCloudPushPending';
 
 function log(..._args: any[]) {
   // console.log('[FirebaseSync]', ..._args);
@@ -153,6 +155,31 @@ async function writeChangeLog(payload: Record<string, any>, userId: string, type
   }));
 }
 
+/** Пострановая выборка журнала (getDocs) — не держит тяжёлый live-query на весь хвост. */
+export async function fetchChangeLogSincePage(
+  userId: string,
+  sinceExclusive: string,
+  pageSize: number
+): Promise<Array<{ id: string; [key: string]: any }>> {
+  const db = getFirebaseDB();
+  const changesRef = collection(db, getUserChangesPath(userId));
+  const q = query(
+    changesRef,
+    where('updatedAt', '>', sinceExclusive),
+    orderBy('updatedAt', 'asc'),
+    limit(pageSize)
+  );
+  try {
+    const snapshot = await withTimeout(getDocs(q), 15000, 'fetchChangeLogSincePage');
+    const rows = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    reportCloudFirestoreSuccess();
+    return rows;
+  } catch (e) {
+    reportCloudFirestoreFailure(e);
+    throw e;
+  }
+}
+
 export function subscribeToChangeLog(
   userId: string,
   since: string | null,
@@ -165,26 +192,40 @@ export function subscribeToChangeLog(
     ? query(changesRef, where('updatedAt', '>', since), orderBy('updatedAt', 'asc'))
     : query(changesRef, orderBy('updatedAt', 'asc'));
 
+  let firstSnapshot = true;
   return onSnapshot(q, (snapshot) => {
+    if (firstSnapshot) {
+      firstSnapshot = false;
+      reportCloudFirestoreSuccess();
+    }
     const added = snapshot.docChanges()
       .filter(change => change.type === 'added')
       .map(change => ({ id: change.doc.id, ...change.doc.data() }));
     if (added.length > 0) onChange(added);
   }, (error) => {
+    reportCloudFirestoreFailure(error);
     if (onError) onError(error);
   });
 }
 
-export async function cleanupChangeLog(userId: string, maxBatch = 100): Promise<void> {
+/** Удаляет до maxBatch просроченных записей журнала; возвращает число удалённых документов. */
+export async function cleanupChangeLog(userId: string, maxBatch = 300): Promise<number> {
   const db = getFirebaseDB();
   const changesRef = collection(db, getUserChangesPath(userId));
   const nowIso = new Date().toISOString();
   const q = query(changesRef, where('expiresAt', '<', nowIso), orderBy('expiresAt', 'asc'), limit(maxBatch));
-  const snapshot = await getDocs(q);
-  if (snapshot.empty) return;
-  const batch = writeBatch(db);
-  snapshot.forEach(docSnap => batch.delete(docSnap.ref));
-  await batch.commit();
+  try {
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return 0;
+    const batch = writeBatch(db);
+    snapshot.forEach((docSnap) => batch.delete(docSnap.ref));
+    await batch.commit();
+    reportCloudFirestoreSuccess();
+    return snapshot.size;
+  } catch (e) {
+    reportCloudFirestoreFailure(e);
+    return 0;
+  }
 }
 
 /**
@@ -198,12 +239,14 @@ export async function getSyncMeta(): Promise<{ lastChangedAt: string } | null> {
   try {
     const metaRef = doc(db, getUserSyncMetaPath(user.uid));
     const metaSnap = await getDoc(metaRef);
+    reportCloudFirestoreSuccess();
     if (metaSnap.exists()) {
       return metaSnap.data() as { lastChangedAt: string };
     }
     return null;
   } catch (error) {
     console.error('Error getting sync meta:', error);
+    reportCloudFirestoreFailure(error);
     return null;
   }
 }
@@ -223,8 +266,10 @@ export async function updateSyncMeta(): Promise<void> {
       lastChangedAt: new Date().toISOString(),
       updatedBy: clientId 
     }, { merge: true });
+    reportCloudFirestoreSuccess();
   } catch (error) {
     console.error('Error updating sync meta:', error);
+    reportCloudFirestoreFailure(error);
   }
 }
 
@@ -298,9 +343,11 @@ export async function syncNodeToFirestore(node: Node): Promise<void> {
     await writeChangeLog(cleanedData, user.uid, 'node');
     await updateSyncMeta();
     log(`Node synced successfully: ${node.id}`);
+    reportCloudFirestoreSuccess();
   } catch (error) {
     log(`Error syncing node ${node.id}:`, error);
     console.error('Error syncing node to Firestore:', error);
+    reportCloudFirestoreFailure(error);
     throw error;
   }
 }
@@ -414,9 +461,15 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
     }
     await updateSyncMeta();
     log(`Bulk sync completed: ${allNodes.length} nodes synced, ${nodesToPurge.length} purged`);
+    clearLocalCloudPushPending();
+    reportCloudFirestoreSuccess();
   } catch (error) {
     log(`Error in bulk sync:`, error);
     console.error('Error syncing all nodes to Firestore:', error);
+    reportCloudFirestoreFailure(error);
+    if (isCloudAccessFailure(error)) {
+      markLocalCloudPushPending();
+    }
     throw error;
   }
 }
@@ -438,6 +491,7 @@ export async function loadNodeFromFirestore(nodeId: string): Promise<Node | null
     const nodeSnap = await getDoc(nodeRef);
     
     if (!nodeSnap.exists()) {
+      reportCloudFirestoreSuccess();
       return null;
     }
 
@@ -472,12 +526,14 @@ export async function loadNodeFromFirestore(nodeId: string): Promise<Node | null
     }
 
     // Восстанавливаем структуру Node (дети загружаются отдельно)
+    reportCloudFirestoreSuccess();
     return {
       ...data,
       children: [], // Дети будут загружены отдельно
     } as unknown as Node;
   } catch (error) {
     console.error('Error loading node from Firestore:', error);
+    reportCloudFirestoreFailure(error);
     return null;
   }
 }
@@ -504,9 +560,11 @@ export async function loadChangedNodesFromFirestore(since: string): Promise<Node
 
     const nodes = await Promise.all(nodePromises);
     log(`Loaded ${nodes.length} changed nodes from Firestore`);
+    reportCloudFirestoreSuccess();
     return nodes;
   } catch (error) {
     console.error('Error loading changed nodes from Firestore:', error);
+    reportCloudFirestoreFailure(error);
     return [];
   }
 }
@@ -644,10 +702,12 @@ export async function loadAllNodesFromFirestore(forceServer = false): Promise<No
 
     log(`Restored hierarchy: ${rootNodes.length} root nodes`);
     // Возвращаем все узлы (не только корневые)
+    reportCloudFirestoreSuccess();
     return [...Array.from(nodeMap.values()), ...deletedNodes];
   } catch (error) {
     log(`Error loading nodes:`, error);
     console.error('Error loading all nodes from Firestore:', error);
+    reportCloudFirestoreFailure(error);
     return [];
   }
 }
@@ -680,8 +740,10 @@ export async function deleteNodeFromFirestore(nodeId: string, childrenIds: strin
     }
     
     await batch.commit();
+    reportCloudFirestoreSuccess();
   } catch (error) {
     console.error('Error soft-deleting node from Firestore:', error);
+    reportCloudFirestoreFailure(error);
     throw error;
   }
 }
@@ -705,10 +767,12 @@ export async function hasDataInFirestore(): Promise<boolean> {
     const querySnapshot = await withTimeout(getDocs(q), 10000, 'hasDataInFirestore');
     const hasData = !querySnapshot.empty;
     log(`Firestore has data: ${hasData}`);
+    reportCloudFirestoreSuccess();
     return hasData;
   } catch (error) {
     log(`Error checking Firestore data:`, error);
     console.error('Error checking Firestore data:', error);
+    reportCloudFirestoreFailure(error);
     return false;
   }
 }

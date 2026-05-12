@@ -137,7 +137,10 @@ export function AuthAvatar() {
       </Tooltip>
 
       {showSecurityModal && (
-        <SecurityChoiceModal onChoice={handleSecurityChoice} />
+        <SecurityChoiceModal
+          onChoice={handleSecurityChoice}
+          onClose={() => setShowSecurityModal(false)}
+        />
       )}
     </>
   );

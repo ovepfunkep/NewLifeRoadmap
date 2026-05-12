@@ -1,6 +1,7 @@
 import { getCurrentUser } from './auth';
 import { getFirebaseDB } from './config';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { reportCloudFirestoreFailure, reportCloudFirestoreSuccess } from '../utils/cloudFirestoreHealth';
 
 function log(..._args: any[]) {
   // Debug logging disabled
@@ -40,8 +41,10 @@ export async function saveUserSettings(settings: UserSettings): Promise<void> {
         updatedAt: new Date().toISOString(),
       }, { merge: true });
       log('User settings saved successfully');
+      reportCloudFirestoreSuccess();
     } catch (error) {
       log('Error saving user settings:', error);
+      reportCloudFirestoreFailure(error);
     }
     saveTimeout = null;
   }, SAVE_DELAY);
@@ -67,9 +70,11 @@ export async function saveAllUserSettings(settings: UserSettings): Promise<void>
       updatedAt: new Date().toISOString(),
     }, { merge: true });
     log('All user settings saved successfully');
+    reportCloudFirestoreSuccess();
   } catch (error) {
     log('Error saving all user settings:', error);
     console.error('Error saving all user settings to Firestore:', error);
+    reportCloudFirestoreFailure(error);
     throw error;
   }
 }
@@ -95,6 +100,7 @@ export async function loadUserSettings(): Promise<UserSettings | null> {
     // Используем collection и doc правильно для четного количества сегментов
     const settingsRef = doc(db, 'users', user.uid, 'settings', 'data');
     const settingsDoc = await getDoc(settingsRef);
+    reportCloudFirestoreSuccess();
     
     if (settingsDoc.exists()) {
       const data = settingsDoc.data();
@@ -107,6 +113,7 @@ export async function loadUserSettings(): Promise<UserSettings | null> {
   } catch (error) {
     log('Error loading user settings:', error);
     console.error('Error loading user settings from Firestore:', error);
+    reportCloudFirestoreFailure(error);
     return null;
   }
 }

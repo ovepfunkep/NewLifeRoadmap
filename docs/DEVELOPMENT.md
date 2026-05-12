@@ -42,6 +42,17 @@ npm run verify
 
 4. Update docs (`README`, `docs/*`, `AGENTS.md`) if behavior or workflow changed.
 
+## Firestore usage (reads / quotas)
+
+Firestore bills **per document read** (including each document returned by `getDocs` and the initial result set of `onSnapshot`). **Spark** free quotas apply to the **entire Firebase project**, not per user. See current numbers in the official [Firestore quotas / pricing](https://firebase.google.com/docs/firestore/quotas) docs.
+
+To measure reads after a scenario (e.g. logout, clear site data, login):
+
+1. Firebase Console → your project → **Firestore** → **Usage** (or Cloud Console metrics for Firestore).
+2. Narrow the time range to when you reproduced the flow and inspect **Reads**.
+
+Relevant code: [`src/firebase/sync.ts`](../src/firebase/sync.ts) (node bulk load, change log, cleanup) and [`src/components/SyncManager.tsx`](../src/components/SyncManager.tsx) (listener lifecycle, incremental `loadCloudDataSilently` on tab focus).
+
 ## Common Troubleshooting
 
 ### Firebase config missing

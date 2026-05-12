@@ -1,5 +1,33 @@
 import { Node } from '../types';
 
+/** Время updatedAt для LWW; отсутствие даты считаем 0 (устаревшая версия). */
+export function nodeUpdatedAtMs(node: Pick<Node, 'updatedAt'> | undefined | null): number {
+  if (!node?.updatedAt) return 0;
+  const t = new Date(node.updatedAt).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+/**
+ * При инкрементальной подтяжке из облака: не затирать локальную запись, если она новее по updatedAt.
+ * Раньше входящий узел всегда клался поверх локального — локальные правки после облачного коммита терялись.
+ */
+export function pickNewerNodeByUpdatedAt(local: Node | undefined, incoming: Node): Node {
+  const flat = (n: Node) => ({ ...n, children: [] as Node[] });
+  if (!local) return flat(incoming);
+  const l = nodeUpdatedAtMs(local);
+  const i = nodeUpdatedAtMs(incoming);
+  if (i > l) return flat(incoming);
+  return flat(local);
+}
+
+function normDesc(n: Node): string {
+  return n.description ?? '';
+}
+
+function normOrder(o: number | undefined): number {
+  return typeof o === 'number' && Number.isFinite(o) ? o : 0;
+}
+
 export interface SyncDiff {
   localOnly: Node[];
   cloudOnly: Node[];
@@ -57,15 +85,15 @@ export function compareNodes(localNodes: Node[], cloudNodes: Node[]): SyncDiff {
       const differences: string[] = [];
       
       if (local.title !== cloud.title) differences.push('title');
-      if (local.description !== cloud.description) differences.push('description');
+      if (normDesc(local) !== normDesc(cloud)) differences.push('description');
       if (local.completed !== cloud.completed) differences.push('completed');
       if (local.deadline !== cloud.deadline) differences.push('deadline');
       if (local.deadlineEnd !== cloud.deadlineEnd) differences.push('deadlineEnd');
-      if (local.isRecurring !== cloud.isRecurring) differences.push('isRecurring');
+      if (!!local.isRecurring !== !!cloud.isRecurring) differences.push('isRecurring');
       if (JSON.stringify(local.recurrence ?? null) !== JSON.stringify(cloud.recurrence ?? null)) differences.push('recurrence');
-      if (local.priority !== cloud.priority) differences.push('priority');
+      if (!!local.priority !== !!cloud.priority) differences.push('priority');
       if (local.parentId !== cloud.parentId) differences.push('parentId');
-      if (local.order !== cloud.order) differences.push('order');
+      if (normOrder(local.order) !== normOrder(cloud.order)) differences.push('order');
       if (local.deletedAt !== cloud.deletedAt) differences.push('deletedAt');
 
       if (differences.length > 0) {
@@ -97,15 +125,15 @@ export function isSignificantNodeDiff(local: Node, cloud: Node): boolean {
 
   // Оба активны - проверяем основные поля
   if (local.title !== cloud.title) return true;
-  if (local.description !== cloud.description) return true;
+  if (normDesc(local) !== normDesc(cloud)) return true;
   if (local.completed !== cloud.completed) return true;
   if (local.deadline !== cloud.deadline) return true;
   if (local.deadlineEnd !== cloud.deadlineEnd) return true;
-  if (local.isRecurring !== cloud.isRecurring) return true;
+  if (!!local.isRecurring !== !!cloud.isRecurring) return true;
   if (JSON.stringify(local.recurrence ?? null) !== JSON.stringify(cloud.recurrence ?? null)) return true;
-  if (local.priority !== cloud.priority) return true;
+  if (!!local.priority !== !!cloud.priority) return true;
   if (local.parentId !== cloud.parentId) return true;
-  if (local.order !== cloud.order) return true;
+  // Порядок сортировки не считаем «конфликтом» для диалога и тихого мержа — только шум.
 
   return false;
 }

@@ -1,14 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { onAuthChange } from '../firebase/auth';
-import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore, getSyncMeta, loadChangedNodesFromFirestore, subscribeToChangeLog, normalizeNodeFromPayload, getClientId, cleanupChangeLog } from '../firebase/sync';
+import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore, getSyncMeta, loadChangedNodesFromFirestore, subscribeToChangeLog, normalizeNodeFromPayload, getClientId, cleanupChangeLog, fetchChangeLogSincePage } from '../firebase/sync';
 import { getAllNodesFlat, clearAllNodes } from '../db';
 import { SyncConflictDialog } from './SyncConflictDialog';
-import { hasDifferences } from '../utils/syncCompare';
+import { hasDifferences, pickNewerNodeByUpdatedAt } from '../utils/syncCompare';
 import { useToast } from '../hooks/useToast';
 import { t } from '../i18n';
 import { openDB } from 'idb';
 import { User } from 'firebase/auth';
 import { initSecurity } from '../utils/securityManager';
+import { resetCloudFirestoreHealth, subscribeCloudFirestoreHealth } from '../utils/cloudFirestoreHealth';
+import {
+  clearLocalCloudPushPending,
+  hasLocalCloudPushPending,
+} from '../utils/localCloudPushPending';
 
 function log(..._args: any[]) {
   // console.log('[SyncManager]', ..._args);
@@ -53,10 +58,14 @@ export function SyncManager() {
   const silentLoadInProgressRef = useRef<boolean>(false); // Флаг, что тихая загрузка уже выполняется
   const lastSilentLoadHashRef = useRef<string | null>(null); // Хеш последних загруженных данных для предотвращения повторной загрузки
   const changeUnsubRef = useRef<null | (() => void)>(null);
+  /** Активная подписка на журнал — не пересоздавать на focus (лишние чтения Firestore). */
+  const changeListenerUserIdRef = useRef<string | null>(null);
   const currentUserIdRef = useRef<string | null>(null);
   const clientIdRef = useRef<string>(getClientId());
   const firstSyncInProgressRef = useRef<boolean>(false);
   const lastFirstSyncUserIdRef = useRef<string | null>(null);
+  const flushPendingPushInProgressRef = useRef<boolean>(false);
+  const onlineDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Ключ для хранения времени последней синхронизации в localStorage
   const LAST_SYNC_TIME_KEY = 'last_local_sync_time';
@@ -121,11 +130,12 @@ export function SyncManager() {
           db = await openDB('LifeRoadmapDB', 2);
           const tx = db.transaction('nodes', 'readwrite');
           
-          // При инкрементальной загрузке мы просто обновляем полученные узлы.
-          // LWW логика здесь упрощена: облако всегда выигрывает для входящих изменений, 
-          // так как мы запрашиваем только то, что новее нашего lastLocalSyncTime.
+          // LWW по updatedAt: журнал/мета могут ссылаться на «новую» запись в облаке,
+          // но локальная правка после этого не должна затираться более старым payload с сервера.
           for (const node of changedNodes) {
-            await tx.store.put(node);
+            const existing = await tx.store.get(node.id);
+            const winner = pickNewerNodeByUpdatedAt(existing, node);
+            await tx.store.put(winner);
           }
           await tx.done;
           
@@ -145,17 +155,38 @@ export function SyncManager() {
       silentLoadInProgressRef.current = false;
     } catch (error: any) {
       log('[loadCloudDataSilently] Error:', error);
-      
-      // Обработка превышения квоты или таймаута
-      if (error?.code === 'resource-exhausted' || error?.message?.includes('TIMEOUT_SYNC')) {
-        showToast(t('toast.syncError') || 'Облако временно недоступно (превышена квота)', undefined, { type: 'error' });
-      }
-      
-      silentLoadInProgressRef.current = false;
     } finally {
       silentLoadInProgressRef.current = false;
     }
   }, []);
+
+  /** После сбоя облака: один bulk-push при online / restored, без отдельного probe-read. */
+  const flushPendingLocalCloudPush = useCallback(async () => {
+    if (!hasLocalCloudPushPending()) return;
+    if (flushPendingPushInProgressRef.current) return;
+    if (!navigator.onLine) return;
+
+    const { getCurrentUser } = await import('../firebase/auth');
+    if (!getCurrentUser()) return;
+
+    const { getActiveSyncKey } = await import('../utils/securityManager');
+    if (getActiveSyncKey() === null) return;
+
+    if (!currentUserIdRef.current) return;
+
+    flushPendingPushInProgressRef.current = true;
+    try {
+      const local = await getAllNodesFlat();
+      await syncAllNodesToFirestore(local);
+    } catch (e) {
+      log('[flushPendingLocalCloudPush] error', e);
+    } finally {
+      flushPendingPushInProgressRef.current = false;
+    }
+  }, []);
+
+  const CHANGE_LOG_DRAIN_PAGE = 250;
+  const CHANGE_LOG_DRAIN_MAX_PAGES = 100;
 
   const applyFullCloudSnapshot = useCallback(async () => {
     const cloud = await loadAllNodesFromFirestore(true);
@@ -174,32 +205,10 @@ export function SyncManager() {
     }
   }, []);
 
-  const startChangeListener = useCallback(async (userId: string) => {
-    if (changeUnsubRef.current) {
-      changeUnsubRef.current();
-      changeUnsubRef.current = null;
-    }
-
-    const cleanupKey = `last_change_cleanup_${userId}`;
-    const lastCleanup = localStorage.getItem(cleanupKey);
-    if (!lastCleanup || Date.now() - new Date(lastCleanup).getTime() > 24 * 60 * 60 * 1000) {
-      try {
-        await cleanupChangeLog(userId);
-      } finally {
-        localStorage.setItem(cleanupKey, new Date().toISOString());
-      }
-    }
-
-    const key = getChangeKey(userId);
-    let since = localStorage.getItem(key);
-    if (!since) {
-      const meta = await getSyncMeta();
-      since = meta?.lastChangedAt || new Date().toISOString();
-      localStorage.setItem(key, since);
-    }
-    lastChangeSeenRef.current = since;
-
-    changeUnsubRef.current = subscribeToChangeLog(userId, since, async (changes) => {
+  /** Обрабатывает записи журнала; при full sync возвращает didFullSync. */
+  const processChangeLogRows = useCallback(
+    async (userId: string, changes: any[]): Promise<{ didFullSync: boolean }> => {
+      const key = getChangeKey(userId);
       let maxUpdatedAt = lastChangeSeenRef.current || '';
       let fullSyncRequired = false;
       const nodesToUpsert: any[] = [];
@@ -223,13 +232,21 @@ export function SyncManager() {
 
       if (fullSyncRequired) {
         await applyFullCloudSnapshot();
-      } else if (nodesToUpsert.length > 0) {
+        if (maxUpdatedAt) {
+          lastChangeSeenRef.current = maxUpdatedAt;
+          localStorage.setItem(key, maxUpdatedAt);
+        }
+        return { didFullSync: true };
+      }
+      if (nodesToUpsert.length > 0) {
         let db: Awaited<ReturnType<typeof openDB>> | null = null;
         try {
           db = await openDB('LifeRoadmapDB', 2);
           const tx = db.transaction('nodes', 'readwrite');
           for (const node of nodesToUpsert) {
-            await tx.store.put(node);
+            const existing = await tx.store.get(node.id);
+            const winner = pickNewerNodeByUpdatedAt(existing, node);
+            await tx.store.put(winner);
           }
           await tx.done;
           notifyDataUpdated();
@@ -242,35 +259,119 @@ export function SyncManager() {
         lastChangeSeenRef.current = maxUpdatedAt;
         localStorage.setItem(key, maxUpdatedAt);
       }
-    }, (error) => {
-      console.error('[SyncManager] Change log subscription error:', error);
-    });
-  }, [applyFullCloudSnapshot]);
+      return { didFullSync: false };
+    },
+    [applyFullCloudSnapshot]
+  );
 
+  const startChangeListener = useCallback(
+    async (userId: string, opts?: { force?: boolean }) => {
+      const force = opts?.force === true;
+      if (changeUnsubRef.current && changeListenerUserIdRef.current === userId && !force) {
+        log('[startChangeListener] already active for user, skip');
+        return;
+      }
+      if (changeUnsubRef.current) {
+        changeUnsubRef.current();
+        changeUnsubRef.current = null;
+      }
+      changeListenerUserIdRef.current = userId;
+
+      const cleanupKey = `last_change_cleanup_${userId}`;
+      const lastCleanup = localStorage.getItem(cleanupKey);
+      if (!lastCleanup || Date.now() - new Date(lastCleanup).getTime() > 24 * 60 * 60 * 1000) {
+        try {
+          for (let round = 0; round < 12; round++) {
+            const deleted = await cleanupChangeLog(userId, 400);
+            if (deleted === 0) break;
+          }
+        } finally {
+          localStorage.setItem(cleanupKey, new Date().toISOString());
+        }
+      }
+
+      const key = getChangeKey(userId);
+      let since = localStorage.getItem(key);
+      if (!since) {
+        const meta = await getSyncMeta();
+        since = meta?.lastChangedAt || new Date().toISOString();
+        localStorage.setItem(key, since);
+      }
+      lastChangeSeenRef.current = since;
+
+      // Постраничный drain: курсор по max updatedAt в странице (в т.ч. отфильтрованные own-client строки).
+      let drainSince = since;
+      for (let page = 0; page < CHANGE_LOG_DRAIN_MAX_PAGES; page++) {
+        const rows = await fetchChangeLogSincePage(userId, drainSince, CHANGE_LOG_DRAIN_PAGE);
+        if (rows.length === 0) break;
+        let highWater = drainSince;
+        for (const row of rows) {
+          if (row.updatedAt && row.updatedAt > highWater) {
+            highWater = row.updatedAt;
+          }
+        }
+        const { didFullSync } = await processChangeLogRows(userId, rows);
+        drainSince = highWater;
+        lastChangeSeenRef.current = drainSince;
+        localStorage.setItem(key, drainSince);
+        if (didFullSync) break;
+        if (rows.length < CHANGE_LOG_DRAIN_PAGE) break;
+      }
+
+      since = lastChangeSeenRef.current || since;
+
+      changeUnsubRef.current = subscribeToChangeLog(
+        userId,
+        since,
+        async (changes) => {
+          await processChangeLogRows(userId, changes);
+        },
+        (error) => {
+          console.error('[SyncManager] Change log subscription error:', error);
+        }
+      );
+    },
+    [processChangeLogRows]
+  );
+
+  // Возврат на вкладку: инкрементальная проверка без пересоздания onSnapshot (экономия чтений).
   useEffect(() => {
-    const handleActivate = async () => {
-      if (document.hidden) return;
-      if (currentUserIdRef.current) {
-        await startChangeListener(currentUserIdRef.current);
+    const handleVisibility = () => {
+      if (!document.hidden && currentUserIdRef.current) {
+        void loadCloudDataSilently();
       }
     };
-
-    const handleVisibility = () => {
-      void handleActivate();
-    };
-
-    const handleFocus = () => {
-      void handleActivate();
-    };
-
     document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('focus', handleFocus);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [loadCloudDataSilently]);
 
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('focus', handleFocus);
+  useEffect(() => {
+    const scheduleFlush = () => {
+      if (onlineDebounceTimerRef.current) {
+        clearTimeout(onlineDebounceTimerRef.current);
+      }
+      onlineDebounceTimerRef.current = setTimeout(() => {
+        onlineDebounceTimerRef.current = null;
+        void flushPendingLocalCloudPush();
+      }, 2000);
     };
-  }, [startChangeListener]);
+    window.addEventListener('online', scheduleFlush);
+    return () => {
+      window.removeEventListener('online', scheduleFlush);
+      if (onlineDebounceTimerRef.current) {
+        clearTimeout(onlineDebounceTimerRef.current);
+        onlineDebounceTimerRef.current = null;
+      }
+    };
+  }, [flushPendingLocalCloudPush]);
+
+  useEffect(() => {
+    return subscribeCloudFirestoreHealth((event) => {
+      if (event === 'restored' && hasLocalCloudPushPending()) {
+        void flushPendingLocalCloudPush();
+      }
+    });
+  }, [flushPendingLocalCloudPush]);
 
   const handleFirstSync = useCallback(async (isNewLogin: boolean) => {
     try {
@@ -460,6 +561,9 @@ export function SyncManager() {
           changeUnsubRef.current();
           changeUnsubRef.current = null;
         }
+        changeListenerUserIdRef.current = null;
+        resetCloudFirestoreHealth();
+        clearLocalCloudPushPending();
       }
     });
 
@@ -503,7 +607,7 @@ export function SyncManager() {
       // Запускаем синхронизацию в фоне, не блокируя UI
       (async () => {
         try {
-          await syncAllNodesToFirestore(localNodes);
+          await syncAllNodesToFirestore(localNodes, cloudNodes);
           showToast('Локальные данные сохранены в облако');
           log('[handleChooseLocal] Local data synced to cloud');
         } catch (error) {

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Node, NodeRecurrence } from '../types';
 import { t } from '../i18n';
 import { initDB, getNode, getRoot, saveNode, deleteNode } from '../db';
+import { getCurrentUser } from '../firebase/auth';
 import { syncNodeNow } from '../db-sync';
 import { buildBreadcrumbs, getTotalChildCount } from '../utils';
 import { useNodeNavigation } from '../hooks/useHashRoute';
@@ -23,13 +24,13 @@ import { ConfettiEffect } from '../components/ConfettiEffect';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { MobileBottomNav, MobileSection } from '../components/MobileBottomNav';
 import { MobileSettingsTab } from '../components/MobileSettingsTab';
-import { SpringTrees } from '../components/SpringTrees';
 import { FiFolder, FiPlus } from 'react-icons/fi';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMotionPreferences } from '../hooks/useMotionPreferences';
 import { motionDurations, motionTransitions } from '../config/motion';
 import { Z_MOBILE_FAB } from '../config/zLayers';
 import { AMBIENT_SEASON } from '../config/ambientSeason';
+import { SpringTrees } from '../components/SpringTrees';
 
 type SortType = 'none' | 'name' | 'deadline';
 
@@ -680,7 +681,7 @@ export function NodePage() {
     const syncToastId = showToast(isNew ? t('toast.nodeCreated') : t('toast.nodeSaved'), undoAction, {
       isLoading: true,
       persistent: true,
-      subtitle: t('toast.syncingCloud')
+      ...(getCurrentUser() ? { subtitle: t('toast.syncingCloud') } : {}),
     });
     
     // Синхронизируем с облаком асинхронно
@@ -700,7 +701,12 @@ export function NodePage() {
         }
         
         // Обновляем тост: заменяем иконку загрузки на галочку
-        updateToast(syncToastId, { isLoading: false, isSuccess: true, persistent: false });
+        updateToast(syncToastId, {
+          isLoading: false,
+          isSuccess: true,
+          persistent: false,
+          subtitle: undefined,
+        });
       } catch (error) {
         console.error('[NodePage] Error syncing after save:', error);
         // При ошибке просто закрываем тост
@@ -755,7 +761,7 @@ export function NodePage() {
     }, {
       isLoading: true,
       persistent: true,
-      subtitle: t('toast.syncingCloud')
+      ...(getCurrentUser() ? { subtitle: t('toast.syncingCloud') } : {}),
     });
     
     // Синхронизируем удаление с облаком асинхронно
@@ -799,7 +805,12 @@ export function NodePage() {
         }
         
         // Обновляем тост: заменяем иконку загрузки на галочку
-        updateToast(syncToastId, { isLoading: false, isSuccess: true, persistent: false });
+        updateToast(syncToastId, {
+          isLoading: false,
+          isSuccess: true,
+          persistent: false,
+          subtitle: undefined,
+        });
       } catch (error) {
         console.error('[NodePage] Error syncing after delete:', error);
         // При ошибке просто закрываем тост
@@ -1027,7 +1038,7 @@ export function NodePage() {
         await Promise.all(syncPromises);
         
         // Обновляем тост: заменяем иконку загрузки на галочку
-        updateToast(syncToastId, { isLoading: false, isSuccess: true });
+        updateToast(syncToastId, { isLoading: false, isSuccess: true, subtitle: undefined });
         
         // Синхронизируем потомков в фоне (не блокируем UI)
         const syncSubtree = async (node: Node) => {
@@ -1147,13 +1158,12 @@ export function NodePage() {
     const syncToastId = showToast(t('toast.importSuccess'), undefined, {
       isLoading: true,
       persistent: true,
-      subtitle: t('toast.syncingCloud')
+      ...(getCurrentUser() ? { subtitle: t('toast.syncingCloud') } : {}),
     });
     
     // Синхронизируем все узлы с облаком асинхронно (только если пользователь залогинен)
     (async () => {
       try {
-        const { getCurrentUser } = await import('../firebase/auth');
         const user = getCurrentUser();
         
         if (!user) {
@@ -1163,12 +1173,18 @@ export function NodePage() {
         }
         
         const { getAllNodesFlat } = await import('../db');
-        const { syncAllNodesToFirestore } = await import('../firebase/sync');
+        const { syncAllNodesToFirestore, loadAllNodesFromFirestore } = await import('../firebase/sync');
         const allNodes = await getAllNodesFlat();
-        await syncAllNodesToFirestore(allNodes);
+        const cloud = await loadAllNodesFromFirestore(false);
+        await syncAllNodesToFirestore(allNodes, cloud);
         
         // Обновляем тост: заменяем иконку загрузки на галочку
-        updateToast(syncToastId, { isLoading: false, isSuccess: true, persistent: false });
+        updateToast(syncToastId, {
+          isLoading: false,
+          isSuccess: true,
+          persistent: false,
+          subtitle: undefined,
+        });
       } catch (error: any) {
         console.error('[NodePage] Error syncing after import:', error);
         
@@ -1213,7 +1229,7 @@ export function NodePage() {
 
   return (
     <>
-      {/* Fixed + inside overflow-x вызывает привязку к скроллу в iOS Safari — выносим из обёртки страницы */}
+      {/* fixed вне overflow-x — иначе iOS Safari; без отдельной «полосы» — только слой деревьев по Z */}
       {isMobile && AMBIENT_SEASON === 'spring' && <SpringTrees />}
       <div className="flex min-h-screen w-full flex-col overflow-x-hidden bg-slate-100 dark:bg-gray-900">
 

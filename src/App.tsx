@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { NodePage } from './pages/NodePage';
 import { SyncManager } from './components/SyncManager';
 import { SettingsSyncManager } from './components/SettingsSyncManager';
+import { CloudFirestoreHealthModals } from './components/CloudFirestoreHealthModals';
 import { Snowfall } from './components/Snowfall';
 import { SpringPetals } from './components/SpringPetals';
 import { AMBIENT_SEASON } from './config/ambientSeason';
@@ -27,6 +28,7 @@ function AppContent() {
         {AMBIENT_SEASON === 'spring' ? <SpringPetals /> : <Snowfall />}
         <NodePage />
         <SyncManager />
+        <CloudFirestoreHealthModals />
         <ToastList toasts={toasts} onRemove={removeToast} />
       </>
     );

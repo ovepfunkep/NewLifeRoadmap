@@ -131,13 +131,12 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
           <span className="text-sm font-medium text-gray-900 dark:text-gray-100 block truncate">
             {toast.message}
           </span>
-          {toast.isLoading && (
-            <span className="text-xs text-gray-500 dark:text-gray-400 opacity-60 block mt-1 animate-pulse">
-              {t('toast.syncingCloud')}
-            </span>
-          )}
-          {toast.subtitle && !toast.isLoading && (
-            <span className="text-xs text-gray-500 dark:text-gray-400 opacity-60 block mt-1">
+          {toast.subtitle && !(toast.isSuccess === true && !toast.isLoading) && (
+            <span
+              className={`text-xs text-gray-500 dark:text-gray-400 opacity-60 block mt-1 ${
+                toast.isLoading ? 'animate-pulse' : ''
+              }`}
+            >
               {toast.subtitle}
             </span>
           )}

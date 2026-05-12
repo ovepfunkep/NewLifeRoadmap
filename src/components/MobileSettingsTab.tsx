@@ -249,7 +249,10 @@ export function MobileSettingsTab() {
       </div>
 
       {showSecurityModal && (
-        <SecurityChoiceModal onChoice={handleSecurityChoice} />
+        <SecurityChoiceModal
+          onChoice={handleSecurityChoice}
+          onClose={() => setShowSecurityModal(false)}
+        />
       )}
 
       <CopyrightNotice className="mt-6 text-center" />

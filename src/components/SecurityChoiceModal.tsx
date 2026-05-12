@@ -1,17 +1,54 @@
+import { useEffect, useRef } from 'react';
 import { FiShield, FiHardDrive, FiLock } from 'react-icons/fi';
 import { Z_MODAL } from '../config/zLayers';
 
 interface SecurityChoiceModalProps {
   onChoice: (choice: 'gdrive' | 'firestore') => void;
+  onClose: () => void;
 }
 
-export function SecurityChoiceModal({ onChoice }: SecurityChoiceModalProps) {
+export function SecurityChoiceModal({ onChoice, onClose }: SecurityChoiceModalProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const clickStartRef = useRef<{ inside: boolean } | null>(null);
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape, true);
+    return () => window.removeEventListener('keydown', handleEscape, true);
+  }, [onClose]);
+
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    clickStartRef.current = {
+      inside: panelRef.current?.contains(e.target as globalThis.Node) || false,
+    };
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (!clickStartRef.current?.inside) {
+      const endedInside = panelRef.current?.contains(e.target as globalThis.Node) || false;
+      if (!endedInside) onClose();
+    }
+    clickStartRef.current = null;
+  };
+
   return (
     <div
       className="fixed inset-0 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
       style={{ zIndex: Z_MODAL }}
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
     >
-      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl animate-in zoom-in duration-300 dark:bg-gray-800">
+      <div
+        ref={panelRef}
+        className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl animate-in zoom-in duration-300 dark:bg-gray-800"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="p-6">
           <div className="flex items-center gap-4 mb-8">
             <div className="w-12 h-12 bg-accent/10 rounded-full flex items-center justify-center shrink-0" style={{ color: 'var(--accent)' }}>
