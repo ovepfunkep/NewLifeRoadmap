@@ -62,6 +62,18 @@ jobs:
           echo "Building with base path: $GITHUB_PAGES_BASE"
           npm run build
 
+      - name: Verify production bundle (not dev index.html)
+        run: |
+          if grep -qE 'src/main\.tsx|/src/main' dist/index.html; then
+            echo '::error::dist/index.html still references Vite dev entry — deploy aborted.'
+            exit 1
+          fi
+          if ! grep -qE 'assets/.*\.(js|mjs)' dist/index.html; then
+            echo '::error::dist/index.html must reference a hashed assets/*.js bundle.'
+            exit 1
+          fi
+          echo 'OK: dist/index.html is a Vite production build.'
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
