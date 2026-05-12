@@ -1,9 +1,12 @@
-import { FiGithub, FiSettings } from 'react-icons/fi';
+import { FiGithub, FiDollarSign, FiSettings } from 'react-icons/fi';
 import { FaTelegram } from 'react-icons/fa';
 import { Tooltip } from './Tooltip';
 import { AuthAvatar } from './AuthAvatar';
 import { CopyrightNotice } from './CopyrightNotice';
+import { SupportAuthorModal } from './SupportAuthorModal';
 import { t } from '../i18n';
+import { BOOSTY_SUPPORT_URL } from '../utils/constants';
+import { useToast } from '../hooks/useToast';
 import { useEffect, useState } from 'react';
 
 interface FooterProps {
@@ -12,6 +15,18 @@ interface FooterProps {
 
 export function Footer({ onOpenSettings }: FooterProps) {
   const [isMobile, setIsMobile] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
+  const { showToast } = useToast();
+
+  const handleSupportAuthor = async () => {
+    try {
+      await navigator.clipboard.writeText(BOOSTY_SUPPORT_URL);
+      showToast(t('toast.supportLinkCopied'), undefined, { type: 'success' });
+    } catch {
+      showToast(t('toast.supportLinkCopyFail'), undefined, { type: 'warning' });
+    }
+    setSupportOpen(true);
+  };
 
   useEffect(() => {
     const checkMobile = () => {
@@ -23,7 +38,8 @@ export function Footer({ onOpenSettings }: FooterProps) {
   }, []);
 
   return (
-    <footer className="border-t border-gray-200 dark:border-gray-700 mt-auto bg-transparent">
+    <>
+      <footer className="border-t border-gray-200 dark:border-gray-700 mt-auto bg-transparent">
       <div className="container mx-auto px-4 py-4 lg:px-2 xl:px-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-2 sm:gap-4">
@@ -49,6 +65,17 @@ export function Footer({ onOpenSettings }: FooterProps) {
               >
                 <FiGithub size={22} className="sm:w-5 sm:h-5" />
               </a>
+            </Tooltip>
+            <Tooltip text={t('tooltip.supportAuthor')}>
+              <button
+                type="button"
+                onClick={handleSupportAuthor}
+                aria-label={t('support.modalTitle')}
+                className="p-3 sm:p-2 rounded-lg transition-all hover:bg-accent/10 hover:brightness-150"
+                style={{ color: 'var(--accent)' }}
+              >
+                <FiDollarSign size={22} className="sm:w-5 sm:h-5" />
+              </button>
             </Tooltip>
             {isMobile && onOpenSettings && (
               <Tooltip text={t('footer.settings')}>
@@ -87,6 +114,8 @@ export function Footer({ onOpenSettings }: FooterProps) {
         <CopyrightNotice className="mt-3 text-center sm:text-left" />
       </div>
     </footer>
+      {supportOpen && <SupportAuthorModal onClose={() => setSupportOpen(false)} />}
+    </>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FiGithub, FiLogIn, FiLogOut } from 'react-icons/fi';
+import { FiGithub, FiDollarSign, FiLogIn, FiLogOut } from 'react-icons/fi';
 import { FaTelegramPlane } from 'react-icons/fa';
 import { useAccent } from '../hooks/useAccent';
 import { useEffects } from '../hooks/useEffects';
@@ -12,6 +12,9 @@ import { getCurrentUser, onAuthChange, signInWithGoogle, signOutUser } from '../
 import { setupSecurity } from '../utils/securityManager';
 import { SecurityChoiceModal } from './SecurityChoiceModal';
 import { CopyrightNotice } from './CopyrightNotice';
+import { SupportAuthorModal } from './SupportAuthorModal';
+import { Tooltip } from './Tooltip';
+import { BOOSTY_SUPPORT_URL } from '../utils/constants';
 
 export function MobileSettingsTab() {
   const { theme, setTheme } = useTheme();
@@ -21,6 +24,7 @@ export function MobileSettingsTab() {
   const { showToast } = useToast();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [showSecurityModal, setShowSecurityModal] = useState(false);
+  const [supportModalOpen, setSupportModalOpen] = useState(false);
 
   useEffect(() => {
     const currentUser = getCurrentUser();
@@ -88,6 +92,16 @@ export function MobileSettingsTab() {
     }
   };
 
+  const handleSupportBoosty = async () => {
+    try {
+      await navigator.clipboard.writeText(BOOSTY_SUPPORT_URL);
+      showToast(t('toast.supportLinkCopied'), undefined, { type: 'success' });
+    } catch {
+      showToast(t('toast.supportLinkCopyFail'), undefined, { type: 'warning' });
+    }
+    setSupportModalOpen(true);
+  };
+
   const renderSwitch = (enabled: boolean, onToggle: () => void, ariaLabel: string) => (
     <button
       type="button"
@@ -109,7 +123,8 @@ export function MobileSettingsTab() {
   );
 
   return (
-    <section className="space-y-4">
+    <>
+      <section className="space-y-4">
       <div className="space-y-2">
         <div className="flex items-center justify-between rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-700">
           <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t('settingsTab.darkTheme')}</p>
@@ -220,6 +235,17 @@ export function MobileSettingsTab() {
           <FiGithub size={14} />
           <span>{t('tooltip.github')}</span>
         </a>
+        <Tooltip text={t('tooltip.supportAuthor')}>
+          <button
+            type="button"
+            onClick={handleSupportBoosty}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-current px-3 py-2 text-sm font-semibold transition-colors hover:bg-accent/10"
+            style={{ color: 'var(--accent)' }}
+          >
+            <FiDollarSign size={14} />
+            <span>{t('support.modalTitle')}</span>
+          </button>
+        </Tooltip>
       </div>
 
       {showSecurityModal && (
@@ -228,5 +254,7 @@ export function MobileSettingsTab() {
 
       <CopyrightNotice className="mt-6 text-center" />
     </section>
+    {supportModalOpen && <SupportAuthorModal onClose={() => setSupportModalOpen(false)} />}
+  </>
   );
 }

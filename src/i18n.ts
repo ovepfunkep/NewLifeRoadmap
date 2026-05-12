@@ -144,6 +144,8 @@ export const i18n: Record<Language, Record<string, any>> = {
       doNotClose: 'Do not close the page',
       syncingCloud: 'Updating cloud data...',
       syncChecking: 'Checking data synchronization...',
+      supportLinkCopied: 'Boosty link copied to clipboard',
+      supportLinkCopyFail: 'Could not copy — paste manually from the modal',
     },
     sync: {
       signIn: 'Sign in with Google',
@@ -164,12 +166,20 @@ export const i18n: Record<Language, Record<string, any>> = {
       signOut: 'Sign out',
       telegram: "Author's Telegram",
       github: 'Project on GitHub',
+      supportAuthor:
+        'Coffee → New features ☕',
       removePriority: 'Remove priority',
       priority: 'Priority task',
     },
     footer: {
       refreshMemory: 'Add tutorial',
       settings: 'Settings',
+    },
+    support: {
+      modalTitle: 'Support the author',
+      modalBody:
+        "You're keeping the project alive — thank you!",
+      openBoosty: 'Open Boosty',
     },
     mobileNav: {
       tasks: 'Tasks',
@@ -424,6 +434,8 @@ export const i18n: Record<Language, Record<string, any>> = {
       doNotClose: 'Не закрывайте страницу',
       syncingCloud: 'Обновляем данные в облаке...',
       syncChecking: 'Проверка синхронизации данных...',
+      supportLinkCopied: 'Ссылка на Boosty скопирована',
+      supportLinkCopyFail: 'Не удалось скопировать — открой ссылку из модалки',
     },
     sync: {
       signIn: 'Войти через Google',
@@ -444,12 +456,20 @@ export const i18n: Record<Language, Record<string, any>> = {
       signOut: 'Выйти из аккаунта',
       telegram: 'Telegram автора',
       github: 'Проект на GitHub',
+      supportAuthor:
+        'На развитие проекта ☕',
       removePriority: 'Убрать приоритет',
       priority: 'Приоритетная задача',
     },
     footer: {
       refreshMemory: 'Добавить туториал',
       settings: 'Настройки',
+    },
+    support: {
+      modalTitle: 'Поддержать автора',
+      modalBody:
+        'Так проект остаётся на плаву — спасибо!',
+      openBoosty: 'Открыть Boosty',
     },
     mobileNav: {
       tasks: 'Задачи',
