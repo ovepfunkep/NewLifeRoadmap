@@ -26,6 +26,9 @@ export const Z_MOBILE_FAB = 84;
 /** Тосты: над модалками и tooltip — иначе оказываются под backdrop-blur */
 export const Z_TOAST = 130;
 
+/** Превью перетаскиваемой карточки — над шапкой и ambient, под модалками */
+export const Z_DRAG_GHOST = 95;
+
 /** Стандартный fullscreen overlay модалок */
 export const Z_MODAL = 100;
 
