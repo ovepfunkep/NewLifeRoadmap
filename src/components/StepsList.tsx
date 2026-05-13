@@ -296,6 +296,7 @@ export function StepsList({
               {sortedChildren.map((child, index) => (
                 <motion.div
                   key={child.id}
+                  className="[content-visibility:auto] [contain-intrinsic-size:auto_5rem]"
                   layout={effectsEnabled ? 'position' : false}
                   initial={effectsEnabled ? { opacity: 0, scale: 0.95, y: 14 } : false}
                   animate={{ opacity: 1, scale: 1, y: 0 }}

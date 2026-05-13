@@ -21,6 +21,8 @@ Required Firebase variables are listed in `.env.example`.
 
 For full Firebase configuration, see [FIREBASE_SETUP.md](../FIREBASE_SETUP.md).
 
+Operations (billing, App Check rollout, maintenance): [RUNBOOK.md](RUNBOOK.md). Firestore read scenarios: [FIRESTORE_LOAD_SCENARIOS.md](FIRESTORE_LOAD_SCENARIOS.md).
+
 ## Scripts
 
 - `npm run dev` - run Vite dev server
@@ -41,6 +43,12 @@ npm run verify
 ```
 
 4. Update docs (`README`, `docs/*`, `AGENTS.md`) if behavior or workflow changed.
+
+### PR checklist (sync / Firestore)
+
+- Не плодить лишние `onSnapshot` на каждый focus.
+- Если полный снимок облака уже в памяти, передавать его вторым аргументом в `syncAllNodesToFirestore`, чтобы не вызывать внутренний `getDocs` по всей коллекции.
+- Для **пустого облака** при первом синке передавать `[]`, а не опускать аргумент ([`SyncManager.tsx`](../src/components/SyncManager.tsx)).
 
 ## Firestore usage (reads / quotas)
 

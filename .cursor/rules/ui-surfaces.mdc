@@ -1,0 +1,12 @@
+---
+description: Surfaces vs background — avoid redundant borders on Tailwind/UI
+globs:
+  - "src/**/*.{tsx,css}"
+alwaysApply: true
+---
+
+# High-contrast surfaces — no redundant borders
+
+- Do **not** add **`border`**, ornamental **`outline`**, or **`ring`** just to «frame» a block when it is **already visually separated** from the surrounding chrome by **surface contrast**: solid `bg-*`, clear luminance delta vs ambient background in both light and dark themes.
+- One cue is enough: if fill already reads as a distinct surface, a stroke doubles the accent and adds noise.
+- Exceptions: semantics (validation error states), focus-visible outlines, actionable control chrome, **true dividers** (hairline separators). Those are fine; decorative card borders solely on top of a contrasting panel are what we skip.

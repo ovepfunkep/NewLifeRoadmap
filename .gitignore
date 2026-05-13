@@ -12,10 +12,10 @@ dist
 dist-ssr
 *.local
 
-# Environment variables
+# Environment variables (шаблон .env.example — в репо)
 .env
-.env.local
-.env.production.local
+.env.*
+!.env.example
 
 # Editor directories and files
 .vscode/*
@@ -33,5 +33,18 @@ coverage
 
 GOOGLE_SYNC_PLAN.md
 
-# Cursor IDE — правила, планы, кэш агента (локально, не в репо)
-.cursor/
+# Локальные / личные markdown (README, AGENTS, docs/** не трогаем)
+*.local.md
+*-private.md
+PRIVATE*.md
+SCRATCH*.md
+NOTES.local.md
+
+# Ключи и учётки (на случай если положат в корень проекта)
+*firebase-adminsdk*.json
+serviceAccount*.json
+*.pem
+*.p12
+
+# Cursor IDE — автопланы чата (правила в .cursor/rules остаются отслеживаемыми)
+.cursor/plans/

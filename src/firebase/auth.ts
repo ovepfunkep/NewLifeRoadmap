@@ -7,6 +7,7 @@ import {
   Auth
 } from 'firebase/auth';
 import { initFirebase } from './config';
+import { clearGoogleAccessToken, setGoogleAccessToken } from '../utils/googleAccessToken';
 
 // Инициализируем Firebase при импорте
 let auth: Auth | null = null;
@@ -36,7 +37,7 @@ export async function signInWithGoogle(withDrive: boolean = false): Promise<User
   // Сохраняем access token для работы с Google API (если нужно)
   const credential = GoogleAuthProvider.credentialFromResult(result);
   if (credential?.accessToken) {
-    localStorage.setItem('google_access_token', credential.accessToken);
+    setGoogleAccessToken(credential.accessToken);
   }
   
   return result.user;
@@ -51,7 +52,7 @@ export async function signOutUser(): Promise<void> {
     auth = fb.auth;
   }
   
-  localStorage.removeItem('google_access_token');
+  clearGoogleAccessToken();
   await signOut(auth!);
 }
 

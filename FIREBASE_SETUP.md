@@ -65,6 +65,27 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
 VITE_FIREBASE_APP_ID=1:123456789:web:abc123
 ```
 
+## Шаг 5b: App Check (рекомендуется для продакшена)
+
+1. Firebase Console → **App Check** → зарегистрируйте веб-приложение с провайдером **reCAPTCHA v3**.
+2. Скопируйте **site key** (не secret key) в `.env`:
+
+```env
+VITE_FIREBASE_APP_CHECK_RECAPTCHA_SITE_KEY=ваш_site_key
+```
+
+3. Клиент подхватывает ключ в [`src/firebase/config.ts`](src/firebase/config.ts). Без ключа App Check не инициализируется (удобно для локальной разработки).
+
+**Локальная отладка:** в [Firebase App Check debug](https://firebase.google.com/docs/app-check/web/debug-provider) зарегистрируйте debug token, затем:
+
+```env
+VITE_APP_CHECK_DEBUG_TOKEN=ваш_debug_token
+```
+
+(только для `npm run dev`; в `config.ts` debug включается в режиме development.)
+
+**Усиление Firestore:** когда все клиенты стабильно получают App Check token, можно добавить в правила проверку `request.app != null` (см. комментарий в [`firestore.rules`](firestore.rules) и [docs/RUNBOOK.md](docs/RUNBOOK.md)).
+
 ## Шаг 6: Настройка правил безопасности Firestore
 
 Источник правды в репозитории: файл [`firestore.rules`](firestore.rules) (включает пути `nodes`, `settings`, `security` для синка и ключей).
@@ -124,5 +145,8 @@ firebase deploy --only firestore:rules
   - `VITE_FIREBASE_STORAGE_BUCKET`
   - `VITE_FIREBASE_MESSAGING_SENDER_ID`
   - `VITE_FIREBASE_APP_ID`
-4. Обновите `.github/workflows/deploy.yml` для использования этих секретов в `env`
+4. Опционально (см. шаг 5b и [docs/RUNBOOK.md](docs/RUNBOOK.md)):
+  - `VITE_FIREBASE_APP_CHECK_RECAPTCHA_SITE_KEY`
+  - `VITE_SENTRY_DSN` — отчёты об ошибках без PII ([`src/main.tsx`](src/main.tsx))
+5. Workflow [`deploy.yml`](.github/workflows/deploy.yml) уже передаёт эти переменные в `npm run build`, если секреты заданы.
 

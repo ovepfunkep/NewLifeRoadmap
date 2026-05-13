@@ -2,11 +2,13 @@
  * Утилиты для работы с Google Drive API (appDataFolder)
  */
 
+import { readGoogleAccessToken } from './googleAccessToken';
+
 const DRIVE_API_URL = 'https://www.googleapis.com/drive/v3/files';
 const SYNC_KEY_FILENAME = 'sync_key.txt';
 
 async function getAccessToken(): Promise<string> {
-  const token = localStorage.getItem('google_access_token');
+  const token = readGoogleAccessToken();
   if (!token) throw new Error('No Google access token found');
   return token;
 }

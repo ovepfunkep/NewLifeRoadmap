@@ -2,6 +2,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Опционально после включения App Check на всех клиентах (см. docs/RUNBOOK.md, src/firebase/config.ts):
+    //   allow read, write: if request.auth != null && request.auth.uid == userId && request.app != null;
+    // Пока не включайте в проде, пока не убедитесь, что Web SDK отдаёт валидный App Check token.
+
     // --- Production: пользователь только со своими данными ---
     match /users/{userId}/nodes/{nodeId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;

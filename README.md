@@ -55,6 +55,7 @@ npm run verify
 - [Development guide](./docs/DEVELOPMENT.md)
 - [Architecture overview](./docs/ARCHITECTURE.md)
 - [Firebase setup](./FIREBASE_SETUP.md)
+- [Production / incidents runbook](./docs/RUNBOOK.md)
 - [Agent guide](./AGENTS.md)
 - [Project report (expanded)](./docs/PROJECT_REPORT.md)
 

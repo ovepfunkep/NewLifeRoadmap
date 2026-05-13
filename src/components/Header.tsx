@@ -226,6 +226,7 @@ export function Header({
               }}
             >
               {AMBIENT_SEASON === 'winter' && <Garland />}
+              {/* Мобильная сакура — общая полоска в NodePage на всех вкладках */}
               {AMBIENT_SEASON === 'spring' && !isMobile && <SpringTrees />}
               {/* Match main `container`: no max-w-full override (would stretch to full viewport) */}
               <div className="container relative mx-auto px-4 pb-6 pt-8 lg:px-2 xl:px-4">

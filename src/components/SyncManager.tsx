@@ -460,9 +460,9 @@ export function SyncManager() {
           }
         }
       } else {
-        // Если в облаке пусто - выгружаем локальные данные
+        // Если в облаке пусто - выгружаем локальные данные (передаём [] — без второго полного getDocs внутри bulk sync)
         if (local.length > 0) {
-          await syncAllNodesToFirestore(local);
+          await syncAllNodesToFirestore(local, []);
         }
         if (checkToastIdRef.current) {
           removeToast(checkToastIdRef.current);

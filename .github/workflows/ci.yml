@@ -20,6 +20,9 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Assert Firestore config present
+        run: test -f firestore.rules && test -f firebase.json
+
       - name: Install dependencies
         run: npm ci
 

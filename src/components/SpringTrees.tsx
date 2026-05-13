@@ -3,7 +3,7 @@ import { Z_HEADER_DECOR } from '../config/zLayers';
 import { useEffects } from '../hooks/useEffects';
 import sakuraTreeUrl from '../assets/SakuraTree.png';
 
-/** Декор для весны: ряд деревьев сакуры в шапке. */
+/** Декор для весны: ряд деревьев сакуры, fixed-оверлей сверху (над шапкой по z-index). */
 export function SpringTrees() {
   const { effectsEnabled } = useEffects();
   const [screenWidth, setScreenWidth] = useState(0);
