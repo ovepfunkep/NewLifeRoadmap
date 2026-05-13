@@ -22,9 +22,36 @@ if (typeof sentryDsn === 'string' && sentryDsn.trim() !== '') {
   });
 }
 
-// Полная регистрация через workbox-window: проверка обновлений и перезагрузка при новой версии.
-// Без этого однострочный registerSW.js из билда только регистрирует SW и не подхватывает деплои после F5.
-registerSW({ immediate: true });
+// PWA: при новой версии SW перезагружаем страницу (registerType: 'autoUpdate' в vite.config).
+// controllerchange — когда активировался новый worker; первый запуск без SW пропускаем без reload.
+function setupServiceWorkerAutoReload() {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+
+  let skipNextControllerChange = !navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (skipNextControllerChange) {
+      skipNextControllerChange = false;
+      return;
+    }
+    window.location.reload();
+  });
+}
+
+setupServiceWorkerAutoReload();
+
+registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    window.location.reload();
+  },
+  onRegisteredSW(_swUrl, registration) {
+    if (!registration) return;
+    const id = window.setInterval(() => {
+      void registration.update();
+    }, 60 * 60 * 1000);
+    window.addEventListener('beforeunload', () => window.clearInterval(id));
+  },
+});
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
