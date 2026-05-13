@@ -219,7 +219,7 @@ export function SettingsWidget({
       {/* Шестеренка (свернутое состояние) - отцентрирована внутри контейнера */}
       {showLauncher && (
         <div
-        className="absolute flex items-center justify-center transition-all duration-[333ms] ease-in-out backdrop-blur-md bg-white/30 dark:bg-gray-900/30 border border-gray-300/50 dark:border-gray-800/50 rounded-2xl shadow-lg hover:shadow-xl hover:bg-white/40 dark:hover:bg-gray-900/40"
+        className="absolute flex items-center justify-center transition-all duration-[333ms] ease-in-out backdrop-blur-md bg-white/30 dark:bg-gray-900/30 border border-gray-300/50 dark:border-gray-800/50 rounded-2xl shadow-lg hover:shadow-xl hover:bg-white/40 dark:hover:bg-gray-900/40 lg:rounded-xl"
         style={{
           width: `${gearSize + 16}px`,
           height: `${gearSize + 16}px`,
@@ -412,7 +412,7 @@ export function SettingsWidget({
             onClick={() => setShowPalette(false)}
           />
           <div 
-            className="absolute rounded-lg bg-white/80 shadow-xl backdrop-blur-md dark:bg-gray-800/80"
+            className="absolute rounded-lg bg-white/80 shadow-xl backdrop-blur-md dark:bg-gray-800/80 lg:rounded-xl"
             onClick={(e) => e.stopPropagation()}
             onMouseEnter={() => {
               if (timeoutRef.current !== null && !isMobile) {

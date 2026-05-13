@@ -121,6 +121,32 @@ export function getProgressCounts(node: Node): { completed: number; total: numbe
   return { completed: completedCount, total: leaves.length };
 }
 
+/** Child row ordering in StepsList / keyboard shortcuts (priority & completion first). */
+export type StepsSortType = 'name' | 'deadline';
+
+export function compareChildNodesForListSort(
+  a: Node,
+  b: Node,
+  sortType: StepsSortType,
+  ascending: boolean,
+): number {
+  if (a.priority && !b.priority) return -1;
+  if (!a.priority && b.priority) return 1;
+  if (a.completed && !b.completed) return 1;
+  if (!a.completed && b.completed) return -1;
+
+  let cmp = 0;
+  if (sortType === 'name') {
+    cmp = a.title.localeCompare(b.title);
+  } else {
+    if (!a.deadline && !b.deadline) cmp = 0;
+    else if (!a.deadline) cmp = 1;
+    else if (!b.deadline) cmp = -1;
+    else cmp = new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+  }
+  return ascending ? cmp : -cmp;
+}
+
 // Статус дедлайна
 export function deadlineStatus(node: Node): DeadlineStatus {
   if (!node.deadline) {

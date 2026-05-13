@@ -18,7 +18,7 @@ export function SupportAuthorModal({ onClose }: SupportAuthorModalProps) {
       role="presentation"
     >
       <div
-        className="animate-in zoom-in-95 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl duration-200 dark:bg-gray-800"
+        className="animate-in zoom-in-95 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl duration-200 dark:bg-gray-800 lg:rounded-xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-labelledby="support-modal-title"

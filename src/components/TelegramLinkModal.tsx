@@ -17,7 +17,7 @@ export function TelegramLinkModal({ onClose }: TelegramLinkModalProps) {
       className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
       style={{ zIndex: Z_MODAL_HIGH }}
     >
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md animate-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md animate-in zoom-in-95 duration-200 lg:rounded-xl">
         <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
           <span className="text-2xl">🤖</span> {t('telegram.linking')}
         </h2>

@@ -46,7 +46,7 @@ export function SecurityChoiceModal({ onChoice, onClose }: SecurityChoiceModalPr
     >
       <div
         ref={panelRef}
-        className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl animate-in zoom-in duration-300 dark:bg-gray-800"
+        className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl animate-in zoom-in duration-300 dark:bg-gray-800 lg:rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6">

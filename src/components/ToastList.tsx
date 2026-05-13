@@ -114,7 +114,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
 
   return (
     <div 
-      className={`relative min-w-[300px] max-w-[400px] flex flex-col overflow-hidden rounded-2xl shadow-lg transition-shadow duration-300 ${
+      className={`relative min-w-[300px] max-w-[400px] flex flex-col overflow-hidden rounded-2xl shadow-lg transition-shadow duration-300 lg:rounded-xl ${
         typeStyles[currentType]
       } ${
         !isPersistent && !toast.isLoading ? 'cursor-pointer hover:shadow-xl' : ''
@@ -181,7 +181,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
 
       {/* Прогресс-бар внизу тоста */}
       {showProgressBar && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200/50 dark:bg-gray-700/50 overflow-hidden rounded-b-2xl">
+        <div className="absolute bottom-0 left-0 right-0 h-1 overflow-hidden rounded-b-2xl bg-[var(--surface-subtle)] dark:bg-gray-700/50">
           <motion.div
             className="h-full"
             initial={{ width: '100%' }}

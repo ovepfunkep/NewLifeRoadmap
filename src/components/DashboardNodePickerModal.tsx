@@ -145,7 +145,7 @@ export function DashboardNodePickerModal({ selectedNodeId, onSelectNode, onClose
   if (!rootNode) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm" style={{ zIndex: Z_MODAL }}>
-        <div className="rounded-lg bg-white p-6 dark:bg-gray-800">
+        <div className="rounded-lg bg-white p-6 dark:bg-gray-800 lg:rounded-xl">
           <p className="text-gray-600 dark:text-gray-400">{t('general.loading')}</p>
         </div>
       </div>
@@ -161,7 +161,7 @@ export function DashboardNodePickerModal({ selectedNodeId, onSelectNode, onClose
     >
       <div
         ref={modalRef}
-        className="mx-4 flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-gray-800"
+        className="mx-4 flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-gray-800 lg:rounded-xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="border-b border-gray-200 p-6 dark:border-gray-700">

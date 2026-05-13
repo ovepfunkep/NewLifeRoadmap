@@ -25,7 +25,7 @@ export function AuthRequiredModal({ onClose, onSuccess }: AuthRequiredModalProps
       className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200"
       style={{ zIndex: Z_MODAL_HIGH }}
     >
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-sm animate-in zoom-in-95 duration-200 text-center">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-sm animate-in zoom-in-95 duration-200 text-center lg:rounded-xl">
         <div className="w-20 h-20 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-6">
           <span className="text-4xl">🔐</span>
         </div>

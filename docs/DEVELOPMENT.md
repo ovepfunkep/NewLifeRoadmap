@@ -37,11 +37,13 @@ Operations (billing, App Check rollout, maintenance): [RUNBOOK.md](RUNBOOK.md). 
 
 1. Create a focused branch.
 2. Implement minimal change set.
-3. Run:
+3. Before pushing or opening a PR, run:
 
 ```bash
 npm run verify
 ```
+
+   For **substantive** code (logic, types, data, hooks), run it while iterating too. **Purely visual** Tailwind/class-only edits may skip a local run until pre-push; see **Verification** in [`AGENTS.md`](../AGENTS.md).
 
 4. Update docs (`README`, `docs/*`, `AGENTS.md`) if behavior or workflow changed.
 

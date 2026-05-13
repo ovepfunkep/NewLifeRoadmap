@@ -933,7 +933,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
           )}
 
           <div
-            className={`rounded-2xl bg-gray-50 dark:bg-gray-900/50 ${
+            className={`rounded-2xl bg-gray-50 dark:bg-gray-900/50 lg:rounded-xl ${
               isMobile ? 'space-y-3 p-3' : 'space-y-4 p-4'
             }`}
           >
@@ -1124,7 +1124,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
           
           {/* Блок уведомлений Telegram */}
           {((!isRecurring && deadlineDate) || isRecurring) && (
-            <div className="space-y-4 rounded-2xl bg-gray-50 p-4 dark:bg-gray-900/50">
+            <div className="space-y-4 rounded-2xl bg-gray-50 p-4 dark:bg-gray-900/50 lg:rounded-xl">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
                   {t('telegram.title')}
@@ -1273,7 +1273,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
         >
           <motion.div
             ref={modalRef}
-            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4"
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 lg:rounded-xl"
             onClick={(e) => e.stopPropagation()}
             initial={allowEssentialMotion ? { y: 20, scale: 0.98, opacity: 0.92 } : { opacity: 1 }}
             animate={allowEssentialMotion ? { y: 0, scale: 1, opacity: 1 } : { opacity: 1 }}

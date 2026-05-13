@@ -143,7 +143,7 @@ function ChartCard({
   chartHeightClassName = 'h-56 sm:h-64',
 }: ChartCardProps) {
   return (
-    <section className={`rounded-2xl bg-white px-4 py-3 shadow-sm dark:bg-gray-800 ${className}`}>
+    <section className={`rounded-2xl bg-white px-4 py-3 shadow-sm dark:bg-gray-800 lg:rounded-xl ${className}`}>
       <h3 className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
       <div className={`min-h-0 ${chartHeightClassName}`}>{children}</div>
     </section>
@@ -486,7 +486,7 @@ export function DashboardContent({
 
   return (
     <>
-      <div className={className ?? 'flex h-full w-full flex-col overflow-hidden rounded-2xl bg-slate-100 dark:bg-slate-900'}>
+      <div className={className ?? 'flex h-full w-full flex-col overflow-hidden rounded-2xl bg-slate-100 dark:bg-slate-900 lg:rounded-xl'}>
         <div
           className={`space-y-3 px-0 py-3 sm:px-5 sm:py-4 ${
             isMobile ? '' : 'border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
@@ -519,7 +519,7 @@ export function DashboardContent({
           )}
 
           <div className="rounded-xl bg-white p-3 shadow-sm dark:bg-gray-800">
-            <div className="flex w-full min-w-0 items-center gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-700/60">
+            <div className="flex w-full min-w-0 items-center gap-1 rounded-lg bg-gray-100 px-1.5 py-2.5 dark:bg-gray-700/60">
               {PERIODS.map((item) => (
                 <button
                   key={item}
@@ -537,11 +537,11 @@ export function DashboardContent({
               ))}
             </div>
 
-            <div className="mt-2 flex w-full min-w-0 gap-1">
+            <div className="mt-5 flex w-full min-w-0 gap-1">
               <button
                 type="button"
                 onClick={() => handleShiftPeriod(-1)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-200/85 p-0 text-gray-600 transition-colors hover:bg-gray-300/70 dark:bg-gray-600/55 dark:text-gray-300 dark:hover:bg-gray-500/55"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-subtle)] p-0 text-gray-600 transition-colors hover:bg-gray-100 dark:bg-gray-900/55 dark:text-gray-300 dark:hover:bg-gray-800/80"
                 title={t('dashboard.periodBack')}
               >
                 <FiChevronLeft size={15} />
@@ -557,7 +557,7 @@ export function DashboardContent({
               <button
                 type="button"
                 onClick={() => handleShiftPeriod(1)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-200/85 p-0 text-gray-600 transition-colors hover:bg-gray-300/70 dark:bg-gray-600/55 dark:text-gray-300 dark:hover:bg-gray-500/55"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-subtle)] p-0 text-gray-600 transition-colors hover:bg-gray-100 dark:bg-gray-900/55 dark:text-gray-300 dark:hover:bg-gray-800/80"
                 title={t('dashboard.periodForward')}
               >
                 <FiChevronRight size={15} />
@@ -572,18 +572,18 @@ export function DashboardContent({
               {t('general.loading')}
             </div>
           ) : stats.isLeafSelection ? (
-            <div className="flex h-full flex-col items-center justify-center rounded-2xl bg-yellow-50 p-8 text-center dark:bg-yellow-900/20">
+            <div className="flex h-full flex-col items-center justify-center rounded-2xl bg-yellow-50 p-8 text-center dark:bg-yellow-900/20 lg:rounded-xl">
               <h3 className="text-xl font-bold text-yellow-900 dark:text-yellow-100">{t('dashboard.warningLeafTitle')}</h3>
               <p className="mt-2 text-sm text-yellow-800 dark:text-yellow-200">{t('dashboard.warningLeafText')}</p>
             </div>
           ) : !hasChartData ? (
-            <div className="flex h-full flex-col items-center justify-center rounded-2xl bg-white p-8 text-center dark:bg-gray-800">
+            <div className="flex h-full flex-col items-center justify-center rounded-2xl bg-white p-8 text-center dark:bg-gray-800 lg:rounded-xl">
               <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">{t('dashboard.warningNoDataTitle')}</h3>
               <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{t('dashboard.warningNoDataText')}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
-              <section className="rounded-2xl bg-white p-2 shadow-sm xl:col-span-4 dark:bg-gray-800">
+              <section className="rounded-2xl bg-white p-2 shadow-sm xl:col-span-4 dark:bg-gray-800 lg:rounded-xl">
                 <div className="overflow-x-auto">
                   <div className="grid min-w-[640px] grid-cols-4 divide-x divide-gray-200 dark:divide-gray-700">
                     {kpis.map((item) => (
@@ -742,7 +742,7 @@ export function DashboardContent({
                 </ResponsiveContainer>
               </ChartCard>
 
-              <section className="rounded-2xl bg-white p-4 shadow-sm xl:col-span-4 dark:bg-gray-800">
+              <section className="rounded-2xl bg-white p-4 shadow-sm xl:col-span-4 dark:bg-gray-800 lg:rounded-xl">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
                     {t('dashboard.chartProjectsTreemap')}

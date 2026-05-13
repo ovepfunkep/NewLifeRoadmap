@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Node } from '../types';
 import { t } from '../i18n';
+import { compareChildNodesForListSort, type StepsSortType } from '../utils';
 import { NodeCard } from './NodeCard';
 import { Tooltip } from './Tooltip';
-import { FiCalendar, FiPlus, FiSliders } from 'react-icons/fi';
+import { FiArrowDown, FiArrowUp, FiCalendar, FiPlus, FiSliders, FiType } from 'react-icons/fi';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { useEffects } from '../hooks/useEffects';
 import { MobileBottomSheet } from './MobileBottomSheet';
 import { useMotionPreferences } from '../hooks/useMotionPreferences';
 import { motionTransitions } from '../config/motion';
 
-type SortType = 'none' | 'name' | 'deadline';
 type FilterType = 'all' | 'completed' | 'incomplete';
 
 interface StepsListProps {
@@ -27,8 +27,9 @@ interface StepsListProps {
   onDragLeave?: () => void;
   draggedNode?: Node | null;
   dragOverNodeId?: string | null;
-  sortType: SortType;
-  onSortChange: (sort: SortType) => void;
+  sortType: StepsSortType;
+  sortAscending: boolean;
+  onSortChange: (sort: StepsSortType) => void;
   filterType: FilterType;
   onFilterChange: (filter: FilterType) => void;
   currentNodeId?: string;
@@ -53,6 +54,7 @@ export function StepsList({
   draggedNode,
   dragOverNodeId,
   sortType,
+  sortAscending,
   onSortChange,
   filterType,
   onFilterChange,
@@ -134,25 +136,10 @@ export function StepsList({
   }, [children, filterType]);
 
   const sortedChildren = useMemo(() => {
-    return [...filteredChildren].sort((a, b) => {
-      if (a.priority && !b.priority) return -1;
-      if (!a.priority && b.priority) return 1;
-      if (a.completed && !b.completed) return 1;
-      if (!a.completed && b.completed) return -1;
-
-      if (sortType === 'name') {
-        return a.title.localeCompare(b.title);
-      }
-      if (sortType === 'deadline') {
-        if (!a.deadline && !b.deadline) return 0;
-        if (!a.deadline) return 1;
-        if (!b.deadline) return -1;
-        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
-      }
-
-      return (a.order ?? 0) - (b.order ?? 0);
-    });
-  }, [filteredChildren, sortType]);
+    return [...filteredChildren].sort((a, b) =>
+      compareChildNodesForListSort(a, b, sortType, sortAscending),
+    );
+  }, [filteredChildren, sortType, sortAscending]);
 
   const filterChips: Array<{ key: FilterType; label: string; count: number }> = [
     { key: 'all', label: t('filter.all'), count: counts.all },
@@ -160,17 +147,16 @@ export function StepsList({
     { key: 'completed', label: t('filter.completed'), count: counts.completed },
   ];
 
-  const sortOptions: Array<{ key: SortType; label: string }> = [
+  const sortOptions: Array<{ key: StepsSortType; label: string }> = [
     { key: 'deadline', label: t('sort.byDeadline') },
     { key: 'name', label: t('sort.byName') },
-    { key: 'none', label: t('sort.defaultOrder') },
   ];
 
   return (
     <>
       <div className="min-w-0">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-2xl font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100 md:text-xl">
+          <h2 className="text-2xl font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100 md:text-[20px]">
             {t('node.steps') || 'Задачи'}
           </h2>
           {isMobile ? (
@@ -216,10 +202,10 @@ export function StepsList({
                   key={chip.key}
                   type="button"
                   onClick={() => onFilterChange(chip.key)}
-                  className={`relative flex shrink-0 items-center gap-1 rounded-full border-0 px-3 py-1.5 text-xs font-semibold ring-0 transition-all outline-none focus-visible:ring-2 focus-visible:ring-accent/35 ${
+                  className={`relative flex shrink-0 items-center gap-1 rounded-full border-0 px-[10px] py-1.5 text-xs font-semibold transition-all outline-none focus-visible:ring-2 focus-visible:ring-accent/35 ${
                     active
-                      ? 'text-white shadow-sm'
-                      : 'bg-white text-gray-800 shadow-sm ring-0 ring-inset md:ring-1 md:ring-inset md:ring-gray-200 hover:bg-gray-50 dark:bg-gray-700/80 dark:text-gray-100 dark:ring-0 dark:shadow-sm dark:hover:bg-gray-600/85'
+                      ? 'text-white'
+                      : 'bg-[var(--surface-subtle)] text-gray-800 hover:bg-gray-50 dark:bg-gray-700/80 dark:text-gray-100 dark:hover:bg-gray-600/85'
                   }`}
                   style={{
                     backgroundColor: active && !allowDecorativeMotion ? 'var(--accent)' : undefined,
@@ -236,10 +222,10 @@ export function StepsList({
                   )}
                   <span className="relative z-10 min-w-0 truncate">{chip.label}</span>
                   <span
-                    className={`relative z-10 min-w-[1.8rem] shrink-0 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold tabular-nums ${
+                    className={`relative z-10 min-w-[26px] shrink-0 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold tabular-nums tracking-tighter ${
                       active
                         ? 'bg-white/20 text-white'
-                        : 'bg-gray-100 text-gray-700 dark:bg-black/25 dark:text-gray-100'
+                        : 'bg-white text-gray-700 dark:bg-black/25 dark:text-gray-100'
                     }`}
                   >
                     {chip.count}
@@ -264,24 +250,42 @@ export function StepsList({
           </div>
           {!isMobile && (
             <div className="flex min-h-9 shrink-0 items-center gap-1">
-              {sortOptions.map((option) => (
-                <Tooltip key={option.key} text={option.label}>
-                  <button
-                    type="button"
-                    onClick={() => onSortChange(option.key)}
-                    className={`rounded-lg px-2 py-1.5 text-xs font-semibold shadow-sm transition-all ${
-                      sortType === option.key
-                        ? 'text-white shadow-accent/25'
-                        : 'bg-white text-accent ring-1 ring-inset ring-gray-200 hover:bg-gray-50 dark:bg-gray-700/80 dark:text-gray-100 dark:ring-0 dark:hover:bg-gray-600/85'
-                    }`}
-                    style={{
-                      ...(sortType === option.key ? { color: 'white', backgroundColor: 'var(--accent)' } : {}),
-                    }}
-                  >
-                    {option.key === 'deadline' ? <FiCalendar size={13} /> : option.label}
-                  </button>
-                </Tooltip>
-              ))}
+              {sortOptions.map((option) => {
+                const active = sortType === option.key;
+                const tip = active
+                  ? `${option.label} — ${sortAscending ? t('sort.ascending') : t('sort.descending')}`
+                  : option.label;
+                return (
+                  <Tooltip key={option.key} text={tip}>
+                    <button
+                      type="button"
+                      onClick={() => onSortChange(option.key)}
+                      className={`relative flex shrink-0 items-center gap-1.5 rounded-full border-0 px-[10px] py-1.5 text-xs font-semibold transition-all outline-none focus-visible:ring-2 focus-visible:ring-accent/35 ${
+                        active
+                          ? 'text-white'
+                          : 'bg-[var(--surface-subtle)] text-gray-800 hover:bg-gray-50 dark:bg-gray-700/80 dark:text-gray-100 dark:hover:bg-gray-600/85'
+                      }`}
+                      style={{
+                        ...(active ? { color: 'white', backgroundColor: 'var(--accent)' } : {}),
+                      }}
+                    >
+                      {option.key === 'deadline' ? (
+                        <FiCalendar className="shrink-0" size={14} aria-hidden />
+                      ) : option.key === 'name' ? (
+                        <FiType className="shrink-0" size={14} aria-hidden />
+                      ) : null}
+                      <span className="relative z-10 whitespace-nowrap">{option.label}</span>
+                      {active ? (
+                        sortAscending ? (
+                          <FiArrowUp className="shrink-0 opacity-95" size={14} aria-hidden />
+                        ) : (
+                          <FiArrowDown className="shrink-0 opacity-95" size={14} aria-hidden />
+                        )
+                      ) : null}
+                    </button>
+                  </Tooltip>
+                );
+              })}
             </div>
           )}
         </div>
@@ -349,14 +353,28 @@ export function StepsList({
                     onSortChange(option.key);
                     setShowSortSheet(false);
                   }}
-                  className={`w-full rounded-xl px-4 py-3 text-left text-sm font-semibold transition-all ${
+                  className={`flex w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left text-sm font-semibold transition-all ${
                     active
-                      ? 'text-white shadow-lg shadow-accent/20'
-                      : 'bg-gray-50 text-gray-700 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'
+                      ? 'text-white'
+                      : 'bg-[var(--surface-subtle)] text-gray-700 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'
                   }`}
                   style={active ? { backgroundColor: 'var(--accent)' } : undefined}
                 >
-                  {option.label}
+                  <span className="flex min-w-0 items-center gap-2">
+                    {option.key === 'deadline' ? (
+                      <FiCalendar className="shrink-0" size={16} aria-hidden />
+                    ) : option.key === 'name' ? (
+                      <FiType className="shrink-0" size={16} aria-hidden />
+                    ) : null}
+                    <span className="truncate">{option.label}</span>
+                  </span>
+                  {active ? (
+                    sortAscending ? (
+                      <FiArrowUp className="shrink-0" size={18} aria-hidden />
+                    ) : (
+                      <FiArrowDown className="shrink-0" size={18} aria-hidden />
+                    )
+                  ) : null}
                 </button>
               );
             })}

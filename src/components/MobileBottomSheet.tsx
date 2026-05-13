@@ -54,7 +54,7 @@ export function MobileBottomSheet({ isOpen, title, onClose, children, compact }:
           }
         >
           <motion.div
-            className={`w-full rounded-t-2xl bg-white shadow-xl dark:bg-gray-800 ${
+            className={`w-full rounded-t-2xl bg-white shadow-xl dark:bg-gray-800 lg:rounded-t-xl ${
               compact ? 'px-3 pb-4 pt-2' : 'px-4 pb-6 pt-3'
             }`}
             onMouseDown={(event) => event.stopPropagation()}

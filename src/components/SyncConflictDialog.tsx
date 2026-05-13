@@ -259,7 +259,7 @@ export function SyncConflictDialog({
     >
       <div
         ref={modalRef}
-        className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-800"
+        className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-800 lg:rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-accent/5">

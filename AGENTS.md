@@ -47,15 +47,21 @@ Before touching persistence, sync, encryption, or task model:
 - Localization: `src/i18n.ts`
 - Automation and deployment: `.github/workflows/**`
 
-## Required Checks Before Finalizing
+## Verification (`npm run verify`)
 
-Run:
+**Run before you consider the task done** when the change is **non-trivial**: logic, state, hooks, data flow, types, sync/DB/security, routing, or anything that can break TypeScript or tests.
+
+**Always run `npm run verify` before a commit or PR** you intend to merge (or ensure CI is green). That is the safety net for integrators.
+
+**You may skip a local `verify` run** when the diff is **purely presentational** and obviously type-safe—for example only Tailwind classes, static layout/copy in `i18n.ts` with no new keys wired into logic, or asset swaps. In those cases, say in the PR/description that checks were skipped as cosmetic-only; still run verify once before merge if CI is not trusted for the branch.
+
+**Docs/rules-only tasks:** document that runtime checks were skipped (same as before).
+
+Command:
 
 ```bash
 npm run verify
 ```
-
-If the task touches only docs/rules, document that runtime checks were skipped.
 
 ## Documentation Update Policy
 

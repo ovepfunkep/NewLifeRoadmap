@@ -137,7 +137,7 @@ function DayTasksModal({
     >
       <motion.div
         ref={modalRef}
-        className="m-4 flex max-h-[80vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-800"
+        className="m-4 flex max-h-[80vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-800 lg:rounded-xl"
         style={{
           boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'
         }}

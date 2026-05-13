@@ -238,6 +238,7 @@ export function Header({
                 // Запрещаем перетаскивание в текущий узел
                 const isCurrentNode = currentNodeId && crumb.id === currentNodeId;
                 const isDragOver = !isCurrentNode && draggedNode && dragOverNodeId === crumb.id;
+                const isBreadcrumbDropHint = Boolean(draggedNode && !isCurrentNode);
                 return (
                   <React.Fragment key={crumb.id}>
                     <button
@@ -247,7 +248,9 @@ export function Header({
                       onMouseUp={() => handleBreadcrumbMouseUp(crumb.id)}
                       onTouchEnd={() => handleBreadcrumbTouchEnd(crumb.id)}
                       data-node-id={crumb.id}
-                      className="relative max-w-[200px] truncate rounded px-1 py-1 transition-all hover:text-gray-900 dark:hover:text-gray-100"
+                      className={`relative max-w-[200px] truncate rounded px-1 py-1 transition-all hover:text-gray-900 dark:hover:text-gray-100 ${
+                        isBreadcrumbDropHint ? 'ring-2 ring-accent/25 bg-accent/[0.07]' : ''
+                      }`}
                       style={{
                         ...(isDragOver ? {
                           color: 'var(--accent)',
@@ -298,7 +301,7 @@ export function Header({
                           <div className="flex items-start justify-between gap-2">
                             <motion.h1
                                 key={node.id}
-                                className={`min-w-0 flex-1 text-3xl font-bold leading-tight transition-all md:text-2xl ${node.completed ? 'opacity-80' : 'text-gray-900 dark:text-gray-100'}`}
+                                className={`min-w-0 flex-1 text-3xl font-bold leading-tight transition-all md:text-[28px] ${node.completed ? 'opacity-80' : 'text-gray-900 dark:text-gray-100'}`}
                                 style={{ color: node.completed ? 'var(--accent)' : undefined }}
                                 initial={allowEssentialMotion ? { opacity: 0, y: 8 } : false}
                                 animate={{ opacity: 1, y: 0 }}
@@ -438,7 +441,7 @@ export function Header({
         
       {/* Full viewport width strip under boxed header */}
       {node.children.length > 0 && (
-        <div className="relative h-6 w-full flex-shrink-0 overflow-hidden border-t border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800">
+        <div className="relative h-6 w-full flex-shrink-0 overflow-hidden border-t border-gray-200 bg-[var(--surface-subtle)] dark:border-gray-700 dark:bg-gray-800">
           <motion.div
             className={`h-full transition-all duration-500 ${isBlinking ? 'animate-pulse' : ''}`}
             animate={{ width: `${progress}%` }}

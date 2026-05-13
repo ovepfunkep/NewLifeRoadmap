@@ -17,9 +17,16 @@ interface DayData {
   isCurrentMonth: boolean;
 }
 
-// Получить название месяца и год
+// Month + year heading (ru: "Май 2026 г." with lowercase год abbreviation — avoid Tailwind `capitalize`, which forces "Г.").
 function getMonthYearLabel(date: Date, lang: string): string {
-  return date.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', { month: 'long', year: 'numeric' });
+  const locale = lang === 'ru' ? 'ru-RU' : 'en-US';
+  if (lang === 'ru') {
+    const month = date.toLocaleDateString('ru-RU', { month: 'long' });
+    const y = date.getFullYear();
+    const monthTitle = month.charAt(0).toLocaleUpperCase('ru-RU') + month.slice(1);
+    return `${monthTitle} ${y} г.`;
+  }
+  return date.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
 }
 
 // Вспомогательная функция для получения ключа даты в локальном времени (YYYY-MM-DD)
@@ -120,14 +127,14 @@ export function CalendarView({ deadlines, onDayClick, onCreateTask }: CalendarVi
     <div className="flex flex-col gap-4">
       {/* Шапка календаря с навигацией */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 capitalize">
+        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
           {getMonthYearLabel(currentDate, lang)}
         </h3>
         <div className="flex items-center gap-2">
           {!isCurrentMonth && (
             <button
               onClick={handleReset}
-              className="rounded-lg bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200/90 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
+              className="rounded-lg bg-[var(--surface-subtle)] p-2 text-accent transition-colors hover:bg-gray-100 dark:bg-gray-900/55 dark:hover:bg-gray-800/80"
               style={{ color: 'var(--accent)' }}
               title="К сегодняшнему дню"
             >
@@ -136,14 +143,14 @@ export function CalendarView({ deadlines, onDayClick, onCreateTask }: CalendarVi
           )}
           <button
             onClick={handlePreviousMonth}
-            className="rounded-lg bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200/90 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
+            className="rounded-lg bg-[var(--surface-subtle)] p-2 text-accent transition-colors hover:bg-gray-100 dark:bg-gray-900/55 dark:hover:bg-gray-800/80"
             style={{ color: 'var(--accent)' }}
           >
             <FiChevronLeft size={20} />
           </button>
           <button
             onClick={handleNextMonth}
-            className="rounded-lg bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200/90 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
+            className="rounded-lg bg-[var(--surface-subtle)] p-2 text-accent transition-colors hover:bg-gray-100 dark:bg-gray-900/55 dark:hover:bg-gray-800/80"
             style={{ color: 'var(--accent)' }}
           >
             <FiChevronRight size={20} />
@@ -180,7 +187,6 @@ export function CalendarView({ deadlines, onDayClick, onCreateTask }: CalendarVi
                 key={key}
                 className={`
                   relative min-h-[60px] sm:min-h-[80px] border-r border-b border-gray-100 dark:border-gray-700/50 last:border-r-0
-                  ${!dayData.isCurrentMonth ? 'bg-gray-50/50 dark:bg-gray-900/20 grayscale opacity-40' : ''}
                   ${idx % 7 === 6 ? 'border-r-0' : ''}
                 `}
               >
@@ -193,7 +199,7 @@ export function CalendarView({ deadlines, onDayClick, onCreateTask }: CalendarVi
                 >
                   <span className={`
                     text-[10px] sm:text-xs font-medium rounded-full w-5 h-5 flex items-center justify-center
-                    ${isToday ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300'}
+                    ${isToday ? 'bg-accent text-white' : dayData.isCurrentMonth ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}
                   `} style={isToday ? { backgroundColor: 'var(--accent)' } : {}}>
                     {day.getDate()}
                   </span>

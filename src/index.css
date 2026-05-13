@@ -6,8 +6,7 @@
   --accent: #2563eb;
   --surface-page: #e9eef7;
   --surface-card: #ffffff;
-  --card-shadow-soft: 0 0 14px rgba(123, 145, 182, 0.14);
-  --card-shadow-priority: 0 0 18px rgba(99, 122, 164, 0.18);
+  --surface-subtle: #f6f6f9;
 }
 
 body {

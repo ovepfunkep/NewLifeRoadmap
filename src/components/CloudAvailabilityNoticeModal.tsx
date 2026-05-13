@@ -23,7 +23,7 @@ export function CloudAvailabilityNoticeModal({ variant, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-800 sm:p-8 animate-in zoom-in-95 duration-200"
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-800 sm:p-8 animate-in zoom-in-95 duration-200 lg:rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col items-center text-center">

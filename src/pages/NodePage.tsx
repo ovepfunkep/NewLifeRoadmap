@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { Node, NodeRecurrence } from '../types';
 import { t } from '../i18n';
 import { getNode, saveNode, deleteNode } from '../db';
@@ -39,13 +40,13 @@ import { motionDurations, motionTransitions } from '../config/motion';
 import { Z_MOBILE_FAB } from '../config/zLayers';
 import { AMBIENT_SEASON } from '../config/ambientSeason';
 import { SpringTrees } from '../components/SpringTrees';
+import { compareChildNodesForListSort, type StepsSortType } from '../utils';
 
 /*
  * NodePage — hash-routed tree screen: loads `Node` from IndexedDB, lists children (StepsList),
  * deadlines/dashboard on mobile tabs, editor/import/move modals, drag-reparent, shortcuts.
  * Heavy logic is split into `hooks/nodePage/*` and `pages/nodePage/executeMoveStep.ts`.
  */
-type SortType = 'none' | 'name' | 'deadline';
 
 export function NodePage() {
   const [nodeId, navigateToNode] = useNodeNavigation();
@@ -60,7 +61,8 @@ export function NodePage() {
   const [editingNode, setEditingNode] = useState<Node | null>(null);
   const [initialDeadline, setInitialDeadline] = useState<Date | undefined>(undefined);
   const [initialRecurring, setInitialRecurring] = useState<NodeRecurrence | undefined>(undefined);
-  const [sortType, setSortType] = useState<SortType>('deadline');
+  const [sortType, setSortType] = useState<StepsSortType>('deadline');
+  const [sortAscending, setSortAscending] = useState(true);
   const [filterType, setFilterType] = useState<'all' | 'completed' | 'incomplete'>('all');
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
@@ -115,6 +117,15 @@ export function NodePage() {
     return currentNode.children.filter(child => !child.deletedAt);
   }, [currentNode?.children, currentNode?.id]);
 
+  const handleSortChange = useCallback((next: StepsSortType) => {
+    if (next === sortType) {
+      setSortAscending((a) => !a);
+    } else {
+      setSortType(next);
+      setSortAscending(true);
+    }
+  }, [sortType]);
+
   // Получаем отсортированные и отфильтрованные шаги для shortcuts
   const getVisibleSteps = useMemo(() => {
     if (!currentNode) return [];
@@ -126,26 +137,11 @@ export function NodePage() {
       if (filterType === 'incomplete') return !child.completed;
       return true;
     });
-    // Сортировка
-    filtered = [...filtered].sort((a, b) => {
-      // Приоритетные всегда сверху
-      if (a.priority && !b.priority) return -1;
-      if (!a.priority && b.priority) return 1;
-      // Выполненные идут вниз
-      if (a.completed && !b.completed) return 1;
-      if (!a.completed && b.completed) return -1;
-      if (sortType === 'name') {
-        return a.title.localeCompare(b.title);
-      } else if (sortType === 'deadline') {
-        if (!a.deadline && !b.deadline) return 0;
-        if (!a.deadline) return 1;
-        if (!b.deadline) return -1;
-        return new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime();
-      }
-      return (a.order ?? 0) - (b.order ?? 0);
-    });
+    filtered = [...filtered].sort((a, b) =>
+      compareChildNodesForListSort(a, b, sortType, sortAscending),
+    );
     return filtered;
-  }, [currentNode, sortType, filterType]);
+  }, [currentNode, sortType, sortAscending, filterType]);
 
   const handleEdit = useCallback((node: Node) => {
     setEditingNode(node);
@@ -620,11 +616,13 @@ export function NodePage() {
 
   // Обработчик drag для перемещения внутрь другого шага
   const handleDragStart = (node: Node) => {
-    // Предотвращаем перетаскивание корневого узла
     if (node.id === 'root-node') {
       return;
     }
-    setDraggedNode(node);
+    // Синхронно, чтобы соседние карточки сразу получили draggedNode и подсветку (иначе один кадр без hint).
+    flushSync(() => {
+      setDraggedNode(node);
+    });
   };
 
   const handleDragEnd = useCallback(() => {
@@ -759,15 +757,6 @@ export function NodePage() {
     );
   }
 
-  const disablePageTransition = Boolean(
-    showImportExport ||
-    showMoveModal ||
-    showDashboard ||
-    nodeToDeleteId
-  );
-  const pageTransitionKey = allowEssentialMotion && !disablePageTransition
-    ? currentNode.id
-    : 'node-page-static';
   const activeDeadlinesNode = mobileDeadlinesNode ?? currentNode;
 
   return (
@@ -781,10 +770,10 @@ export function NodePage() {
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
-          key={pageTransitionKey}
-          initial={allowEssentialMotion && !disablePageTransition ? { opacity: 0, y: 14 } : false}
+          key={currentNode.id}
+          initial={allowEssentialMotion ? { opacity: 0, y: 14 } : false}
           animate={{ opacity: 1, y: 0 }}
-          exit={allowEssentialMotion && !disablePageTransition ? { opacity: 0, y: -10 } : { opacity: 1 }}
+          exit={allowEssentialMotion ? { opacity: 0, y: -10 } : { opacity: 1 }}
           transition={allowEssentialMotion ? motionTransitions.fade : { duration: motionDurations.fast }}
         >
           {(!isMobile || mobileSection === 'tasks') && (
@@ -812,7 +801,7 @@ export function NodePage() {
 
           <main className={`container mx-auto px-4 py-6 lg:px-2 xl:px-4 ${isMobile ? 'pb-[calc(88px+env(safe-area-inset-bottom))]' : ''}`}>
             {!isMobile && (
-              <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3">
+              <div className="flex flex-col gap-6 lg:grid lg:grid-cols-3 lg:gap-4">
                 <div className="lg:col-span-1 lg:order-2">
                   <DeadlineList
                     node={currentNode}
@@ -825,7 +814,7 @@ export function NodePage() {
 
                 <div className="min-w-0 lg:col-span-2 lg:order-1">
                   {/* Та же визуальная «карточка», что у DeadlineList на lg+ */}
-                  <div className="flex min-h-[140px] flex-col rounded-lg bg-white py-4 shadow-sm transition-all md:p-5 dark:bg-gray-800">
+                  <div className="flex min-h-[140px] flex-col rounded-lg bg-white py-4 transition-all md:p-5 lg:rounded-xl dark:bg-gray-800">
                     <StepsList
                       children={sortedChildren}
                       onNavigate={navigateToNode}
@@ -844,7 +833,8 @@ export function NodePage() {
                       draggedNode={draggedNode}
                       dragOverNodeId={dragOverNodeId}
                       sortType={sortType}
-                      onSortChange={setSortType}
+                      sortAscending={sortAscending}
+                      onSortChange={handleSortChange}
                       filterType={filterType}
                       onFilterChange={setFilterType}
                       currentNodeId={currentNode.id}
@@ -876,7 +866,8 @@ export function NodePage() {
                 draggedNode={draggedNode}
                 dragOverNodeId={dragOverNodeId}
                 sortType={sortType}
-                onSortChange={setSortType}
+                sortAscending={sortAscending}
+                onSortChange={handleSortChange}
                 filterType={filterType}
                 onFilterChange={setFilterType}
                 currentNodeId={currentNode.id}

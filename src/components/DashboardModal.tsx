@@ -72,7 +72,7 @@ export function DashboardModal({ initialNodeId, onClose }: DashboardModalProps) 
           initialNodeId={initialNodeId}
           onClose={onClose}
           showCloseButton={true}
-          className="mx-2 flex h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-slate-100 shadow-xl sm:mx-4 dark:bg-slate-900"
+          className="mx-2 flex h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-slate-100 shadow-xl sm:mx-4 dark:bg-slate-900 lg:rounded-xl"
         />
       </motion.div>
     </motion.div>

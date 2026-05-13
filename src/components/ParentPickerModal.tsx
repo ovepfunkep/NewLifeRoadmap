@@ -134,7 +134,7 @@ export function ParentPickerModal({ onSelectParent, onClose }: ParentPickerModal
         className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm"
         style={{ zIndex: Z_MODAL_HIGH }}
       >
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 lg:rounded-xl">
           <p className="text-gray-600 dark:text-gray-400">{t('general.loading')}</p>
         </div>
       </div>
@@ -150,7 +150,7 @@ export function ParentPickerModal({ onSelectParent, onClose }: ParentPickerModal
     >
       <div
         ref={modalRef}
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col mx-4"
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col mx-4 lg:rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
