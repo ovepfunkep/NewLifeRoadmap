@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { onAuthChange } from '../firebase/auth';
-import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore, getSyncMeta, loadChangedNodesFromFirestore, subscribeToChangeLog, normalizeNodeFromPayload, getClientId, cleanupChangeLog, fetchChangeLogSincePage } from '../firebase/sync';
+import { loadAllNodesFromFirestore, hasDataInFirestore, syncAllNodesToFirestore, getSyncMeta, loadChangedNodesFromFirestore, subscribeToChangeLog, normalizeNodeFromPayload, getClientId, cleanupChangeLog, fetchChangeLogSincePage, type SyncChangeLogRow } from '../firebase/sync';
 import { getAllNodesFlat, clearAllNodes } from '../db';
 import { SyncConflictDialog } from './SyncConflictDialog';
 import { hasDifferences, pickNewerNodeByUpdatedAt } from '../utils/syncCompare';
@@ -14,8 +14,11 @@ import {
   clearLocalCloudPushPending,
   hasLocalCloudPushPending,
 } from '../utils/localCloudPushPending';
+import type { Node } from '../types';
 
-function log(..._args: any[]) {
+type ProgrammaticReloadWindow = Window & { __isProgrammaticReload?: boolean };
+
+function log(..._args: unknown[]) {
   // console.log('[SyncManager]', ..._args);
 }
 
@@ -34,9 +37,10 @@ if (syncChannel) {
 
 // Слушаем локальные обновления, чтобы переслать их в другие вкладки
 if (typeof window !== 'undefined') {
-  window.addEventListener(DATA_UPDATED_EVENT, (event: any) => {
+  window.addEventListener(DATA_UPDATED_EVENT, (event: Event) => {
+    const ce = event as CustomEvent<{ fromBroadcast?: boolean }>;
     // Если событие пришло не из броадкаста, значит оно локальное — рассылаем остальным
-    if (syncChannel && !event.detail?.fromBroadcast) {
+    if (syncChannel && !ce.detail?.fromBroadcast) {
       syncChannel.postMessage('dataUpdated');
     }
   });
@@ -48,8 +52,8 @@ function notifyDataUpdated() {
 
 export function SyncManager() {
   const [showConflictDialog, setShowConflictDialog] = useState(false);
-  const [localNodes, setLocalNodes] = useState<any[]>([]);
-  const [cloudNodes, setCloudNodes] = useState<any[]>([]);
+  const [localNodes, setLocalNodes] = useState<Node[]>([]);
+  const [cloudNodes, setCloudNodes] = useState<Node[]>([]);
   const { showToast, removeToast } = useToast();
   const isInitialLoadRef = useRef<boolean>(true); // Флаг первой загрузки
   const checkToastIdRef = useRef<string | null>(null); // Ref для ID тоста проверки
@@ -109,7 +113,7 @@ export function SyncManager() {
         return;
       }
       
-      let changedNodes: any[] = [];
+      let changedNodes: Node[] = [];
       let hasChanges = false;
 
       if (!lastLocalSyncTime) {
@@ -153,7 +157,7 @@ export function SyncManager() {
       localStorage.setItem(LAST_SYNC_TIME_KEY, meta.lastChangedAt);
       
       silentLoadInProgressRef.current = false;
-    } catch (error: any) {
+    } catch (error: unknown) {
       log('[loadCloudDataSilently] Error:', error);
     } finally {
       silentLoadInProgressRef.current = false;
@@ -207,11 +211,11 @@ export function SyncManager() {
 
   /** Обрабатывает записи журнала; при full sync возвращает didFullSync. */
   const processChangeLogRows = useCallback(
-    async (userId: string, changes: any[]): Promise<{ didFullSync: boolean }> => {
+    async (userId: string, changes: SyncChangeLogRow[]): Promise<{ didFullSync: boolean }> => {
       const key = getChangeKey(userId);
       let maxUpdatedAt = lastChangeSeenRef.current || '';
       let fullSyncRequired = false;
-      const nodesToUpsert: any[] = [];
+      const nodesToUpsert: Node[] = [];
 
       for (const change of changes) {
         if (change.updatedAt && change.updatedAt > maxUpdatedAt) {
@@ -426,14 +430,14 @@ export function SyncManager() {
         const localMap = new Map(local.map(n => [n.id, n]));
         const cloudMap = new Map(cloud.map(n => [n.id, n]));
         const allIds = new Set([...localMap.keys(), ...cloudMap.keys()]);
-        const mergedNodes: any[] = [];
+        const mergedNodes: Node[] = [];
         
         for (const id of allIds) {
           const lNode = localMap.get(id);
           const cNode = cloudMap.get(id);
-          if (!lNode) mergedNodes.push({ ...cNode, children: [] });
-          else if (!cNode) mergedNodes.push({ ...lNode, children: [] });
-          else {
+          if (!lNode && cNode) mergedNodes.push({ ...cNode, children: [] });
+          else if (!cNode && lNode) mergedNodes.push({ ...lNode, children: [] });
+          else if (lNode && cNode) {
             const lTime = new Date(lNode.updatedAt || 0).getTime();
             const cTime = new Date(cNode.updatedAt || 0).getTime();
             const winner = cTime > lTime ? cNode : lNode;
@@ -490,11 +494,9 @@ export function SyncManager() {
     log('[useEffect] Initializing sync manager');
     log(`[useEffect] isFirstAuthCheckRef.current: ${isFirstAuthCheckRef.current}`);
     log(`[useEffect] previousUserRef.current: ${previousUserRef.current ? 'exists' : 'null'}`);
-    log(`[useEffect] __isProgrammaticReload: ${(window as any).__isProgrammaticReload}`);
-    
-    // Очищаем флаг сессии при монтировании компонента (новая сессия браузера)
-    // Но не очищаем при программной перезагрузке страницы
-    if (!(window as any).__isProgrammaticReload) {
+    log(`[useEffect] __isProgrammaticReload: ${(window as ProgrammaticReloadWindow).__isProgrammaticReload}`);
+
+    if (!(window as ProgrammaticReloadWindow).__isProgrammaticReload) {
       log('[useEffect] Not a programmatic reload, clearing session flags');
       lastSilentLoadHashRef.current = null;
     } else {
@@ -568,8 +570,8 @@ export function SyncManager() {
     });
 
     // Слушатель инициализации безопасности (вызывается после выбора в AuthAvatar)
-    const handleSecurityInit = async (e: any) => {
-      const { userId } = e.detail;
+    const handleSecurityInit: EventListener = async (e) => {
+      const { userId } = (e as CustomEvent<{ userId: string }>).detail;
       log('[security:initialized] event received for user', userId);
       // Если это тот же пользователь, запускаем синхронизацию
       if (previousUserRef.current && previousUserRef.current.uid === userId) {
@@ -578,12 +580,12 @@ export function SyncManager() {
       }
     };
 
-    window.addEventListener('security:initialized', handleSecurityInit as EventListener);
+    window.addEventListener('security:initialized', handleSecurityInit);
 
     return () => {
       log('[useEffect] Cleaning up sync manager');
       unsubscribe();
-      window.removeEventListener('security:initialized', handleSecurityInit as EventListener);
+      window.removeEventListener('security:initialized', handleSecurityInit);
     };
   }, [handleFirstSync, startChangeListener]);
 
@@ -677,17 +679,17 @@ export function SyncManager() {
       const cloudMap = new Map(cloudNodes.map(n => [n.id, n]));
       
       const allIds = new Set([...localMap.keys(), ...cloudMap.keys()]);
-      const mergedNodes: any[] = [];
+      const mergedNodes: Node[] = [];
       
       for (const id of allIds) {
         const local = localMap.get(id);
         const cloud = cloudMap.get(id);
-        
-        if (!local) {
+
+        if (!local && cloud) {
           mergedNodes.push(cloud);
-        } else if (!cloud) {
+        } else if (!cloud && local) {
           mergedNodes.push(local);
-        } else {
+        } else if (local && cloud) {
           const localTime = new Date(local.updatedAt || 0).getTime();
           const cloudTime = new Date(cloud.updatedAt || 0).getTime();
           

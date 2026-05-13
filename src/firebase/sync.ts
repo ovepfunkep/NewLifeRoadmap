@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, setDoc, getDocs, query, writeBatch, getDocsFromServer, where, limit, onSnapshot, orderBy, Unsubscribe } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, getDocs, query, writeBatch, getDocsFromServer, where, limit, onSnapshot, orderBy, Unsubscribe, type DocumentData } from 'firebase/firestore';
 import { getFirebaseDB } from './config';
 import { getCurrentUser } from './auth';
 import { Node } from '../types';
@@ -8,7 +8,14 @@ import { computeNextReminderAt } from '../utils';
 import { isCloudAccessFailure, reportCloudFirestoreFailure, reportCloudFirestoreSuccess } from '../utils/cloudFirestoreHealth';
 import { clearLocalCloudPushPending, markLocalCloudPushPending } from '../utils/localCloudPushPending';
 
-function log(..._args: any[]) {
+/**
+ * Firestore sync: encrypt node writes, decrypt/normalize reads, change-log paging,
+ * bulk sync helpers, and `onSnapshot` subscriptions. Payloads use `DocumentData`;
+ * app model is `Node` from `../types` after `normalizeNodeFromPayload`.
+ */
+export type SyncChangeLogRow = { id: string } & DocumentData;
+
+function log(..._args: unknown[]) {
   // console.log('[FirebaseSync]', ..._args);
 }
 
@@ -16,7 +23,7 @@ function log(..._args: any[]) {
  * Промис с таймаутом для предотвращения бесконечного ожидания Firebase SDK при Quota Exceeded
  */
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operationName: string): Promise<T> {
-  let timeoutId: any;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
       reject(new Error(`TIMEOUT_SYNC: ${operationName} took too long (> ${timeoutMs}ms)`));
@@ -64,7 +71,7 @@ export function getClientId(): string {
   return created;
 }
 
-async function encryptNodeFields(node: Node, syncKey: string): Promise<Record<string, any>> {
+async function encryptNodeFields(node: Node, syncKey: string): Promise<Record<string, unknown>> {
   const { children, ...nodeData } = node;
   const encryptedTitle = await encryptData(node.title, syncKey);
   let encryptedDescription = node.description;
@@ -84,7 +91,7 @@ async function encryptNodeFields(node: Node, syncKey: string): Promise<Record<st
   });
 }
 
-async function decryptNodeFields(data: any, syncKey: string | null): Promise<any> {
+async function decryptNodeFields(data: DocumentData, syncKey: string | null): Promise<DocumentData> {
   if (!syncKey) return data;
   let result = { ...data };
   if (result.isEncrypted && result.encryptedData) {
@@ -110,7 +117,7 @@ async function decryptNodeFields(data: any, syncKey: string | null): Promise<any
   return result;
 }
 
-export async function normalizeNodeFromPayload(payload: any, nodeIdOverride?: string): Promise<Node> {
+export async function normalizeNodeFromPayload(payload: DocumentData, nodeIdOverride?: string): Promise<Node> {
   const syncKey = getActiveSyncKey();
   const data = await decryptNodeFields(payload, syncKey);
   const id = data.id || nodeIdOverride || '';
@@ -137,7 +144,7 @@ export async function normalizeNodeFromPayload(payload: any, nodeIdOverride?: st
   };
 }
 
-async function writeChangeLog(payload: Record<string, any>, userId: string, type: 'node' | 'bulk'): Promise<void> {
+async function writeChangeLog(payload: Record<string, unknown>, userId: string, type: 'node' | 'bulk'): Promise<void> {
   const db = getFirebaseDB();
   const changesRef = collection(db, getUserChangesPath(userId));
   const changeDoc = doc(changesRef);
@@ -160,7 +167,7 @@ export async function fetchChangeLogSincePage(
   userId: string,
   sinceExclusive: string,
   pageSize: number
-): Promise<Array<{ id: string; [key: string]: any }>> {
+): Promise<SyncChangeLogRow[]> {
   const db = getFirebaseDB();
   const changesRef = collection(db, getUserChangesPath(userId));
   const q = query(
@@ -183,8 +190,8 @@ export async function fetchChangeLogSincePage(
 export function subscribeToChangeLog(
   userId: string,
   since: string | null,
-  onChange: (changes: any[]) => void,
-  onError?: (error: any) => void
+  onChange: (changes: SyncChangeLogRow[]) => void,
+  onError?: (error: unknown) => void
 ): Unsubscribe {
   const db = getFirebaseDB();
   const changesRef = collection(db, getUserChangesPath(userId));
@@ -284,8 +291,8 @@ function getUserNodesPath(userId: string): string {
  * Очистить объект от undefined значений для Firestore
  * Firestore не принимает undefined, заменяем на null или удаляем
  */
-function cleanForFirestore<T extends Record<string, any>>(obj: T): T {
-  const cleanValue = (value: any): any => {
+function cleanForFirestore<T extends Record<string, unknown>>(obj: T): T {
+  const cleanValue = (value: unknown): unknown => {
     if (value === undefined) return undefined;
     if (value === null) return null;
     if (Array.isArray(value)) {
@@ -294,7 +301,7 @@ function cleanForFirestore<T extends Record<string, any>>(obj: T): T {
         .filter((item) => item !== undefined);
     }
     if (typeof value === 'object') {
-      const nested: Record<string, any> = {};
+      const nested: Record<string, unknown> = {};
       for (const [nestedKey, nestedValue] of Object.entries(value)) {
         const cleanedNestedValue = cleanValue(nestedValue);
         if (cleanedNestedValue !== undefined) {
@@ -374,7 +381,7 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
     log(`Starting bulk sync: ${allNodes.length} nodes`);
     
     let cloudMap = new Map<string, any>();
-    let nodesToPurge: string[] = [];
+    const nodesToPurge: string[] = [];
 
     if (cloudNodes) {
       log('Using provided cloud nodes for diff check');
@@ -389,7 +396,7 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
       const PURGE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
       
       querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data() as any;
+        const data = docSnap.data() as DocumentData;
         cloudMap.set(docSnap.id, data);
         if (data.deletedAt) {
           const deletedTime = new Date(data.deletedAt).getTime();

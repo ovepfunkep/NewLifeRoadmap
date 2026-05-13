@@ -29,6 +29,7 @@ Operations (billing, App Check rollout, maintenance): [RUNBOOK.md](RUNBOOK.md). 
 - `npm run test` - run Vitest in watch mode
 - `npm run test:ci` - run Vitest once (CI mode)
 - `npm run build` - run `tsc` and Vite production build
+- `npm run lint` - run ESLint (`eslint.config.mjs`: Hooks rules-of-hooks + recommended TS/JS; some `exhaustive-deps` warnings remain)
 - `npm run verify` - run tests + production build
 - `npm run preview` - preview production build locally
 

@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { flushSync } from 'react-dom';
-import { Node } from '../types';
 import { useTranslation } from '../i18n';
-import { computeProgress, getProgressCounts, formatDeadline } from '../utils';
+import { computeProgress, formatDeadline } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { useEffects } from '../hooks/useEffects';
 import { useTheme } from '../hooks/useTheme';
@@ -11,28 +10,29 @@ import { Tooltip } from './Tooltip';
 import { motion } from 'framer-motion';
 import { useMotionPreferences } from '../hooks/useMotionPreferences';
 import { motionTransitions } from '../config/motion';
+import { useIsMobile } from '../hooks/useIsMobile';
+import type { IconType } from 'react-icons';
+import type { NodeCardProps } from './nodeCard/NodeCard.types';
+import { NODE_CARD_DRUM_ITEM_HEIGHT } from './nodeCard/constants';
+import { NodeCardSubtaskProgress } from './nodeCard/NodeCardSubtaskProgress';
+import { NodeCardBurnOverlay } from './nodeCard/NodeCardBurnOverlay';
 
-interface NodeCardProps {
-  node: Node;
-  index: number;
-  onNavigate: (id: string) => void;
-  onMarkCompleted: (id: string, completed: boolean) => void;
-  onEdit: (node: Node) => void;
-  onDelete: (id: string) => void;
-  onTogglePriority: (id: string, priority: boolean) => void;
-  onMove?: (node: Node) => void;
-  onDragStart?: (node: Node) => void;
-  onDragEnd?: () => void;
-  onDragOver?: (nodeId: string) => void;
-  onDragLeave?: () => void;
-  isDragOver?: boolean;
-  draggedNode?: Node | null;
-  currentNodeId?: string;
-  isBurning?: boolean; 
-  isMovingOut?: boolean; 
-}
+export type { NodeCardProps };
 
-export function NodeCard({ 
+type CardAction = {
+  id: string;
+  icon: IconType;
+  action: () => void;
+  label: string;
+  color: string;
+  active?: boolean;
+};
+
+/**
+ * Task row card: navigate, deadlines, subtask progress, desktop icon actions,
+ * mobile drum wheel, drag-to-reparent, burn/delete animation.
+ */
+export function NodeCard({
   node, 
   onNavigate, 
   onMarkCompleted, 
@@ -76,7 +76,7 @@ export function NodeCard({
   const baseActionIndexRef = useRef(0);
   const [offsetPx, setOffsetPx] = useState(0); 
   const offsetPxRef = useRef(0);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useIsMobile(768);
   const drumRef = useRef<HTMLDivElement>(null);
   const drumDragStartYRef = useRef(0);
   const drumDragStartOffsetRef = useRef(0);
@@ -95,26 +95,8 @@ export function NodeCard({
   const handleTouchMoveRef = useRef<(e: TouchEvent) => void>();
   const handleTouchEndLikeRef = useRef<(e?: TouchEvent) => void>();
 
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  // Синхронизируем рефы с состоянием для использования в нативных обработчиках без "stale closure"
-  useEffect(() => {
-    baseActionIndexRef.current = baseActionIndex;
-  }, [baseActionIndex]);
-
-  useEffect(() => {
-    offsetPxRef.current = offsetPx;
-  }, [offsetPx]);
-
   // Реф для хранения актуальных действий, чтобы избежать stale closure в нативных событиях
-  const actionsRef = useRef<any[]>([]);
+  const actionsRef = useRef<CardAction[]>([]);
 
   const actions = useMemo(() => [
     { id: 'complete', icon: FiCheck, action: () => onMarkCompleted(node.id, !node.completed), label: node.completed ? t('node.markIncomplete') : t('node.markCompleted'), color: 'var(--accent)', active: node.completed },
@@ -128,7 +110,15 @@ export function NodeCard({
     actionsRef.current = actions;
   }, [actions]);
 
-  const ITEM_HEIGHT = 38; // Increased from 30 (approx 20% larger buttons area)
+  useEffect(() => {
+    baseActionIndexRef.current = baseActionIndex;
+  }, [baseActionIndex]);
+
+  useEffect(() => {
+    offsetPxRef.current = offsetPx;
+  }, [offsetPx]);
+
+  const ITEM_HEIGHT = NODE_CARD_DRUM_ITEM_HEIGHT;
 
   const mod = (n: number, m: number) => ((n % m) + m) % m;
 
@@ -943,109 +933,15 @@ export function NodeCard({
             )}
           </div>
 
-          {/* Прогресс подзадач */}
-          {node.children.length > 0 && (
-            <div
-              className="relative mt-auto h-7 overflow-hidden dark:bg-gray-700/50"
-              style={
-                theme === 'light'
-                  ? { backgroundColor: 'rgba(var(--accent-rgb), 0.11)' }
-                  : undefined
-              }
-            >
-              <div
-                className={`h-full transition-all duration-500 ${isBlinking ? 'animate-pulse' : ''}`}
-                style={{
-                  width: `${progress}%`,
-                  backgroundColor: progress === 100 ? 'var(--accent)' : 'rgba(var(--accent-rgb), 0.4)',
-                }}
-              />
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <span className={`text-xs font-semibold ${progress > 50 ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
-                  {getProgressCounts(node).completed} / {getProgressCounts(node).total}
-                </span>
-              </div>
-            </div>
-          )}
+          <NodeCardSubtaskProgress
+            node={node}
+            progress={progress}
+            isBlinking={isBlinking}
+            theme={theme}
+          />
         </motion.div>
 
-        {isBurning && effectsEnabled && (
-          <div className="absolute inset-0 z-[60] pointer-events-none overflow-visible">
-            {/* Эффект разреза (белая линия) */}
-            <motion.div
-              className="absolute inset-0 z-[70] bg-white dark:bg-gray-200 shadow-[0_0_15px_white] dark:shadow-[0_0_15px_rgba(255,255,255,0.5)]"
-              style={{ 
-                clipPath: 'polygon(45% 0%, 55% 0%, 40% 20%, 50% 40%, 35% 60%, 45% 80%, 35% 100%, 30% 100%, 40% 80%, 30% 60%, 45% 40%, 35% 20%, 45% 0%)',
-                width: '4px',
-                left: '50%',
-                marginLeft: '-2px',
-                originY: 0
-              }}
-              initial={{ scaleY: 0, opacity: 1 }}
-              animate={{ 
-                scaleY: [0, 1.2, 1.2],
-                opacity: [1, 1, 0],
-              }}
-              transition={{ 
-                duration: 0.4, 
-                times: [0, 0.5, 1],
-                ease: "easeInOut" 
-              }}
-            />
-
-            {/* Левая половина */}
-            <motion.div
-              className="absolute inset-y-0 left-0 w-1/2 rounded-l-lg bg-white shadow-xl dark:bg-gray-800"
-              style={{ 
-                clipPath: 'polygon(0% 0%, 100% 0%, 85% 20%, 100% 40%, 80% 60%, 100% 80%, 90% 100%, 0% 100%)',
-                backgroundColor: node.completed ? 'rgba(var(--accent-rgb), 0.05)' : undefined
-              }}
-              initial={{ x: 0, y: 0, rotate: 0 }}
-              animate={{ 
-                x: [0, -20, -150], 
-                y: [0, 0, 800], 
-                rotate: [0, -2, -35],
-              }}
-              transition={{ 
-                duration: 1.2, 
-                times: [0, 0.3, 1],
-                ease: [0.45, 0, 0.55, 1],
-                delay: 0.2
-              }}
-            >
-              <div className="p-4 w-[200%]">
-                <span className="font-semibold" style={{ color: 'var(--accent)' }}>{node.title}</span>
-              </div>
-            </motion.div>
-
-            {/* Правая половина */}
-            <motion.div
-              className="absolute inset-y-0 right-0 w-1/2 rounded-r-lg bg-white shadow-xl dark:bg-gray-800"
-              style={{ 
-                clipPath: 'polygon(15% 0%, 100% 0%, 100% 100%, 10% 100%, 20% 80%, 0% 60%, 15% 40%, 0% 20%)',
-                backgroundColor: node.completed ? 'rgba(var(--accent-rgb), 0.05)' : undefined
-              }}
-              initial={{ x: 0, y: 0, rotate: 0 }}
-              animate={{ 
-                x: [0, 20, 180], 
-                y: [0, 0, 850], 
-                rotate: [0, 2, 45],
-              }}
-              transition={{ 
-                duration: 1.2, 
-                times: [0, 0.3, 1],
-                ease: [0.45, 0, 0.55, 1],
-                delay: 0.2
-              }}
-            >
-              <div className="p-4 w-[200%] -ml-[100%]">
-                <div className="flex justify-end pr-10">
-                   <FiTrash2 size={24} color="#ef4444" />
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
+        {isBurning && effectsEnabled && <NodeCardBurnOverlay node={node} />}
       </div>
 
       {isDragging && draggedNode?.id === node.id && (

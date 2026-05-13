@@ -15,7 +15,7 @@ export interface Toast {
 let toastIdCounter = 0;
 // Глобальное состояние тостов
 let globalToasts: Toast[] = [];
-let globalListeners: Set<() => void> = new Set();
+const globalListeners: Set<() => void> = new Set();
 
 function getActiveSyncCount() {
   return globalToasts.filter(t => t.isLoading).length;

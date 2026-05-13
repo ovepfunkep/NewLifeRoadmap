@@ -1,12 +1,20 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Node, NodeRecurrence } from '../types';
 import { t } from '../i18n';
-import { initDB, getNode, getRoot, saveNode, deleteNode } from '../db';
+import { getNode, saveNode, deleteNode } from '../db';
 import { getCurrentUser } from '../firebase/auth';
 import { syncNodeNow } from '../db-sync';
 import { buildBreadcrumbs, getTotalChildCount } from '../utils';
 import { useNodeNavigation } from '../hooks/useHashRoute';
 import { useToast } from '../hooks/useToast';
+import { useIsMobile } from '../hooks/useIsMobile';
+import { useNodeDragGlobalListeners } from '../hooks/nodePage/useNodeDragGlobalListeners';
+import {
+  useMobileDeadlinesScopeNode,
+  useMobileDashboardScopeNode,
+} from '../hooks/nodePage/useMobileScopeNodes';
+import { useNodePageTree } from '../hooks/nodePage/useNodePageTree';
+import { executeMoveStep } from './nodePage/executeMoveStep';
 import { useEffects } from '../hooks/useEffects';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Header } from '../components/Header';
@@ -32,13 +40,21 @@ import { Z_MOBILE_FAB } from '../config/zLayers';
 import { AMBIENT_SEASON } from '../config/ambientSeason';
 import { SpringTrees } from '../components/SpringTrees';
 
+/*
+ * NodePage — hash-routed tree screen: loads `Node` from IndexedDB, lists children (StepsList),
+ * deadlines/dashboard on mobile tabs, editor/import/move modals, drag-reparent, shortcuts.
+ * Heavy logic is split into `hooks/nodePage/*` and `pages/nodePage/executeMoveStep.ts`.
+ */
 type SortType = 'none' | 'name' | 'deadline';
 
 export function NodePage() {
   const [nodeId, navigateToNode] = useNodeNavigation();
-  const [currentNode, setCurrentNode] = useState<Node | null>(null);
-  const [breadcrumbs, setBreadcrumbs] = useState<Node[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { showToast, updateToast, removeToast } = useToast();
+  const { currentNode, setCurrentNode, breadcrumbs, setBreadcrumbs, loading } = useNodePageTree({
+    nodeId,
+    navigateToNode,
+    showToast,
+  });
   const [showEditor, setShowEditor] = useState(false);
   const [showImportExport, setShowImportExport] = useState(false);
   const [editingNode, setEditingNode] = useState<Node | null>(null);
@@ -55,33 +71,25 @@ export function NodePage() {
   const [nodeToDeleteId, setNodeToDeleteId] = useState<string | null>(null);
   const [animatingBurnId, setAnimatingBurnId] = useState<string | null>(null);
   const [animatingMoveId, setAnimatingMoveId] = useState<string | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
   const [mobileSection, setMobileSection] = useState<MobileSection>('tasks');
   const [editorParentId, setEditorParentId] = useState<string | null>(null);
   const [mobileDeadlinesNodeId, setMobileDeadlinesNodeId] = useState<string>('root-node');
-  const [mobileDeadlinesNode, setMobileDeadlinesNode] = useState<Node | null>(null);
   const [mobileDashboardNodeId, setMobileDashboardNodeId] = useState<string>('root-node');
-  const [mobileDashboardNode, setMobileDashboardNode] = useState<Node | null>(null);
   const [showDeadlinesScopePicker, setShowDeadlinesScopePicker] = useState(false);
   const [showDashboardScopePicker, setShowDashboardScopePicker] = useState(false);
-  const { showToast, updateToast, removeToast } = useToast();
+  const [confettiTrigger, setConfettiTrigger] = useState(0); // Изменено на number для поддержки нескольких запусков
+  const [confettiChildCount, setConfettiChildCount] = useState(0);
   const { effectsEnabled } = useEffects();
   const { setLanguage } = useLanguage();
   const { allowEssentialMotion } = useMotionPreferences();
-
-  // Сохраняем последнюю позицию touch для проверки в handleDragEnd
-  const lastTouchPositionRef = useRef<{ x: number; y: number } | null>(null);
-  const scrollIntervalRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  const isMobile = useIsMobile(768);
+  const { lastTouchPositionRef } = useNodeDragGlobalListeners({
+    draggedNode,
+    routeNodeId: nodeId,
+    setDragOverNodeId,
+  });
+  const mobileDeadlinesNode = useMobileDeadlinesScopeNode(mobileDeadlinesNodeId, currentNode);
+  const mobileDashboardNode = useMobileDashboardScopeNode(mobileDashboardNodeId, currentNode);
 
   useEffect(() => {
     if (!isMobile) {
@@ -90,126 +98,6 @@ export function NodePage() {
       setShowDashboardScopePicker(false);
     }
   }, [isMobile]);
-
-  // Глобальный обработчик touchmove и dragover для определения карточки под пальцем и авто-скролла
-  useEffect(() => {
-    if (!draggedNode) {
-      if (scrollIntervalRef.current) {
-        window.clearInterval(scrollIntervalRef.current);
-        scrollIntervalRef.current = null;
-      }
-      lastTouchPositionRef.current = null;
-      return;
-    }
-
-    let lastHoveredNodeId: string | null = null;
-
-    // Запускаем постоянный интервал проверки необходимости скролла
-    scrollIntervalRef.current = window.setInterval(() => {
-      if (!lastTouchPositionRef.current) return;
-      
-      const { y } = lastTouchPositionRef.current;
-      const threshold = 100;
-      const maxSpeed = 15;
-      const h = window.innerHeight;
-
-      if (y < threshold) {
-        const intensity = (threshold - y) / threshold;
-        window.scrollBy(0, -maxSpeed * intensity);
-      } else if (y > h - threshold) {
-        const intensity = (y - (h - threshold)) / threshold;
-        window.scrollBy(0, maxSpeed * intensity);
-      }
-    }, 16);
-
-    const handleDragMove = (x: number, y: number) => {
-      // Сохраняем позицию для проверки в handleDragEnd и авто-скролла
-      lastTouchPositionRef.current = { x, y };
-      
-      // Находим все карточки и крошки
-      const allCards = document.querySelectorAll('[data-node-id]');
-      let foundCard: HTMLElement | null = null;
-      
-      // Проверяем каждую карточку, находится ли палец внутри её границ
-      for (const card of allCards) {
-        const htmlCard = card as HTMLElement;
-        const nodeId = htmlCard.getAttribute('data-node-id');
-        
-        // Пропускаем перетаскиваемую карточку
-        if (!nodeId || nodeId === draggedNode.id) continue;
-        
-        const rect = htmlCard.getBoundingClientRect();
-        const isInside = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
-        
-        if (isInside) {
-          foundCard = htmlCard;
-          break;
-        }
-      }
-      
-      // Если нашли карточку или крошку
-      if (foundCard) {
-        const hoveredNodeId = foundCard.getAttribute('data-node-id');
-        
-        if (!hoveredNodeId) {
-          if (lastHoveredNodeId) {
-            setDragOverNodeId(null);
-            lastHoveredNodeId = null;
-          }
-          return;
-        }
-        
-        // Запрещаем перетаскивание в текущий узел
-        if (nodeId && hoveredNodeId === nodeId) {
-          if (lastHoveredNodeId) {
-            setDragOverNodeId(null);
-            lastHoveredNodeId = null;
-          }
-          return;
-        }
-        
-        // Если это новая карточка или крошка, обновляем состояние
-        if (hoveredNodeId !== lastHoveredNodeId) {
-          lastHoveredNodeId = hoveredNodeId;
-          setDragOverNodeId(hoveredNodeId);
-        }
-      } else {
-        // Палец не над карточкой - сбрасываем состояние
-        if (lastHoveredNodeId) {
-          setDragOverNodeId(null);
-          lastHoveredNodeId = null;
-        }
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      handleDragMove(e.clientX, e.clientY);
-    };
-
-    const handleDragOver = (e: DragEvent) => {
-      handleDragMove(e.clientX, e.clientY);
-    };
-
-    window.addEventListener('touchmove', handleTouchMove, { passive: true });
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('dragover', handleDragOver);
-
-    return () => {
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('dragover', handleDragOver);
-      if (scrollIntervalRef.current) {
-        window.clearInterval(scrollIntervalRef.current);
-        scrollIntervalRef.current = null;
-      }
-      lastTouchPositionRef.current = null;
-    };
-  }, [draggedNode, nodeId]);
 
   // Auto-switch language when entering tutorial language branch (matches your tutorial roots)
   useEffect(() => {
@@ -220,43 +108,6 @@ export function NodePage() {
       setLanguage('en');
     }
   }, [currentNode, setLanguage]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadDeadlinesScopeNode = async () => {
-      if (!mobileDeadlinesNodeId) {
-        setMobileDeadlinesNode(currentNode);
-        return;
-      }
-      const scopedNode = await getNode(mobileDeadlinesNodeId);
-      if (cancelled) return;
-      setMobileDeadlinesNode(scopedNode ?? currentNode);
-    };
-
-    loadDeadlinesScopeNode();
-    return () => {
-      cancelled = true;
-    };
-  }, [mobileDeadlinesNodeId, currentNode]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadDashboardScopeNode = async () => {
-      const scopedNode = await getNode(mobileDashboardNodeId);
-      if (cancelled) return;
-      setMobileDashboardNode(scopedNode ?? currentNode);
-    };
-
-    loadDashboardScopeNode();
-    return () => {
-      cancelled = true;
-    };
-  }, [mobileDashboardNodeId, currentNode]);
-
-  const [confettiTrigger, setConfettiTrigger] = useState(0); // Изменено на number для поддержки нескольких запусков
-  const [confettiChildCount, setConfettiChildCount] = useState(0);
 
   // Мемоизированный список детей (сортировка и фильтрация теперь в StepsList)
   const sortedChildren = useMemo(() => {
@@ -422,93 +273,6 @@ export function NodePage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentNode, showEditor, showImportExport, showMoveModal, navigateToNode, breadcrumbs, getVisibleSteps, handleCreateChild]);
-
-  // Функция загрузки узла (вынесена для переиспользования)
-  const loadNode = useCallback(async (targetNodeId?: string, silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      await initDB();
-      
-      const targetId = targetNodeId || nodeId || 'root-node';
-      let node = await getNode(targetId);
-      
-      // Если узел не найден и это не root-node, пытаемся загрузить root-node
-      if (!node && targetId !== 'root-node') {
-        node = await getNode('root-node');
-        
-        if (node) {
-          navigateToNode('root-node');
-          setLoading(false);
-          return;
-        }
-      }
-      
-      // Если root-node не найден, создаём его
-      if (!node && targetId === 'root-node') {
-        // Пытаемся получить root через getRoot, который создаст его если нужно
-        try {
-          node = await getRoot();
-        } catch (error) {
-          console.error('Error getting root:', error);
-          
-          // Если и это не помогло, создаём корневой узел вручную
-          const rootNode: Node = {
-            id: 'root-node',
-            parentId: null,
-            title: 'Ваши Life Roadmaps',
-            completed: false,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            children: [],
-          };
-          await saveNode(rootNode);
-          node = rootNode;
-        }
-      }
-      
-      if (!node) {
-        console.error('Failed to load or create root node');
-        showToast('Ошибка загрузки задачи');
-        setLoading(false);
-        return;
-      }
-      
-      setCurrentNode(node);
-      
-      try {
-        const crumbs = await buildBreadcrumbs(targetId, getNode);
-        setBreadcrumbs(crumbs);
-      } catch (breadcrumbError) {
-        console.error('Error building breadcrumbs:', breadcrumbError);
-        // Устанавливаем пустые breadcrumbs, чтобы не блокировать загрузку
-        setBreadcrumbs([]);
-      }
-    } catch (error) {
-      console.error('Error loading node:', error);
-      showToast('Ошибка загрузки задачи');
-    } finally {
-      setLoading(false);
-    }
-  }, [nodeId, navigateToNode, showToast]);
-
-  // Загрузка узла при изменении nodeId
-  useEffect(() => {
-    loadNode();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeId]);
-
-  // Слушатель события обновления данных из облака
-  useEffect(() => {
-    const handleDataUpdated = () => {
-      loadNode(undefined, true);
-    };
-
-    window.addEventListener('syncManager:dataUpdated', handleDataUpdated);
-
-    return () => {
-      window.removeEventListener('syncManager:dataUpdated', handleDataUpdated);
-    };
-  }, [loadNode]);
 
   const handleMarkCompleted = async (id: string, completed: boolean) => {
     if (!currentNode) return;
@@ -833,247 +597,26 @@ export function NodePage() {
     }
   };
 
-  // Перемещение шага внутрь другого шага
-  const handleMoveNode = async (sourceNodeId: string, targetNodeId: string) => {
-    if (!currentNode || sourceNodeId === targetNodeId) return;
-    
-    // Предотвращаем перемещение корневого узла
-    if (sourceNodeId === 'root-node') {
-      showToast('Нельзя переместить корневую задачу');
-      return;
-    }
-
-    // Запускаем анимацию уплывания только если эффекты включены
-    if (effectsEnabled) {
-      setAnimatingMoveId(sourceNodeId);
-      // Ждем окончания анимации (пользователь просил медленнее)
-      await new Promise(resolve => setTimeout(resolve, 800));
-    }
-
-    // Получаем узел для перемещения
-    const sourceNode = await getNode(sourceNodeId);
-    if (!sourceNode) {
-      setAnimatingMoveId(null);
-      return;
-    }
-
-    // Проверяем, не является ли targetNodeId потомком sourceNodeId (предотвращение рекурсии)
-    const isDescendant = (node: Node, targetId: string): boolean => {
-      for (const child of node.children) {
-        if (child.id === targetId) return true;
-        if (isDescendant(child, targetId)) return true;
-      }
-      return false;
-    };
-    
-    if (isDescendant(sourceNode, targetNodeId)) {
-      showToast('Нельзя переместить задачу в её собственный подшаг');
-      setAnimatingMoveId(null);
-      return;
-    }
-
-    // Сохраняем старый родитель для отмены
-    const oldParentId = sourceNode.parentId;
-    let oldParent: Node | null = null;
-    if (oldParentId) {
-      oldParent = await getNode(oldParentId);
-    }
-
-    // Удаляем из старого родителя
-    if (oldParent) {
-      const updatedChildren = oldParent.children.filter(child => child.id !== sourceNodeId);
-      const updatedParent: Node = {
-        ...oldParent,
-        children: updatedChildren,
-        updatedAt: new Date().toISOString(),
-      };
-      await saveNode(updatedParent);
-    }
-
-    // Обновляем parentId у перемещаемого узла и всех его потомков
-    const updateParentIds = (node: Node, newParentId: string | null) => {
-      node.parentId = newParentId;
-      node.updatedAt = new Date().toISOString();
-      for (const child of node.children) {
-        updateParentIds(child, node.id);
-      }
-    };
-
-    // Добавляем в новый родитель
-    const targetNode = await getNode(targetNodeId);
-    if (!targetNode) {
-      setAnimatingMoveId(null);
-      return;
-    }
-
-    updateParentIds(sourceNode, targetNodeId);
-    await saveNode(sourceNode);
-
-    const updatedTarget: Node = {
-      ...targetNode,
-      children: [...targetNode.children, sourceNode],
-      updatedAt: new Date().toISOString(),
-    };
-    await saveNode(updatedTarget);
-    
-    setAnimatingMoveId(null); // Сбрасываем ID после перемещения
-
-    // Функция отмены перемещения
-    const undoMove = async () => {
-      if (!oldParentId || !sourceNode) return;
-      
-      // Получаем актуальные данные из БД
-      const currentSourceNode = await getNode(sourceNodeId);
-      const currentTargetNode = await getNode(targetNodeId);
-      const currentOldParent = oldParentId ? await getNode(oldParentId) : null;
-      
-      if (!currentSourceNode || !currentTargetNode) return;
-
-      // Удаляем из нового родителя (целевого) ПЕРВЫМ ДЕЛОМ
-      const updatedTargetChildren = currentTargetNode.children.filter(child => child.id !== sourceNodeId);
-      const updatedTarget: Node = {
-        ...currentTargetNode,
-        children: updatedTargetChildren,
-        updatedAt: new Date().toISOString(),
-      };
-      await saveNode(updatedTarget);
-
-      // Затем обновляем parentId у перемещенного узла и всех его потомков
-      updateParentIds(currentSourceNode, oldParentId || null);
-      await saveNode(currentSourceNode);
-      // saveNode автоматически добавит узел в старого родителя, если parentId установлен
-
-      // Проверяем, что узел действительно удален из нового родителя и добавлен в старый
-      // Перезагружаем узлы для проверки
-      const reloadedTarget = await getNode(targetNodeId);
-      const reloadedOldParent = currentOldParent ? await getNode(oldParentId) : null;
-      
-      // Если узел все еще в новом родителе, удаляем его вручную
-      if (reloadedTarget && reloadedTarget.children.some(child => child.id === sourceNodeId)) {
-        const fixedTargetChildren = reloadedTarget.children.filter(child => child.id !== sourceNodeId);
-        const fixedTarget: Node = {
-          ...reloadedTarget,
-          children: fixedTargetChildren,
-          updatedAt: new Date().toISOString(),
-        };
-        await saveNode(fixedTarget);
-      }
-      
-      // Если узел не в старом родителе, добавляем его вручную
-      if (reloadedOldParent && !reloadedOldParent.children.some(child => child.id === sourceNodeId)) {
-        const fixedOldParent: Node = {
-          ...reloadedOldParent,
-          children: [...reloadedOldParent.children, currentSourceNode],
-          updatedAt: new Date().toISOString(),
-        };
-        await saveNode(fixedOldParent);
-      }
-
-      // Синхронизируем изменения (в фоне)
-      (async () => {
-        try {
-          // Получаем финальные версии узлов для синхронизации
-          const finalTarget = await getNode(targetNodeId);
-          const finalSource = await getNode(sourceNodeId);
-          const finalOldParent = currentOldParent ? await getNode(oldParentId) : null;
-          
-          // Синхронизируем только критически важные узлы
-          const syncPromises: Promise<void>[] = [];
-          if (finalTarget) syncPromises.push(syncNodeNow(finalTarget));
-          if (finalSource) syncPromises.push(syncNodeNow(finalSource));
-          if (finalOldParent) syncPromises.push(syncNodeNow(finalOldParent));
-          
-          Promise.all(syncPromises).catch(error => {
-            console.error('[NodePage] Error syncing nodes after undo:', error);
-          });
-          
-          // Синхронизируем потомков в фоне
-          if (finalSource) {
-            const syncSubtree = async (node: Node) => {
-              for (const child of node.children) {
-                try {
-                  await syncNodeNow(child);
-                  await syncSubtree(child);
-                } catch (error) {
-                  console.error(`[NodePage] Error syncing child ${child.id}:`, error);
-                }
-              }
-            };
-            
-            syncSubtree(finalSource).catch(error => {
-              console.error('[NodePage] Error syncing subtree:', error);
-            });
-          }
-        } catch (error) {
-          console.error('[NodePage] Error starting sync:', error);
-        }
-      })();
-
-      // Перезагружаем текущий узел
-      const reloaded = await getNode(currentNode.id);
-      if (reloaded) {
-        setCurrentNode(reloaded);
-        const breadcrumbs = await buildBreadcrumbs(reloaded.id, getNode);
-        setBreadcrumbs(breadcrumbs);
-      }
-    };
-
-    // Показываем объединенный тост с иконкой загрузки и возможностью отмены
-    const syncToastId = showToast(t('toast.nodeMoved'), undoMove, {
-      isLoading: true
-    });
-
-    // Синхронизируем изменения с Firestore (в фоне, не блокируем UI)
-    (async () => {
-      try {
-        // Синхронизируем только критически важные узлы параллельно
-        const syncPromises: Promise<void>[] = [];
-        if (oldParent) {
-          syncPromises.push(syncNodeNow(oldParent));
-        }
-        syncPromises.push(syncNodeNow(sourceNode));
-        syncPromises.push(syncNodeNow(updatedTarget));
-        
-        // Ждем завершения критических синхронизаций
-        await Promise.all(syncPromises);
-        
-        // Обновляем тост: заменяем иконку загрузки на галочку
-        updateToast(syncToastId, { isLoading: false, isSuccess: true, subtitle: undefined });
-        
-        // Синхронизируем потомков в фоне (не блокируем UI)
-        const syncSubtree = async (node: Node) => {
-          for (const child of node.children) {
-            try {
-              await syncNodeNow(child);
-              await syncSubtree(child);
-            } catch (error) {
-              console.error(`[NodePage] Error syncing child ${child.id}:`, error);
-            }
-          }
-        };
-        
-        // Запускаем синхронизацию потомков в фоне без await
-        syncSubtree(sourceNode).catch(error => {
-          console.error('[NodePage] Error syncing subtree:', error);
-        });
-      } catch (error) {
-        console.error('[NodePage] Error syncing after move:', error);
-        // При ошибке просто закрываем тост
-        removeToast(syncToastId);
-        showToast(t('toast.syncError'));
-      }
-    })();
-
-    // Перезагружаем текущий узел
-    const reloaded = await getNode(currentNode.id);
-    if (reloaded) {
-      setCurrentNode(reloaded);
-      const breadcrumbs = await buildBreadcrumbs(reloaded.id, getNode);
-      setBreadcrumbs(breadcrumbs);
-    }
-
-    // Undo функциональность сохранена, но тост уже показан выше с индикатором загрузки
-  };
+  const handleMoveNode = useCallback(
+    async (sourceNodeId: string, targetNodeId: string) => {
+      if (!currentNode) return;
+      await executeMoveStep(
+        {
+          currentNode,
+          effectsEnabled,
+          setAnimatingMoveId,
+          showToast,
+          updateToast,
+          removeToast,
+          setCurrentNode,
+          setBreadcrumbs,
+        },
+        sourceNodeId,
+        targetNodeId
+      );
+    },
+    [currentNode, effectsEnabled, showToast, updateToast, removeToast, setCurrentNode, setBreadcrumbs]
+  );
 
   // Обработчик drag для перемещения внутрь другого шага
   const handleDragStart = (node: Node) => {

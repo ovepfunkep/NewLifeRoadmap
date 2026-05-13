@@ -16,7 +16,6 @@ import { getUserSecurityConfig } from '../firebase/security';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   expandNodesToSlots,
-  normalizeRecurrenceVariants,
   recurrenceVariantsTimeOverlapOnSharedDay,
   computeNextOccurrenceStartMs,
 } from '../utils/recurrence';
@@ -24,118 +23,42 @@ import { RecurrenceVariantsEditor } from './RecurrenceVariantsEditor';
 import { useMotionPreferences } from '../hooks/useMotionPreferences';
 import { motionDurations, motionTransitions } from '../config/motion';
 import { MobileBottomSheet } from './MobileBottomSheet';
+import { useIsMobile } from '../hooks/useIsMobile';
+import { mapNodeRecurrenceToVariants } from './editorModal/mapRecurrence';
+import {
+  formatDateForInput,
+  formatTimeForInput,
+  getInitialDeadlineDate,
+  getInitialDeadlineTime,
+  getInitialDeadlineEndTime,
+} from './editorModal/deadlineInitialValues';
+import type { EditorModalProps } from './editorModal/EditorModalTypes';
 
-function mapNodeRecurrenceToVariants(rule: NodeRecurrence, freq: 'weekly' | 'monthly' | 'yearly'): RecurrenceScheduleVariant[] {
-  const list = normalizeRecurrenceVariants(rule);
-  if (freq === 'weekly') {
-    return list.map((v) => ({
-      weekdays: [...(v.weekdays ?? [])],
-      timeStart: v.timeStart ?? '',
-      timeEnd: v.timeEnd ?? '',
-    }));
-  }
-  if (freq === 'monthly') {
-    return list.map((v) => ({
-      monthDays: [...(v.monthDays ?? [])],
-      timeStart: v.timeStart ?? '',
-      timeEnd: v.timeEnd ?? '',
-    }));
-  }
-  return list.map((v) => ({
-    yearlyMonth: v.yearlyMonth ?? 1,
-    yearlyMonthDay: v.yearlyMonthDay ?? 1,
-    timeStart: v.timeStart ?? '',
-    timeEnd: v.timeEnd ?? '',
-  }));
-}
+export type { EditorModalProps };
 
-interface EditorModalProps {
-  node: Node | null; // null = создание нового
-  parentId: string | null;
-  onSave: (node: Node) => void;
-  onClose: () => void;
-  initialDeadline?: Date; // Начальная дата для новой задачи
-  initialRecurring?: NodeRecurrence; // Пресет регулярности для новой задачи
-}
-
+/**
+ * Modal editor: title/body, deadline, recurrence variants, reminders, parent pick (create).
+ * Shell: desktop centered dialog vs `MobileBottomSheet` on narrow viewports.
+ */
 export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, initialRecurring }: EditorModalProps) {
   const { allowEssentialMotion } = useMotionPreferences();
   const { language } = useLanguage();
   const [showTgLinkModal, setShowTgLinkModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [timeConflicts, setTimeConflicts] = useState<Array<{ id: string; title: string }>>([]);
-  const [isMobile, setIsMobile] = useState(false);
-  
-  // Форматируем initialDeadline в строку для input type="date"
-  const formatDateForInput = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-  
-  // Форматируем initialDeadline в строку для input type="time"
-  const formatTimeForInput = (date: Date): string => {
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
-  
-  const getInitialDeadlineDate = (): string => {
-    if (!node && initialRecurring) {
-      return '';
-    }
-    if (node?.deadline) {
-      return formatDateForInput(new Date(node.deadline));
-    }
-    if (initialDeadline) {
-      return formatDateForInput(initialDeadline);
-    }
-    return '';
-  };
-  
-  const getInitialDeadlineTime = (): string => {
-    if (!node && initialRecurring) {
-      return '';
-    }
-    if (node?.deadline) {
-      const date = new Date(node.deadline);
-      const hours = date.getHours();
-      const minutes = date.getMinutes();
-      // Если время 00:00, считаем его пустым (сентинель для "только дата")
-      if (hours === 0 && minutes === 0) {
-        return '';
-      }
-      return formatTimeForInput(date);
-    }
-    // Если есть начальная дата (создание из расписания), ставим 12:00 по умолчанию
-    if (initialDeadline) {
-      return '12:00';
-    }
-    return '';
-  };
+  const isMobile = useIsMobile(768);
 
-  const getInitialDeadlineEndTime = (): string => {
-    if (!node && initialRecurring) {
-      return '';
-    }
-    if (node?.deadlineEnd) {
-      const date = new Date(node.deadlineEnd);
-      const hours = date.getHours();
-      const minutes = date.getMinutes();
-      if (hours === 0 && minutes === 0) {
-        return '';
-      }
-      return formatTimeForInput(date);
-    }
-    return '';
-  };
-  
   const [title, setTitle] = useState(node?.title || '');
   const [description, setDescription] = useState(node?.description || '');
-  const [deadlineDate, setDeadlineDate] = useState(getInitialDeadlineDate());
-  const [deadlineTime, setDeadlineTime] = useState(getInitialDeadlineTime());
-  const [deadlineEndTime, setDeadlineEndTime] = useState(getInitialDeadlineEndTime());
+  const [deadlineDate, setDeadlineDate] = useState(() =>
+    getInitialDeadlineDate(node, initialDeadline, initialRecurring)
+  );
+  const [deadlineTime, setDeadlineTime] = useState(() =>
+    getInitialDeadlineTime(node, initialDeadline, initialRecurring)
+  );
+  const [deadlineEndTime, setDeadlineEndTime] = useState(() =>
+    getInitialDeadlineEndTime(node, initialRecurring)
+  );
   const [isRecurring, setIsRecurring] = useState(node?.isRecurring || !!initialRecurring);
   const [recurrenceFreq, setRecurrenceFreq] = useState<RecurrenceFrequency>(node?.recurrence?.freq || initialRecurring?.freq || 'daily');
   const [recurrenceVariants, setRecurrenceVariants] = useState<RecurrenceScheduleVariant[]>(() => {
@@ -283,15 +206,6 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
   }, [recurrenceVariants.length]);
 
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  useEffect(() => {
     if (!node) {
       setChosenParentId(parentId);
     }
@@ -356,7 +270,7 @@ export function EditorModal({ node, parentId, onSave, onClose, initialDeadline, 
     setReminders(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleUpdateReminder = (index: number, field: 'value' | 'unit', value: any) => {
+  const handleUpdateReminder = (index: number, field: 'value' | 'unit', value: string | number) => {
     setReminders(prev => prev.map((rem, i) => i === index ? { ...rem, [field]: value } : rem));
   };
 
