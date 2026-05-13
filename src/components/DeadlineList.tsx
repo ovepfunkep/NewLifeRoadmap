@@ -260,12 +260,16 @@ export function DeadlineList({ node, onNavigate, onNavigateToTask, onMarkComplet
     <>
       <div
         className={`flex min-h-[140px] flex-col py-4 transition-all md:p-5 ${
-          isMobile ? '' : 'rounded-lg bg-white shadow-sm dark:bg-gray-800'
+          isMobile ? '' : 'rounded-lg bg-white shadow-sm lg:rounded-xl dark:bg-gray-800'
         }`}
       >
-        {/* Режимы дедлайнов */}
-        <div className="mb-4 flex flex-col gap-3 flex-shrink-0">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+        {/* Режимы дедлайнов: под календарь — больше воздуха; список/неделя — как у перечня задач (mb-4 после переключателя) */}
+        <div
+          className={`flex flex-col gap-3 flex-shrink-0 ${
+            viewMode === 'calendar' ? 'mb-5' : 'mb-4'
+          }`}
+        >
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 md:text-[20px]">
             {t('deadline.title')}
           </h2>
           <LayoutGroup id="deadline-view-chips">
@@ -273,7 +277,7 @@ export function DeadlineList({ node, onNavigate, onNavigateToTask, onMarkComplet
             className={`mt-1 flex w-full items-center gap-2 rounded-xl p-1 ${
               isMobile
                 ? 'bg-white shadow-sm dark:bg-gray-800'
-                : 'bg-gray-100 dark:bg-gray-900/55'
+                : 'bg-[var(--surface-subtle)] dark:bg-gray-900/55'
             }`}
           >
             <button
@@ -377,8 +381,8 @@ export function DeadlineList({ node, onNavigate, onNavigateToTask, onMarkComplet
               className="relative h-full flex flex-col"
             >
               <div
-                className={`space-y-2 overflow-y-auto px-1 custom-scrollbar ${
-                  isMobile ? 'flex-1 min-h-0 py-1' : 'max-h-[435px] py-4'
+                className={`space-y-3 overflow-y-auto px-1 custom-scrollbar ${
+                  isMobile ? 'flex-1 min-h-0 py-1' : 'max-h-[435px] py-0'
                 }`}
               >
                 <AnimatePresence mode="popLayout">

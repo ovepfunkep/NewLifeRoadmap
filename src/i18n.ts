@@ -16,6 +16,7 @@ export const i18n: Record<Language, Record<string, any>> = {
       create: 'Create',
       close: 'Close',
       notFound: 'Task not found',
+      moreActions: 'More actions',
     },
     node: {
       markCompleted: 'Mark as completed',
@@ -88,6 +89,8 @@ export const i18n: Record<Language, Record<string, any>> = {
       byName: 'By name',
       byDeadline: 'By deadline',
       defaultOrder: 'By manual order',
+      ascending: 'Ascending',
+      descending: 'Descending',
       openOptions: 'Sort options',
     },
     keyboard: {
@@ -133,6 +136,7 @@ export const i18n: Record<Language, Record<string, any>> = {
       previousDay: 'Previous day',
       nextDay: 'Next day',
       today: 'Go to today',
+      toCurrentWeek: 'To current week',
     },
     toast: {
       undo: 'Undo',
@@ -319,6 +323,7 @@ export const i18n: Record<Language, Record<string, any>> = {
       create: 'Создать',
       close: 'Закрыть',
       notFound: 'Задача не найдена',
+      moreActions: 'Другие действия',
     },
     node: {
       markCompleted: 'Отметить готовым',
@@ -391,6 +396,8 @@ export const i18n: Record<Language, Record<string, any>> = {
       byName: 'По имени',
       byDeadline: 'По дедлайну',
       defaultOrder: 'По порядку',
+      ascending: 'По возрастанию',
+      descending: 'По убыванию',
       openOptions: 'Параметры сортировки',
     },
     keyboard: {
@@ -436,6 +443,7 @@ export const i18n: Record<Language, Record<string, any>> = {
       previousDay: 'Предыдущий день',
       nextDay: 'Следующий день',
       today: 'К сегодняшнему дню',
+      toCurrentWeek: 'К текущей неделе',
     },
     toast: {
       undo: 'Отменить',

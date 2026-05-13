@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { flushSync } from 'react-dom';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
+import { createPortal, flushSync } from 'react-dom';
 import { useTranslation } from '../i18n';
 import { computeProgress, formatDeadline } from '../utils';
 import { useDeadlineTicker } from '../hooks/useDeadlineTicker';
 import { useEffects } from '../hooks/useEffects';
 import { useTheme } from '../hooks/useTheme';
-import { FiCheck, FiEdit2, FiTrash2, FiArrowUp, FiMove } from 'react-icons/fi';
+import { FiCheck, FiEdit2, FiTrash2, FiStar, FiMove, FiMoreVertical } from 'react-icons/fi';
 import { Tooltip } from './Tooltip';
 import { motion } from 'framer-motion';
 import { useMotionPreferences } from '../hooks/useMotionPreferences';
 import { motionTransitions } from '../config/motion';
+import { Z_DRAG_GHOST } from '../config/zLayers';
 import { useIsMobile } from '../hooks/useIsMobile';
 import type { IconType } from 'react-icons';
 import type { NodeCardProps } from './nodeCard/NodeCard.types';
@@ -65,7 +66,13 @@ export function NodeCard({
   const [longPressProgress, setLongPressProgress] = useState(0);
   const [longPressPos, setLongPressPos] = useState({ x: 0, y: 0 });
   const [isDrumActive, setIsDrumActive] = useState(false);
-  
+  const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
+  const [desktopMenuAnchor, setDesktopMenuAnchor] = useState<{
+    top: number;
+    right: number;
+    minWidth: number;
+  } | null>(null);
+
   const isBurning = isBurningProp;
   const isMovingOut = isMovingOutProp;
 
@@ -90,6 +97,8 @@ export function NodeCard({
   const prevHtmlTouchActionRef = useRef<string | null>(null);
   const drumPointerIdRef = useRef<number | null>(null);
   const pointerHandlingRef = useRef(false);
+  const desktopKebabRef = useRef<HTMLButtonElement>(null);
+  const desktopMenuPanelRef = useRef<HTMLDivElement>(null);
 
   // Стабильные ссылки на обработчики для предотвращения утечек
   const handleTouchMoveRef = useRef<(e: TouchEvent) => void>();
@@ -100,7 +109,7 @@ export function NodeCard({
 
   const actions = useMemo(() => [
     { id: 'complete', icon: FiCheck, action: () => onMarkCompleted(node.id, !node.completed), label: node.completed ? t('node.markIncomplete') : t('node.markCompleted'), color: 'var(--accent)', active: node.completed },
-    { id: 'priority', icon: FiArrowUp, action: () => onTogglePriority(node.id, !node.priority), label: node.priority ? t('tooltip.removePriority') : t('tooltip.priority'), color: 'var(--accent)', active: node.priority },
+    { id: 'priority', icon: FiStar, action: () => onTogglePriority(node.id, !node.priority), label: node.priority ? t('tooltip.removePriority') : t('tooltip.priority'), color: 'var(--accent)', active: node.priority },
     { id: 'edit', icon: FiEdit2, action: () => onEdit(node), label: t('general.edit'), color: 'var(--accent)' },
     { id: 'move', icon: FiMove, action: () => onMove?.(node), label: t('node.move'), color: 'var(--accent)' },
     { id: 'delete', icon: FiTrash2, action: () => onDelete(node.id), label: t('general.delete'), color: '#ef4444' },
@@ -109,6 +118,67 @@ export function NodeCard({
   useEffect(() => {
     actionsRef.current = actions;
   }, [actions]);
+
+  const desktopOverflowActions = useMemo(
+    () => actions.filter((a) => a.id === 'edit' || a.id === 'move' || a.id === 'delete'),
+    [actions],
+  );
+
+  const refreshDesktopMenuAnchor = useCallback(() => {
+    const el = desktopKebabRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setDesktopMenuAnchor({
+      top: r.bottom + 6,
+      right: document.documentElement.clientWidth - r.right,
+      minWidth: Math.max(176, r.width),
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!desktopMenuOpen) {
+      setDesktopMenuAnchor(null);
+      return;
+    }
+    refreshDesktopMenuAnchor();
+  }, [desktopMenuOpen, refreshDesktopMenuAnchor]);
+
+  useEffect(() => {
+    if (!desktopMenuOpen) return;
+    const onResize = () => refreshDesktopMenuAnchor();
+    const onScroll = () => setDesktopMenuOpen(false);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [desktopMenuOpen, refreshDesktopMenuAnchor]);
+
+  useEffect(() => {
+    if (!desktopMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDesktopMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [desktopMenuOpen]);
+
+  useEffect(() => {
+    if (!desktopMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target;
+      if (!(t instanceof Node)) return;
+      if (desktopKebabRef.current?.contains(t) || desktopMenuPanelRef.current?.contains(t)) return;
+      setDesktopMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown, true);
+    return () => document.removeEventListener('mousedown', onDown, true);
+  }, [desktopMenuOpen]);
+
+  useEffect(() => {
+    if (isMobile) setDesktopMenuOpen(false);
+  }, [isMobile]);
 
   useEffect(() => {
     baseActionIndexRef.current = baseActionIndex;
@@ -514,6 +584,7 @@ export function NodeCard({
     };
 
     const handleMouseUp = () => {
+      document.body.style.userSelect = '';
       setIsDragging(false);
       setJustDragged(true);
       if (timeoutRef.current) {
@@ -523,6 +594,7 @@ export function NodeCard({
     };
 
     const handleTouchEnd = () => {
+      document.body.style.userSelect = '';
       setIsDragging(false);
       setJustDragged(true);
       if (timeoutRef.current) {
@@ -537,6 +609,7 @@ export function NodeCard({
     window.addEventListener('touchend', handleTouchEnd);
 
     return () => {
+      document.body.style.userSelect = '';
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('touchmove', handleTouchMove);
@@ -555,7 +628,11 @@ export function NodeCard({
     }
   };
 
-  const handleMouseLeave = () => {
+  const handleMouseLeave = (e: React.MouseEvent) => {
+    const rel = e.relatedTarget;
+    if (rel instanceof Element && rel.closest('[data-node-id]')) {
+      return;
+    }
     onDragLeave?.();
   };
 
@@ -584,6 +661,7 @@ export function NodeCard({
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; 
     if (isDragBlockedTarget(e.target)) return;
+    document.body.style.userSelect = 'none';
     const startX = e.clientX;
     const startY = e.clientY;
     let hasStartedDrag = false;
@@ -593,18 +671,19 @@ export function NodeCard({
       const deltaY = Math.abs(moveEvent.clientY - startY);
       if (!hasStartedDrag && (deltaX > 3 || deltaY > 3)) {
         hasStartedDrag = true;
+        moveEvent.preventDefault();
         setIsDragging(true);
         setDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
         onDragStart?.(node);
-        document.body.style.userSelect = 'none';
       }
       if (hasStartedDrag) {
+        moveEvent.preventDefault();
         setDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
       }
     };
     
     const handleMouseUp = () => {
-      document.body.style.userSelect = ''; 
+      document.body.style.userSelect = '';
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       if (hasStartedDrag) {
@@ -701,6 +780,7 @@ export function NodeCard({
           if (longPressDelayTimeoutRef.current) clearTimeout(longPressDelayTimeoutRef.current);
           setIsLongPressing(false);
           setLongPressProgress(0);
+          document.body.style.userSelect = '';
           window.removeEventListener('touchmove', handleTouchMove);
           window.removeEventListener('touchend', handleTouchEnd);
         }
@@ -764,6 +844,16 @@ export function NodeCard({
     (!currentNodeId || node.id !== currentNodeId)
   );
 
+  // Десктоп: неактивные тогглы на выполненной карточке — в той же палитре, что и фон карточки.
+  const desktopToggleInactive = node.completed
+    ? 'rounded-lg border border-accent/25 bg-accent/[0.14] p-2.5 text-accent shadow-sm transition-colors hover:bg-accent/[0.22] dark:border-accent/35 dark:bg-accent/[0.18] dark:hover:bg-accent/[0.26]'
+    : 'rounded-lg border border-transparent bg-gray-100 p-2.5 text-accent shadow-sm transition-colors hover:bg-gray-200/90 dark:bg-gray-700/85 dark:hover:bg-gray-600/80';
+  const desktopToggleActive =
+    'rounded-lg border border-transparent bg-[var(--accent)] p-2.5 text-white shadow-sm transition-colors hover:brightness-110';
+
+  // Выполнена + приоритет выкл.: иконка темнее заливки кнопки, но в той же гамме (не нейтральный чёрный).
+  const priorityDoneOffIconColor = 'color-mix(in srgb, var(--accent) 72%, black)';
+
   return (
     <>
       <div className="relative">
@@ -780,30 +870,32 @@ export function NodeCard({
             opacity: { duration: isMovingOut ? (effectsEnabled ? 0.4 : 0) : motionTransitions.fade.duration },
           }}
           whileTap={allowDecorativeMotion && !isDrumActive ? { scale: 0.995 } : undefined}
-          className={`relative flex min-h-[140px] flex-col overflow-hidden rounded-2xl bg-white transition-[box-shadow] duration-300 ease-out dark:bg-gray-800 ${
+          className={`group/card relative flex min-h-[140px] select-none flex-col overflow-hidden rounded-2xl bg-white transition-[border-color,opacity,box-shadow] duration-300 ease-out dark:bg-gray-800 lg:rounded-xl ${
             node.priority
-              ? 'border-2'
+              ? peerDropHint
+                ? 'border-2 bg-accent/[0.07] ring-2 ring-accent/30 dark:bg-accent/[0.12]'
+                : 'border-2'
               : peerDropHint
-                ? 'border border-accent/80'
+                ? 'border-2 border-accent/45 bg-accent/[0.07] ring-2 ring-accent/30 dark:bg-accent/[0.12]'
                 : 'border border-gray-200 dark:border-gray-700'
           } ${
-            isDragOver ? 'ring-2 ring-offset-2' : ''
-          } ${
-            draggedNode && draggedNode.id !== node.id ? 'opacity-60' : ''
+            draggedNode && draggedNode.id !== node.id
+              ? peerDropHint
+                ? 'opacity-[0.9]'
+                : 'opacity-[0.72]'
+              : ''
           } ${node.completed ? 'bg-accent/20 dark:bg-accent/30' : ''}`}
           style={{
-            ...(node.completed ? { 
-              opacity: 1, 
-              backgroundColor: 'rgba(var(--accent-rgb), 0.2)',
-            } : {}),
+            ...(node.completed
+              ? {
+                  ...(draggedNode && draggedNode.id !== node.id ? {} : { opacity: 1 }),
+                  backgroundColor: 'rgba(var(--accent-rgb), 0.2)',
+                }
+              : {}),
             ...(node.priority ? { borderColor: 'var(--accent)' } : {}),
-            boxShadow: isDragOver
-              ? `0 0 0 2px var(--accent), var(--card-shadow-priority)`
-              : node.priority
-                ? 'var(--card-shadow-priority)'
-                : 'var(--card-shadow-soft)',
+            // Inset ring: outer box-shadow is clipped by overflow-hidden on rounded cards.
+            boxShadow: isDragOver ? 'inset 0 0 0 2px var(--accent)' : 'none',
             ...(isDragOver ? { transition: 'all 0.3s ease' } : {}),
-            ...(peerDropHint ? { opacity: 0.7 } : {}),
             visibility: isBurning && effectsEnabled ? 'hidden' : 'visible',
             pointerEvents: isDrumActive ? 'none' : 'auto'
           }}
@@ -819,14 +911,16 @@ export function NodeCard({
               className={`flex min-w-0 flex-1 flex-col p-0 ${isMobile ? 'pr-16' : ''}`}
             >
               <div className="flex min-h-0 flex-1 flex-col justify-center">
-                <div className="flex items-center justify-between gap-2 px-4 py-3">
+                <div
+                  className={`relative flex items-center gap-2 px-4 py-3 ${!isMobile ? 'pr-40' : ''}`}
+                >
                   <button
                     type="button"
                     onClick={handleNavigateClick}
-                    className="group min-w-0 flex-1 text-left"
+                    className="min-w-0 flex-1 text-left hover:[&_h3]:opacity-75"
                   >
-                    <div className="flex flex-col gap-1.5">
-                      <h3 className="m-0 line-clamp-2 text-lg font-bold leading-snug text-gray-900 transition-opacity group-hover:opacity-75 dark:text-gray-100" style={{ color: 'var(--accent)' }}>
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <h3 className="m-0 line-clamp-2 text-lg font-bold leading-snug text-gray-900 transition-opacity dark:text-gray-100" style={{ color: 'var(--accent)' }}>
                         {node.title}
                       </h3>
                       {node.description && (
@@ -852,23 +946,81 @@ export function NodeCard({
                   </button>
 
                   {!isMobile && (
-                    <div className="relative z-10 ml-2 flex shrink-0">
-                      <div className="flex items-center gap-1.5">
-                        {actions.map((action) => (
-                          <Tooltip key={action.id} text={action.label}>
-                            <motion.button
-                              type="button"
-                              data-card-action="true"
-                              onClick={(e) => { e.stopPropagation(); action.action(); }}
-                              whileTap={allowDecorativeMotion ? { scale: 0.94 } : undefined}
-                              className={`rounded-lg border p-2.5 shadow-sm transition-all hover:scale-110 ${action.active ? 'border-transparent' : 'border-current hover:bg-accent/10'}`}
-                              style={{ color: action.color, backgroundColor: action.active ? action.color : 'transparent' }}
-                            >
-                              {React.createElement(action.icon, { size: 20, style: { color: action.active ? 'white' : action.color } })}
-                            </motion.button>
-                          </Tooltip>
-                        ))}
-                      </div>
+                    <div
+                      className={`pointer-events-none absolute right-3 top-1/2 z-30 flex -translate-y-1/2 items-center gap-1.5 will-change-[opacity,transform] ${
+                        allowDecorativeMotion
+                          ? 'transition-[opacity,transform] duration-200 ease-out'
+                          : 'transition-none'
+                      } ${
+                        desktopMenuOpen
+                          ? 'pointer-events-auto translate-x-0 scale-100 opacity-100'
+                          : 'translate-x-1.5 scale-[0.97] opacity-0 group-hover/card:pointer-events-auto group-hover/card:translate-x-0 group-hover/card:scale-100 group-hover/card:opacity-100'
+                      }`}
+                    >
+                      <Tooltip text={actions[0].label}>
+                        <motion.button
+                          type="button"
+                          data-card-action="true"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            actions[0].action();
+                          }}
+                          whileTap={allowDecorativeMotion ? { scale: 0.94 } : undefined}
+                          className={node.completed ? desktopToggleActive : desktopToggleInactive}
+                        >
+                          <FiCheck size={20} />
+                        </motion.button>
+                      </Tooltip>
+                      <Tooltip text={actions[1].label}>
+                        <motion.button
+                          type="button"
+                          data-card-action="true"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            actions[1].action();
+                          }}
+                          whileTap={allowDecorativeMotion ? { scale: 0.94 } : undefined}
+                          className={
+                            node.priority || node.completed ? desktopToggleActive : desktopToggleInactive
+                          }
+                        >
+                          <FiStar
+                            size={20}
+                            className={
+                              node.priority
+                                ? 'fill-current text-white'
+                                : node.completed
+                                  ? 'fill-current'
+                                  : ''
+                            }
+                            style={
+                              node.completed && !node.priority
+                                ? { color: priorityDoneOffIconColor }
+                                : undefined
+                            }
+                          />
+                        </motion.button>
+                      </Tooltip>
+                      <Tooltip text={t('general.moreActions')}>
+                        <motion.button
+                          ref={desktopKebabRef}
+                          type="button"
+                          data-card-action="true"
+                          aria-expanded={desktopMenuOpen}
+                          aria-haspopup="menu"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDesktopMenuOpen((v) => !v);
+                          }}
+                          whileTap={allowDecorativeMotion ? { scale: 0.94 } : undefined}
+                          className={`rounded-lg border border-current p-2.5 shadow-sm transition-all hover:scale-110 hover:bg-accent/10 ${
+                            desktopMenuOpen ? 'bg-accent/5' : ''
+                          }`}
+                          style={{ color: 'var(--accent)' }}
+                        >
+                          <FiMoreVertical size={20} />
+                        </motion.button>
+                      </Tooltip>
                     </div>
                   )}
                 </div>
@@ -900,6 +1052,12 @@ export function NodeCard({
                           
                           if (opacity <= 0) return null;
                           
+                          const priorityDoneOff =
+                            isSelected &&
+                            action.id === 'priority' &&
+                            node.completed &&
+                            !action.active;
+
                           return (
                             <div key={offset} className="absolute flex items-center justify-center" style={{ top: '50%', marginTop: `${offset * ITEM_HEIGHT - (ITEM_HEIGHT / 2)}px`, height: `${ITEM_HEIGHT}px`, width: '100%', transform: `scale(${scale})`, opacity: opacity, color: action.color, zIndex: isSelected ? 10 : 1, transition: 'none' }}>
                               <div
@@ -908,7 +1066,7 @@ export function NodeCard({
                                   backgroundColor: isSelected
                                     ? action.id === 'delete'
                                       ? 'rgba(239, 68, 68, 0.16)'
-                                      : action.active
+                                      : action.active || priorityDoneOff
                                         ? action.color
                                         : theme === 'dark'
                                           ? 'rgba(71, 85, 105, 0.55)'
@@ -916,13 +1074,23 @@ export function NodeCard({
                                     : 'transparent',
                                   color: action.id === 'delete'
                                     ? '#ef4444'
-                                    : isSelected && action.active
-                                      ? 'white'
+                                    : isSelected && (action.active || priorityDoneOff)
+                                      ? priorityDoneOff
+                                        ? priorityDoneOffIconColor
+                                        : 'white'
                                       : action.color,
                                   transition: 'none',
                                 }}
                               >
-                                <Icon size={20} style={{ color: action.id === 'delete' ? '#ef4444' : isSelected && action.active ? 'white' : undefined }} />
+                                <Icon
+                                  size={20}
+                                  className={
+                                    action.id === 'priority' && (node.priority || node.completed)
+                                      ? 'fill-current'
+                                      : undefined
+                                  }
+                                  style={{ color: action.id === 'delete' ? '#ef4444' : isSelected && action.active ? 'white' : undefined }}
+                                />
                               </div>
                             </div>
                           );
@@ -937,34 +1105,99 @@ export function NodeCard({
             node={node}
             progress={progress}
             isBlinking={isBlinking}
-            theme={theme}
+            isDragOver={isDragOver}
           />
         </motion.div>
 
         {isBurning && effectsEnabled && <NodeCardBurnOverlay node={node} />}
       </div>
 
-      {isDragging && draggedNode?.id === node.id && (
-        <div
-          className="fixed pointer-events-none z-50 opacity-50 transform scale-50"
-          style={{
-            left: dragPosition.x - 150,
-            top: dragPosition.y - 50,
-            width: '300px'
-          }}
-        >
-          <div className="rounded-lg bg-white p-3 shadow-xl dark:bg-gray-800">
-            <div className="font-semibold text-gray-900 dark:text-gray-100 truncate" style={{ color: 'var(--accent)' }}>
-              {node.title}
-            </div>
-            {node.description && (
-              <div className="text-sm text-gray-600 dark:text-gray-400 truncate mt-1">
-                {node.description}
+      {isDragging &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="pointer-events-none w-[min(240px,calc(100vw-32px))] rounded-2xl border border-gray-200 bg-white/97 shadow-xl backdrop-blur-sm dark:border-gray-600 dark:bg-gray-800/97 lg:rounded-xl"
+            style={{
+              position: 'fixed',
+              left: dragPosition.x,
+              top: dragPosition.y,
+              zIndex: Z_DRAG_GHOST,
+              transform: 'translate(-18px, -18px) scale(0.72)',
+              transformOrigin: '0 0',
+            }}
+          >
+            <div className="px-3 py-2.5">
+              <div className="line-clamp-2 text-sm font-bold leading-snug text-gray-900 dark:text-gray-100" style={{ color: 'var(--accent)' }}>
+                {node.title}
               </div>
-            )}
-          </div>
-        </div>
-      )}
+              {node.description ? (
+                <div className="mt-1 line-clamp-2 text-[11px] leading-snug text-gray-600 dark:text-gray-400">
+                  {node.description}
+                </div>
+              ) : null}
+              {deadlineDisplay ? (
+                <div className="mt-1.5">
+                  <span
+                    className="inline-block rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white"
+                    style={{ backgroundColor: '#f97316' }}
+                  >
+                    {deadlineDisplay}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {!isMobile &&
+        desktopMenuOpen &&
+        desktopMenuAnchor &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={desktopMenuPanelRef}
+            role="menu"
+            className={`fixed origin-top-right rounded-lg bg-white/95 py-1 text-sm shadow-[0_10px_40px_rgba(15,23,42,0.14),0_2px_12px_rgba(15,23,42,0.08)] backdrop-blur-sm dark:bg-gray-900/95 dark:shadow-[0_12px_48px_rgba(0,0,0,0.55),0_4px_16px_rgba(0,0,0,0.35)] ${
+              allowDecorativeMotion ? 'animate-in fade-in zoom-in-95 duration-150' : ''
+            }`}
+            style={{
+              top: desktopMenuAnchor.top,
+              right: desktopMenuAnchor.right,
+              minWidth: desktopMenuAnchor.minWidth,
+              zIndex: 108,
+            }}
+          >
+            {desktopOverflowActions.map((action) => {
+              const Icon = action.icon;
+              const isDelete = action.id === 'delete';
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  role="menuitem"
+                  data-card-action="true"
+                  className={`flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-gray-100/90 dark:hover:bg-white/5 ${
+                    isDelete ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-200'
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDesktopMenuOpen(false);
+                    action.action();
+                  }}
+                >
+                  <Icon
+                    size={18}
+                    className="shrink-0"
+                    style={isDelete ? { color: '#ef4444' } : { color: 'var(--accent)' }}
+                  />
+                  <span className="min-w-0 flex-1">{action.label}</span>
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
 
       {isLongPressing && (
         <div 

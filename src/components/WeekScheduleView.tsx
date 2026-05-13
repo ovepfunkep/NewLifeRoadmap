@@ -32,6 +32,36 @@ function formatMinutes(totalMinutes: number): string {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
+/** Подпись недели как в календаре: «18–25 мая»; год — только если не текущий. */
+function getWeekRangeLabel(start: Date, end: Date, lang: string): string {
+  const a = new Date(start);
+  a.setHours(0, 0, 0, 0);
+  const b = new Date(end);
+  b.setHours(0, 0, 0, 0);
+  const y = b.getFullYear();
+  const thisYear = new Date().getFullYear();
+  const showYear = y !== thisYear || a.getFullYear() !== thisYear;
+  const sameMonth = a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+  if (lang === 'ru') {
+    const m = b.toLocaleDateString('ru-RU', { month: 'long' });
+    if (sameMonth) {
+      return showYear ? `${a.getDate()}–${b.getDate()} ${m} ${y} г.` : `${a.getDate()}–${b.getDate()} ${m}`;
+    }
+    const ma = a.toLocaleDateString('ru-RU', { month: 'long' });
+    const mb = b.toLocaleDateString('ru-RU', { month: 'long' });
+    return showYear
+      ? `${a.getDate()} ${ma} — ${b.getDate()} ${mb} ${b.getFullYear()} г.`
+      : `${a.getDate()} ${ma} — ${b.getDate()} ${mb}`;
+  }
+  if (sameMonth) {
+    const month = b.toLocaleDateString('en-US', { month: 'long' });
+    return showYear ? `${month} ${a.getDate()}–${b.getDate()}, ${y}` : `${month} ${a.getDate()}–${b.getDate()}`;
+  }
+  const left = a.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const right = b.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return showYear ? `${left} – ${right}, ${b.getFullYear()}` : `${left} – ${right}`;
+}
+
 function toTimeInput(totalMinutes: number): string {
   const safe = Math.max(0, Math.min(totalMinutes, 23 * 60 + 59));
   const hours = Math.floor(safe / 60);
@@ -167,10 +197,7 @@ export function WeekScheduleView({
     }
 
     for (const [key, value] of grouped.entries()) {
-      value.sort((a, b) => {
-        if (a.isAllDay !== b.isAllDay) return a.isAllDay ? -1 : 1;
-        return (a.startMinutes ?? 0) - (b.startMinutes ?? 0);
-      });
+      value.sort((a, b) => (a.startMinutes ?? 0) - (b.startMinutes ?? 0));
       grouped.set(key, value);
     }
 
@@ -211,8 +238,6 @@ export function WeekScheduleView({
     return marks;
   }, []);
 
-  const hasAnyAllDay = useMemo(() => slots.some((slot) => slot.isAllDay), [slots]);
-
   const handleCreateFromTimeline = (day: Date, event: MouseEvent<HTMLDivElement>) => {
     if (!onCreateTask) return;
     const rect = event.currentTarget.getBoundingClientRect();
@@ -241,8 +266,77 @@ export function WeekScheduleView({
   const now = new Date();
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
+  const isWeekAnchoredToday = useMemo(() => {
+    const anchor = new Date(startDate);
+    anchor.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return anchor.getTime() === today.getTime();
+  }, [startDate]);
+
+  const weekRangeLabel = useMemo(() => {
+    const first = days[0];
+    const last = days[6] ?? first;
+    if (!first || !last) return '';
+    return getWeekRangeLabel(first, last, language);
+  }, [days, language]);
+
+  const navBtnClass =
+    'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-subtle)] text-accent transition-colors hover:bg-gray-100 dark:bg-gray-900/55 dark:hover:bg-gray-800/80';
+
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-4">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <h3 className="min-w-0 flex-1 text-lg font-bold leading-snug text-gray-900 dark:text-gray-100">
+          {weekRangeLabel}
+        </h3>
+        <div className="flex shrink-0 items-center gap-2">
+          {!isWeekAnchoredToday && onResetToday && (
+            <>
+              <button
+                type="button"
+                onClick={onResetToday}
+                className={`${navBtnClass} md:hidden`}
+                style={{ color: 'var(--accent)' }}
+                title={t('schedule.toCurrentWeek')}
+                aria-label={t('schedule.toCurrentWeek')}
+              >
+                <FiRotateCw size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={onResetToday}
+                className="hidden max-w-[42vw] truncate rounded-lg px-2 py-2 text-left text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 md:inline-flex md:max-w-[min(280px,40vw)] md:text-sm dark:text-gray-400 dark:hover:bg-gray-800/80 dark:hover:text-gray-200"
+                title={t('schedule.toCurrentWeek')}
+                aria-label={t('schedule.toCurrentWeek')}
+              >
+                {t('schedule.toCurrentWeek')}
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => onShiftDays?.(-1)}
+            className={navBtnClass}
+            style={{ color: 'var(--accent)' }}
+            title={t('schedule.previousDay')}
+            aria-label={t('schedule.previousDay')}
+          >
+            <FiChevronLeft size={20} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onShiftDays?.(1)}
+            className={navBtnClass}
+            style={{ color: 'var(--accent)' }}
+            title={t('schedule.nextDay')}
+            aria-label={t('schedule.nextDay')}
+          >
+            <FiChevronRight size={20} />
+          </button>
+        </div>
+      </div>
+
       <motion.div
         key={weekKey}
         initial={allowDecorativeMotion ? { opacity: 0, x: shiftDirection > 0 ? 22 : shiftDirection < 0 ? -22 : 0 } : false}
@@ -253,7 +347,6 @@ export function WeekScheduleView({
         <div className="grid grid-cols-8 gap-2">
           <div className="flex flex-col space-y-2">
             <div className="min-h-[48px] shrink-0" aria-hidden />
-            <div className={hasAnyAllDay ? 'min-h-[42px]' : 'min-h-[8px]'} />
             <div className="relative shrink-0" style={{ height: `${timelineHeight}px` }}>
               {timelineMarks.map((minutes) => (
                 <div
@@ -279,7 +372,6 @@ export function WeekScheduleView({
                 }
               : undefined;
           const daySlots = slotsByDay.get(dayKey) ?? [];
-          const allDaySlots = daySlots.filter((slot) => slot.isAllDay);
           const timedSlots = daySlots.filter((slot) => !slot.isAllDay);
           const timedLayouts = buildTimedLayouts(timedSlots);
           const laneGapPercent = 1.8;
@@ -287,7 +379,7 @@ export function WeekScheduleView({
           return (
             <div
               key={dayKey}
-              className={`space-y-2 rounded-lg border-2 ${isToday ? '' : 'border-transparent'}`}
+              className={`space-y-2 rounded-lg border-2 lg:rounded-xl ${isToday ? '' : 'border-transparent'}`}
               style={isToday ? { borderColor: 'var(--accent)' } : undefined}
             >
               <div
@@ -308,30 +400,8 @@ export function WeekScheduleView({
                 </div>
               </div>
 
-              <div className={`${hasAnyAllDay ? 'min-h-[42px]' : 'min-h-[8px]'} space-y-1`}>
-                {allDaySlots.map((slot) => (
-                  <motion.button
-                    type="button"
-                    key={`${slot.taskId}-${slot.dayKey}-allday`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleTaskTap(slot.taskId);
-                    }}
-                    className="w-full h-2.5 rounded-md transition-colors hover:brightness-110"
-                    style={{
-                      backgroundColor: toTransparentFill(colorByTaskId.get(slot.taskId) || 'var(--accent)', 66),
-                    }}
-                    title={slot.title}
-                    aria-label={slot.title}
-                    initial={{ opacity: 0, scale: 0.97 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.18 }}
-                  />
-                ))}
-              </div>
-
               <div
-                className={`relative overflow-hidden rounded-lg bg-gray-50/90 shadow-sm dark:bg-gray-900/55 ${onCreateTask ? 'cursor-copy' : ''}`}
+                className={`relative overflow-hidden rounded-lg bg-gray-50/90 shadow-sm dark:bg-gray-900/55 lg:rounded-xl ${onCreateTask ? 'cursor-copy' : ''}`}
                 onClick={(event) => handleCreateFromTimeline(day, event)}
                 style={{
                   height: `${timelineHeight}px`,
@@ -387,39 +457,6 @@ export function WeekScheduleView({
             </div>
           );
           })}
-        </div>
-
-        <div className="mt-3 flex items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => onShiftDays?.(-1)}
-            className="rounded-lg bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200/90 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
-            style={{ color: 'var(--accent)' }}
-            title={t('schedule.previousDay')}
-            aria-label={t('schedule.previousDay')}
-          >
-            <FiChevronLeft size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={onResetToday}
-            className="rounded-lg bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200/90 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
-            style={{ color: 'var(--accent)' }}
-            title={t('schedule.today')}
-            aria-label={t('schedule.today')}
-          >
-            <FiRotateCw size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onShiftDays?.(1)}
-            className="rounded-lg bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200/90 dark:bg-gray-700/60 dark:hover:bg-gray-600/60"
-            style={{ color: 'var(--accent)' }}
-            title={t('schedule.nextDay')}
-            aria-label={t('schedule.nextDay')}
-          >
-            <FiChevronRight size={14} />
-          </button>
         </div>
 
         {legendItems.length > 0 && (
