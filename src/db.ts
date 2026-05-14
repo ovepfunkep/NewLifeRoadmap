@@ -11,12 +11,19 @@ interface LifeRoadmapDB extends DBSchema {
     key: string;
     value: Node;
   };
+  weeklyBackupFallback: {
+    key: string;
+    value: { key: string; body: string };
+  };
 }
 
 const DB_NAME = 'LifeRoadmapDB';
-const DB_VERSION = 2; // Увеличиваем версию для пересоздания store с keyPath
+const DB_VERSION = 3; // + weeklyBackupFallback для OPFS-fallback
 const STORE_NAME = 'nodes';
-const ROOT_ID = 'root-node';
+const WEEKLY_BACKUP_FALLBACK_STORE = 'weeklyBackupFallback';
+/** Публичный id корня (совпадает с ROOT_ID). */
+export const ROOT_NODE_ID = 'root-node';
+const ROOT_ID = ROOT_NODE_ID;
 
 let dbInstance: IDBPDatabase<LifeRoadmapDB> | null = null;
 
@@ -39,6 +46,9 @@ export async function initDB(): Promise<void> {
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
         log('Created object store');
+      }
+      if (!db.objectStoreNames.contains(WEEKLY_BACKUP_FALLBACK_STORE)) {
+        db.createObjectStore(WEEKLY_BACKUP_FALLBACK_STORE, { keyPath: 'key' });
       }
     },
   });
@@ -79,6 +89,22 @@ export async function initDB(): Promise<void> {
     log('Root node already exists');
     await injectTutorialIfEmpty();
   }
+
+  await purgeLegacySoftDeletedFromStore();
+}
+
+/** Удаляет записи с deletedAt после перехода на жёсткое удаление в IndexedDB. */
+async function purgeLegacySoftDeletedFromStore(): Promise<void> {
+  if (!dbInstance) return;
+  const allNodes = await dbInstance.getAll(STORE_NAME);
+  const doomed = allNodes.filter((n) => n.id !== ROOT_ID && n.deletedAt);
+  if (doomed.length === 0) return;
+  log(`Removing ${doomed.length} legacy soft-deleted rows from IndexedDB`);
+  const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
+  for (const n of doomed) {
+    await tx.store.delete(n.id);
+  }
+  await tx.done;
 }
 
 async function injectTutorialIfEmpty(): Promise<void> {
@@ -273,6 +299,51 @@ export async function clearAllNodes(): Promise<void> {
   log('All nodes cleared (except root)');
 }
 
+const WEEKLY_FALLBACK_ROW_KEY = 'weeklyPayload';
+
+/** Fallback, если OPFS недоступен: один JSON в отдельном store. */
+export async function saveWeeklyBackupFallbackBody(body: string): Promise<void> {
+  if (!dbInstance) await initDB();
+  await dbInstance!.put(WEEKLY_BACKUP_FALLBACK_STORE, { key: WEEKLY_FALLBACK_ROW_KEY, body });
+}
+
+export async function loadWeeklyBackupFallbackBody(): Promise<string | null> {
+  if (!dbInstance) await initDB();
+  const row = await dbInstance!.get(WEEKLY_BACKUP_FALLBACK_STORE, WEEKLY_FALLBACK_ROW_KEY);
+  return row?.body ?? null;
+}
+
+export async function clearWeeklyBackupFallbackBody(): Promise<void> {
+  if (!dbInstance) await initDB();
+  try {
+    await dbInstance!.delete(WEEKLY_BACKUP_FALLBACK_STORE, WEEKLY_FALLBACK_ROW_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Полная замена дерева из плоского бэкапа (локальный weekly restore). */
+export async function restoreFromWeeklyBackupFlat(nodes: Node[]): Promise<void> {
+  if (!dbInstance) await initDB();
+  if (!nodes.some((n) => n.id === ROOT_ID)) {
+    throw new Error('BACKUP_MISSING_ROOT');
+  }
+  const tx = dbInstance!.transaction(STORE_NAME, 'readwrite');
+  const keys = await tx.store.getAllKeys();
+  for (const k of keys) {
+    if (k !== ROOT_ID) await tx.store.delete(k);
+  }
+  for (const raw of nodes) {
+    const { children: _c, deletedAt: _d, ...rest } = raw;
+    let flat: Node = { ...rest, children: [] };
+    if (flat.id === ROOT_ID) {
+      flat = { ...flat, parentId: null };
+    }
+    await tx.store.put(flat);
+  }
+  await tx.done;
+}
+
 // Сохранить узел (только плоскую структуру)
 export async function saveNode(node: Node): Promise<void> {
   if (!dbInstance) await initDB();
@@ -281,8 +352,8 @@ export async function saveNode(node: Node): Promise<void> {
   // Используем дату из объекта, если она есть, иначе создаем новую
   const updatedAt = node.updatedAt || new Date().toISOString();
   
-  // КЛОНИРУЕМ узел и ОЧИЩАЕМ его от детей перед сохранением в БД.
-  const { children, ...nodeToSave } = node;
+  // КЛОНИРУЕМ узел и ОЧИЩАЕМ его от детей перед сохранением в БД. deletedAt не сохраняем (жёсткое удаление).
+  const { children, deletedAt: _removedDeletedAt, ...nodeToSave } = node;
   const flatNode: Node = {
     ...nodeToSave,
     children: [], // В БД дети всегда должны быть пустыми
@@ -311,7 +382,7 @@ export async function saveNode(node: Node): Promise<void> {
   }
 }
 
-// Удалить узел и всех потомков (soft-delete)
+// Удалить узел и всех потомков (жёсткое удаление записей из IndexedDB)
 export async function deleteNode(id: string): Promise<void> {
   if (!dbInstance) await initDB();
   
@@ -321,9 +392,8 @@ export async function deleteNode(id: string): Promise<void> {
     return;
   }
 
-  // Находим все узлы, чтобы найти потомков (так как в БД нет иерархии)
   const allNodes = await dbInstance!.getAll(STORE_NAME);
-  const deletedAt = new Date().toISOString();
+  const now = new Date().toISOString();
   
   const idsToDelete = new Set<string>();
   const collectIds = (targetId: string) => {
@@ -332,23 +402,15 @@ export async function deleteNode(id: string): Promise<void> {
   };
   
   collectIds(id);
-  log(`Marking ${idsToDelete.size} nodes as deleted`);
+  log(`Hard-deleting ${idsToDelete.size} nodes from IndexedDB`);
 
   const tx = dbInstance!.transaction(STORE_NAME, 'readwrite');
   for (const nodeId of idsToDelete) {
-    const n = allNodes.find(item => item.id === nodeId);
-    if (n) {
-      await tx.store.put({
-        ...n,
-        children: [],
-        deletedAt,
-        updatedAt: deletedAt
-      });
-    }
+    if (nodeId === ROOT_ID) continue;
+    await tx.store.delete(nodeId);
   }
   await tx.done;
 
-  // Обновляем родителя (только его updatedAt)
   const node = allNodes.find(n => n.id === id);
   if (node && node.parentId) {
     const parent = allNodes.find(n => n.id === node.parentId);
@@ -356,7 +418,7 @@ export async function deleteNode(id: string): Promise<void> {
       await dbInstance!.put(STORE_NAME, {
         ...parent,
         children: [],
-        updatedAt: deletedAt
+        updatedAt: now
       });
     }
   }
@@ -410,7 +472,6 @@ export async function bulkImport(
   }
 
   // Обновляем список ID после удаления, чтобы remapIds видел актуальную картину
-  // Включаем даже удаленные узлы, чтобы не создавать конфликтов с tombstones
   const allNodesAfterDelete = await dbInstance!.getAll(STORE_NAME);
   const existingIds = new Set(allNodesAfterDelete.map(n => n.id));
 

@@ -5,6 +5,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useAccent } from '../hooks/useAccent';
 import { useEffects } from '../hooks/useEffects';
 import { useLanguage } from '../contexts/LanguageContext';
+import { isWeeklyLocalBackupEnabled, setWeeklyLocalBackupEnabledLocal } from '../utils/weeklyLocalBackup';
 
 function log(..._args: any[]) {
   // Debug logging disabled
@@ -40,11 +41,13 @@ export function SettingsSyncManager() {
         log('Cloud settings loaded:', cloudSettings);
         
         // Проверяем, отличаются ли настройки от локальных
-        const hasChanges = 
+        const hasChanges =
           (cloudSettings.theme && cloudSettings.theme !== theme) ||
           (cloudSettings.accent && cloudSettings.accent !== accent) ||
           (cloudSettings.language && cloudSettings.language !== language) ||
-          (cloudSettings.effectsEnabled !== undefined && cloudSettings.effectsEnabled !== effectsEnabled);
+          (cloudSettings.effectsEnabled !== undefined && cloudSettings.effectsEnabled !== effectsEnabled) ||
+          (cloudSettings.weeklyLocalBackupEnabled !== undefined &&
+            cloudSettings.weeklyLocalBackupEnabled !== isWeeklyLocalBackupEnabled());
         
         if (hasChanges) {
           log('Settings differ from local, applying');
@@ -73,6 +76,13 @@ export function SettingsSyncManager() {
             if (cloudSettings.effectsEnabled !== undefined && cloudSettings.effectsEnabled !== effectsEnabled) {
               log('Applying effectsEnabled from cloud:', cloudSettings.effectsEnabled);
               setEffectsEnabled(cloudSettings.effectsEnabled);
+            }
+
+            if (
+              cloudSettings.weeklyLocalBackupEnabled !== undefined &&
+              cloudSettings.weeklyLocalBackupEnabled !== isWeeklyLocalBackupEnabled()
+            ) {
+              setWeeklyLocalBackupEnabledLocal(cloudSettings.weeklyLocalBackupEnabled);
             }
           } finally {
             // Сбрасываем флаг после применения всех настроек

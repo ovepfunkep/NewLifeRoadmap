@@ -152,7 +152,7 @@ export function Tooltip({
   } as any);
 
   const layoutClass = multiline
-    ? 'whitespace-normal text-left min-w-[150px]'
+    ? 'whitespace-pre-line text-left min-w-[150px] break-words leading-snug'
     : 'whitespace-nowrap';
 
   return (
@@ -173,7 +173,9 @@ export function Tooltip({
               transition: 'opacity 0.12s ease-out',
               pointerEvents: 'none',
             }}
-            className={`${tooltipSurfaceClass} max-w-[min(90vw,20rem)] ${layoutClass}`}
+            className={`${tooltipSurfaceClass} ${
+              multiline ? 'max-w-[min(94vw,28rem)]' : 'max-w-[min(90vw,20rem)]'
+            } ${layoutClass}`}
           >
             {text}
           </div>,

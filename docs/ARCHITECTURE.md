@@ -62,6 +62,10 @@ flowchart TD
 - **Operational verification**: use Firebase Console Firestore **Usage** (see `docs/DEVELOPMENT.md`).
 - **Maintenance rules**: see [`firestore.rules`](../firestore.rules) (commented deny-all block). Publishing those rules triggers `permission-denied`; the app shows a **one-time** availability modal, then a **one-time** “restored” modal after the next successful Firestore operation (`CloudFirestoreHealthModals` + [`src/utils/cloudFirestoreHealth.ts`](../src/utils/cloudFirestoreHealth.ts)).
 
+## Weekly local backup (client-only)
+
+Optional weekly backup: on **desktop**, controls live in the **page footer** (`Footer` + `WeeklyLocalBackupSettingsBlock`); on **mobile**, the same block is in **Settings** (`MobileSettingsTab`). One JSON file (flat `Node[]`; in the file the root title is `LifeRoadmap_BackUp` for readability) is written to **OPFS** (`navigator.storage.getDirectory`) when available, otherwise to IndexedDB store `weeklyBackupFallback`. Last successful backup time lives in **`localStorage`** (`weeklyLocalBackupLastAt`). The flag **`weeklyLocalBackupEnabled`** is synced in Firestore `users/{uid}/settings/data`; the snapshot bytes stay on the device. `WeeklyBackupScheduler` runs a silent backup on app load when the toggle is on and more than seven days have passed.
+
 ## Where to Start for Sensitive Changes
 
 1. `AGENTS.md`

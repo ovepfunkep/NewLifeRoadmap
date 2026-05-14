@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FiGithub, FiDollarSign, FiLogIn, FiLogOut } from 'react-icons/fi';
+import { FiGithub, FiDollarSign, FiLogIn, FiLogOut, FiExternalLink } from 'react-icons/fi';
 import { FaTelegramPlane } from 'react-icons/fa';
 import { useAccent } from '../hooks/useAccent';
 import { useEffects } from '../hooks/useEffects';
@@ -14,7 +14,9 @@ import { SecurityChoiceModal } from './SecurityChoiceModal';
 import { CopyrightNotice } from './CopyrightNotice';
 import { SupportAuthorModal } from './SupportAuthorModal';
 import { Tooltip } from './Tooltip';
+import { WeeklyLocalBackupSettingsBlock } from './WeeklyLocalBackupSettingsBlock';
 import { BOOSTY_SUPPORT_URL } from '../utils/constants';
+import { SettingsGroup, SettingsRow, SettingsSection } from './mobileSettings/MobileSettingsLayout';
 
 export function MobileSettingsTab() {
   const { theme, setTheme } = useTheme();
@@ -36,7 +38,6 @@ export function MobileSettingsTab() {
     return () => unsubscribe();
   }, []);
 
-  // Recreates the onboarding tutorial node in the root list.
   const handleRefreshMemory = async () => {
     try {
       await recreateTutorial();
@@ -109,7 +110,7 @@ export function MobileSettingsTab() {
       aria-checked={enabled}
       aria-label={ariaLabel}
       onClick={onToggle}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
         enabled ? 'bg-accent' : 'bg-gray-300 dark:bg-gray-600'
       }`}
       style={enabled ? { backgroundColor: 'var(--accent)' } : undefined}
@@ -122,142 +123,151 @@ export function MobileSettingsTab() {
     </button>
   );
 
+  const linkRowClass =
+    'flex min-h-[48px] w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-800 transition-colors hover:bg-black/[0.04] active:bg-black/[0.06] dark:text-gray-100 dark:hover:bg-white/[0.05] dark:active:bg-white/[0.08]';
+
   return (
     <>
-      <section className="space-y-4">
-      <div className="space-y-2">
-        <div className="flex items-center justify-between rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-700">
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t('settingsTab.darkTheme')}</p>
-          {renderSwitch(theme === 'dark', () => setTheme(theme === 'dark' ? 'light' : 'dark'), t('settingsTab.darkTheme'))}
-        </div>
-        <div className="flex items-center justify-between rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-700">
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t('settingsTab.effects')}</p>
-          {renderSwitch(effectsEnabled, () => setEffectsEnabled(!effectsEnabled), t('settingsTab.effects'))}
-        </div>
-      </div>
+      <section className="space-y-6">
+        <SettingsSection title={t('settingsTab.sectionAppearance')}>
+          <SettingsGroup>
+            <SettingsRow>
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t('settingsTab.darkTheme')}</p>
+              {renderSwitch(theme === 'dark', () => setTheme(theme === 'dark' ? 'light' : 'dark'), t('settingsTab.darkTheme'))}
+            </SettingsRow>
+            <SettingsRow>
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t('settingsTab.effects')}</p>
+              {renderSwitch(effectsEnabled, () => setEffectsEnabled(!effectsEnabled), t('settingsTab.effects'))}
+            </SettingsRow>
+            <SettingsRow>
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t('settingsTab.language')}</p>
+              <div className="flex shrink-0 rounded-lg bg-gray-200/70 p-0.5 dark:bg-gray-900/55">
+                {(['ru', 'en'] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setLanguage(value)}
+                    className={`min-w-[2.5rem] rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                      language === value
+                        ? 'text-white shadow-sm'
+                        : 'text-gray-600 dark:text-gray-300'
+                    }`}
+                    style={language === value ? { backgroundColor: 'var(--accent)' } : undefined}
+                  >
+                    {value.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </SettingsRow>
+            <div className="px-4 pb-4 pt-3">
+              <p className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">{t('settingsTab.accent')}</p>
+              <div className="grid grid-cols-8 gap-2">
+                {colors.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setAccent(color)}
+                    className={`h-8 w-8 rounded-lg transition-transform focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${
+                      accent === color ? 'scale-110 ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-gray-100 dark:ring-offset-gray-800' : ''
+                    }`}
+                    style={{ backgroundColor: color }}
+                    aria-label={`${t('settingsTab.accent')} ${color}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </SettingsGroup>
+        </SettingsSection>
 
-      <div className="space-y-2">
-        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t('settingsTab.language')}</p>
-        <div className="grid grid-cols-2 gap-2">
-          {(['ru', 'en'] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setLanguage(value)}
-              className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-                language === value
-                  ? 'text-white'
-                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
-              }`}
-              style={language === value ? { backgroundColor: 'var(--accent)' } : undefined}
-            >
-              {value.toUpperCase()}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t('settingsTab.accent')}</p>
-        <div className="grid grid-cols-8 gap-2">
-          {colors.map((color) => (
-            <button
-              key={color}
-              type="button"
-              onClick={() => setAccent(color)}
-              className={`h-8 w-8 rounded-lg border-2 transition-transform ${
-                accent === color
-                  ? 'scale-110 border-gray-900 dark:border-gray-100'
-                  : 'border-gray-300 dark:border-gray-700'
-              }`}
-              style={{ backgroundColor: color }}
-              aria-label={`${t('settingsTab.accent')} ${color}`}
-            />
-          ))}
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={handleRefreshMemory}
-        className="w-full rounded-lg border border-current px-3 py-2 text-sm font-semibold transition-colors hover:bg-accent/10"
-        style={{ color: 'var(--accent)' }}
-      >
-        {t('settingsTab.addTutorial')}
-      </button>
-
-      <div className="h-px bg-gray-200 dark:bg-gray-700" />
-
-      <div className="space-y-3">
-        <div className="px-0.5 py-0.5">
-          {userEmail ? (
-            <div className="flex items-center justify-between gap-2">
-              <p className="truncate text-sm font-medium text-gray-700 dark:text-gray-200">{userEmail}</p>
+        <SettingsSection title={t('settingsTab.sectionDeviceData')}>
+          <SettingsGroup>
+            <div className="px-4 py-3">
               <button
                 type="button"
-                onClick={handleSignOut}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
+                onClick={() => void handleRefreshMemory()}
+                className="w-full rounded-xl bg-white/70 py-2.5 text-sm font-semibold text-gray-800 transition-opacity active:opacity-90 dark:bg-gray-900/45 dark:text-gray-100"
               >
-                <FiLogOut size={14} />
-                <span>{t('sync.signOut')}</span>
+                {t('settingsTab.addTutorial')}
               </button>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSignIn}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-white transition-colors hover:brightness-110"
-              style={{ backgroundColor: 'var(--accent)' }}
+            <div className="px-4 py-3">
+              <WeeklyLocalBackupSettingsBlock variant="stacked" embedded />
+            </div>
+          </SettingsGroup>
+        </SettingsSection>
+
+        <SettingsSection title={t('settingsTab.sectionAccount')}>
+          <SettingsGroup>
+            {userEmail ? (
+              <SettingsRow>
+                <p className="min-w-0 flex-1 truncate text-sm font-medium text-gray-700 dark:text-gray-200">{userEmail}</p>
+                <button
+                  type="button"
+                  onClick={() => void handleSignOut()}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
+                >
+                  <FiLogOut size={14} aria-hidden />
+                  <span>{t('sync.signOut')}</span>
+                </button>
+              </SettingsRow>
+            ) : (
+              <div className="px-4 py-3">
+                <button
+                  type="button"
+                  onClick={handleSignIn}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-white transition-opacity active:opacity-90"
+                  style={{ backgroundColor: 'var(--accent)' }}
+                >
+                  <FiLogIn size={16} aria-hidden />
+                  <span>{t('sync.signIn')}</span>
+                </button>
+              </div>
+            )}
+          </SettingsGroup>
+        </SettingsSection>
+
+        <SettingsSection title={t('settingsTab.sectionLinks')}>
+          <SettingsGroup>
+            <a
+              href="https://t.me/IncludeIntelligence"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={linkRowClass}
             >
-              <FiLogIn size={15} />
-              <span>{t('sync.signIn')}</span>
-            </button>
-          )}
-        </div>
+              <FaTelegramPlane className="shrink-0" size={18} style={{ color: 'var(--accent)' }} aria-hidden />
+              <span className="min-w-0 flex-1">{t('tooltip.telegram')}</span>
+              <FiExternalLink className="shrink-0 opacity-50" size={16} aria-hidden />
+            </a>
+            <a
+              href="https://github.com/ovepfunkep/NewLifeRoadmap"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={linkRowClass}
+            >
+              <FiGithub className="shrink-0" size={18} style={{ color: 'var(--accent)' }} aria-hidden />
+              <span className="min-w-0 flex-1">{t('tooltip.github')}</span>
+              <FiExternalLink className="shrink-0 opacity-50" size={16} aria-hidden />
+            </a>
+            <Tooltip text={t('tooltip.supportAuthor')}>
+              <button type="button" onClick={handleSupportBoosty} className={linkRowClass}>
+                <FiDollarSign className="shrink-0" size={18} style={{ color: 'var(--accent)' }} aria-hidden />
+                <span className="min-w-0 flex-1 text-left">{t('support.modalTitle')}</span>
+                <FiExternalLink className="shrink-0 opacity-50" size={16} aria-hidden />
+              </button>
+            </Tooltip>
+          </SettingsGroup>
+        </SettingsSection>
 
-        <a
-          href="https://t.me/IncludeIntelligence"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-current px-3 py-2 text-sm font-semibold transition-colors hover:bg-accent/10"
-          style={{ color: 'var(--accent)' }}
-        >
-          <FaTelegramPlane size={14} />
-          <span>{t('tooltip.telegram')}</span>
-        </a>
-        <a
-          href="https://github.com/ovepfunkep/NewLifeRoadmap"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-current px-3 py-2 text-sm font-semibold transition-colors hover:bg-accent/10"
-          style={{ color: 'var(--accent)' }}
-        >
-          <FiGithub size={14} />
-          <span>{t('tooltip.github')}</span>
-        </a>
-        <Tooltip text={t('tooltip.supportAuthor')}>
-          <button
-            type="button"
-            onClick={handleSupportBoosty}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-current px-3 py-2 text-sm font-semibold transition-colors hover:bg-accent/10"
-            style={{ color: 'var(--accent)' }}
-          >
-            <FiDollarSign size={14} />
-            <span>{t('support.modalTitle')}</span>
-          </button>
-        </Tooltip>
-      </div>
+        {showSecurityModal && (
+          <SecurityChoiceModal
+            onChoice={handleSecurityChoice}
+            onClose={() => setShowSecurityModal(false)}
+          />
+        )}
 
-      {showSecurityModal && (
-        <SecurityChoiceModal
-          onChoice={handleSecurityChoice}
-          onClose={() => setShowSecurityModal(false)}
-        />
-      )}
-
-      <CopyrightNotice className="mt-6 text-center" />
-    </section>
-    {supportModalOpen && <SupportAuthorModal onClose={() => setSupportModalOpen(false)} />}
-  </>
+        <CopyrightNotice className="pt-2 text-center" />
+      </section>
+      {supportModalOpen && <SupportAuthorModal onClose={() => setSupportModalOpen(false)} />}
+    </>
   );
 }

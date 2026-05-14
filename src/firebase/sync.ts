@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, setDoc, getDocs, query, writeBatch, getDocsFromServer, where, limit, onSnapshot, orderBy, Unsubscribe, type DocumentData } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, getDocs, query, writeBatch, getDocsFromServer, where, limit, onSnapshot, orderBy, Unsubscribe, type DocumentData, type Firestore } from 'firebase/firestore';
 import { getFirebaseDB } from './config';
 import { getCurrentUser } from './auth';
 import { Node } from '../types';
@@ -72,7 +72,7 @@ export function getClientId(): string {
 }
 
 async function encryptNodeFields(node: Node, syncKey: string): Promise<Record<string, unknown>> {
-  const { children, ...nodeData } = node;
+  const { children, deletedAt: _omitDeletedAt, ...nodeData } = node;
   const encryptedTitle = await encryptData(node.title, syncKey);
   let encryptedDescription = node.description;
   if (node.description) {
@@ -287,6 +287,28 @@ function getUserNodesPath(userId: string): string {
   return `users/${userId}/nodes`;
 }
 
+const ROOT_NODE_ID = 'root-node';
+
+/** Физическое удаление документов узлов батчами (лимит Firestore 500 операций). */
+async function commitBatchedNodeDocDeletes(db: Firestore, userId: string, ids: string[]): Promise<void> {
+  const uniq = [...new Set(ids.filter((id) => id && id !== ROOT_NODE_ID))];
+  if (uniq.length === 0) return;
+  log(`Hard-deleting ${uniq.length} node document(s) from Firestore`);
+  const nodesRef = collection(db, getUserNodesPath(userId));
+  const BATCH_LIMIT = 500;
+  for (let i = 0; i < uniq.length; i += BATCH_LIMIT) {
+    const batch = writeBatch(db);
+    for (const id of uniq.slice(i, i + BATCH_LIMIT)) {
+      batch.delete(doc(nodesRef, id));
+    }
+    await withTimeout(
+      batch.commit(),
+      BATCH_COMMIT_TIMEOUT,
+      `delete nodes batch ${Math.floor(i / BATCH_LIMIT) + 1}`,
+    );
+  }
+}
+
 /**
  * Очистить объект от undefined значений для Firestore
  * Firestore не принимает undefined, заменяем на null или удаляем
@@ -385,24 +407,28 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
 
     if (cloudNodes) {
       log('Using provided cloud nodes for diff check');
-      cloudMap = new Map(cloudNodes.map(n => [n.id, n]));
+      const alive: Node[] = [];
+      const legacyTombIds: string[] = [];
+      for (const n of cloudNodes) {
+        if (n.deletedAt) legacyTombIds.push(n.id);
+        else alive.push(n);
+      }
+      cloudMap = new Map(alive.map((n) => [n.id, n]));
+      if (legacyTombIds.length > 0) {
+        await commitBatchedNodeDocDeletes(db, user.uid, legacyTombIds);
+      }
     } else {
       log('Fetching all nodes from Firestore for diff check (expensive)');
       // Загружаем все существующие узлы из Firestore только если они не переданы
       const nodesRef = collection(db, getUserNodesPath(user.uid));
       const querySnapshot = await withTimeout(getDocs(query(nodesRef)), 15000, 'syncAllNodes:getDocs');
-      
-      const now = Date.now();
-      const PURGE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
-      
+
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data() as DocumentData;
-        cloudMap.set(docSnap.id, data);
         if (data.deletedAt) {
-          const deletedTime = new Date(data.deletedAt).getTime();
-          if (Number.isFinite(deletedTime) && now - deletedTime > PURGE_AFTER_MS) {
-            nodesToPurge.push(docSnap.id);
-          }
+          nodesToPurge.push(docSnap.id);
+        } else {
+          cloudMap.set(docSnap.id, data);
         }
       });
     }
@@ -413,20 +439,10 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
     const BATCH_LIMIT = 500;
     const nodesRef = collection(db, getUserNodesPath(user.uid));
     
-    // СНАЧАЛА очищаем старые tombstone-узлы
+    // Сначала убираем устаревшие документы с deletedAt (раньше soft-delete)
     if (nodesToPurge.length > 0) {
-      for (let i = 0; i < nodesToPurge.length; i += BATCH_LIMIT) {
-        const batch = writeBatch(db);
-        const batchToDelete = nodesToPurge.slice(i, i + BATCH_LIMIT);
-        
-        for (const nodeId of batchToDelete) {
-          const nodeRef = doc(nodesRef, nodeId);
-          batch.delete(nodeRef);
-        }
-        
-        await batch.commit();
-        log(`Purge batch ${Math.floor(i / BATCH_LIMIT) + 1} completed: ${batchToDelete.length} nodes deleted`);
-      }
+      await commitBatchedNodeDocDeletes(db, user.uid, nodesToPurge);
+      log(`Removed ${nodesToPurge.length} legacy tombstone document(s) from Firestore`);
     }
     
     // ЗАТЕМ сохраняем только ИЗМЕНЕННЫЕ узлы батчами
@@ -436,10 +452,6 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
       
       const localTime = new Date(local.updatedAt || 0).getTime();
       const cloudTime = new Date(cloud.updatedAt || 0).getTime();
-      
-      if (local.deletedAt && cloud.deletedAt && localTime <= cloudTime) {
-        return false;
-      }
 
       return localTime > cloudTime;
     });
@@ -566,9 +578,14 @@ export async function loadChangedNodesFromFirestore(since: string): Promise<Node
     });
 
     const nodes = await Promise.all(nodePromises);
-    log(`Loaded ${nodes.length} changed nodes from Firestore`);
+    const tombIds = nodes.filter((n) => n.deletedAt).map((n) => n.id);
+    if (tombIds.length > 0) {
+      await commitBatchedNodeDocDeletes(db, user.uid, tombIds);
+    }
+    const active = nodes.filter((n) => !n.deletedAt);
+    log(`Loaded ${active.length} changed nodes from Firestore`);
     reportCloudFirestoreSuccess();
-    return nodes;
+    return active;
   } catch (error) {
     console.error('Error loading changed nodes from Firestore:', error);
     reportCloudFirestoreFailure(error);
@@ -663,17 +680,19 @@ export async function loadAllNodesFromFirestore(forceServer = false): Promise<No
       console.warn(`[Sync] Failed to decrypt ${decryptionFailedCount} nodes. This is normal if you changed your security key recently.`);
     }
 
-    log(`Loaded ${nodes.length} nodes from Firestore`);
+    const tombstoneIds = nodes.filter((n) => n.deletedAt).map((n) => n.id);
+    if (tombstoneIds.length > 0) {
+      await commitBatchedNodeDocDeletes(db, user.uid, tombstoneIds);
+    }
+    const activeNodes = nodes.filter((n) => !n.deletedAt);
+    log(
+      `Loaded ${activeNodes.length} active nodes from Firestore (${tombstoneIds.length} legacy tombstone document(s) removed)`,
+    );
 
     // Восстанавливаем иерархию (дети) только для активных узлов
     const nodeMap = new Map<string, Node>();
-    const deletedNodes: Node[] = [];
-    nodes.forEach(node => {
-      if (node.deletedAt) {
-        deletedNodes.push({ ...node, children: [] });
-      } else {
-        nodeMap.set(node.id, { ...node, children: [] });
-      }
+    activeNodes.forEach((node) => {
+      nodeMap.set(node.id, { ...node, children: [] });
     });
 
     // Связываем детей с родителями
@@ -708,9 +727,8 @@ export async function loadAllNodesFromFirestore(forceServer = false): Promise<No
     rootNodes.forEach(sortChildren);
 
     log(`Restored hierarchy: ${rootNodes.length} root nodes`);
-    // Возвращаем все узлы (не только корневые)
     reportCloudFirestoreSuccess();
-    return [...Array.from(nodeMap.values()), ...deletedNodes];
+    return Array.from(nodeMap.values());
   } catch (error) {
     log(`Error loading nodes:`, error);
     console.error('Error loading all nodes from Firestore:', error);
@@ -732,24 +750,10 @@ export async function deleteNodeFromFirestore(nodeId: string, childrenIds: strin
   const db = getFirebaseDB();
 
   try {
-    const batch = writeBatch(db);
-    const nodesRef = collection(db, getUserNodesPath(user.uid));
-    const deletedAt = new Date().toISOString();
-    
-    const markDeleted = (id: string) => {
-      const nodeRef = doc(nodesRef, id);
-      batch.set(nodeRef, { deletedAt, updatedAt: deletedAt, syncedAt: deletedAt }, { merge: true });
-    };
-    
-    markDeleted(nodeId);
-    for (const childId of childrenIds) {
-      markDeleted(childId);
-    }
-    
-    await batch.commit();
+    await commitBatchedNodeDocDeletes(db, user.uid, [nodeId, ...childrenIds]);
     reportCloudFirestoreSuccess();
   } catch (error) {
-    console.error('Error soft-deleting node from Firestore:', error);
+    console.error('Error deleting node from Firestore:', error);
     reportCloudFirestoreFailure(error);
     throw error;
   }

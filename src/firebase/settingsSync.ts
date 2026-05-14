@@ -12,6 +12,8 @@ export interface UserSettings {
   accent?: string;
   language?: 'ru' | 'en';
   effectsEnabled?: boolean;
+  /** Еженедельный локальный бэкап (OPFS / fallback IDB); сам файл только на устройстве. */
+  weeklyLocalBackupEnabled?: boolean;
 }
 
 // Debounce для сохранения настроек

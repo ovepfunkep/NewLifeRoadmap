@@ -3,6 +3,7 @@ import { NodePage } from './pages/NodePage';
 import { SyncManager } from './components/SyncManager';
 import { SettingsSyncManager } from './components/SettingsSyncManager';
 import { CloudFirestoreHealthModals } from './components/CloudFirestoreHealthModals';
+import { WeeklyBackupScheduler } from './components/WeeklyBackupScheduler';
 import { Snowfall } from './components/Snowfall';
 import { SpringPetals } from './components/SpringPetals';
 import { AMBIENT_SEASON } from './config/ambientSeason';
@@ -25,6 +26,7 @@ function AppContent() {
     return (
       <>
         <SettingsSyncManager />
+        <WeeklyBackupScheduler />
         {AMBIENT_SEASON === 'spring' ? <SpringPetals /> : <Snowfall />}
         <NodePage />
         <SyncManager />

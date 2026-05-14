@@ -4,6 +4,7 @@ import { Tooltip } from './Tooltip';
 import { AuthAvatar } from './AuthAvatar';
 import { CopyrightNotice } from './CopyrightNotice';
 import { SupportAuthorModal } from './SupportAuthorModal';
+import { WeeklyLocalBackupSettingsBlock } from './WeeklyLocalBackupSettingsBlock';
 import { t } from '../i18n';
 import { BOOSTY_SUPPORT_URL } from '../utils/constants';
 import { useToast } from '../hooks/useToast';
@@ -90,23 +91,27 @@ export function Footer({ onOpenSettings }: FooterProps) {
             )}
           </div>
           {!isMobile && (
-            <div className="flex items-center gap-6">
-              <div className="text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
-                <div>{t('keyboard.esc')}</div>
-                <div>{t('keyboard.addStep')}</div>
-                <div>{t('keyboard.edit')}</div>
-              </div>
-              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 self-center"></div>
-              <div className="text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
-                <div>{t('keyboard.move')}</div>
-                <div>{t('keyboard.import')}</div>
-                <div>{t('keyboard.delete')}</div>
-              </div>
-              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 self-center"></div>
-              <div className="text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
-                <div>{t('keyboard.complete')}</div>
-                <div>{t('keyboard.crtlNumber')}</div>
-                <div>{t('keyboard.number')}</div>
+            <div className="flex flex-wrap items-center justify-end gap-3 sm:gap-5">
+              <WeeklyLocalBackupSettingsBlock variant="footerBar" />
+              <div className="hidden h-6 w-px shrink-0 bg-gray-300 dark:bg-gray-600 sm:block" aria-hidden />
+              <div className="flex items-center gap-6">
+                <div className="text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
+                  <div>{t('keyboard.esc')}</div>
+                  <div>{t('keyboard.addStep')}</div>
+                  <div>{t('keyboard.edit')}</div>
+                </div>
+                <div className="h-6 w-px self-center bg-gray-300 dark:bg-gray-600" />
+                <div className="text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
+                  <div>{t('keyboard.move')}</div>
+                  <div>{t('keyboard.import')}</div>
+                  <div>{t('keyboard.delete')}</div>
+                </div>
+                <div className="h-6 w-px self-center bg-gray-300 dark:bg-gray-600" />
+                <div className="text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
+                  <div>{t('keyboard.complete')}</div>
+                  <div>{t('keyboard.crtlNumber')}</div>
+                  <div>{t('keyboard.number')}</div>
+                </div>
               </div>
             </div>
           )}

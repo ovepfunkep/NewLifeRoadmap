@@ -43,7 +43,8 @@ export interface Node {
   order?: number; // Порядок отображения
   createdAt: string; // ISO
   updatedAt?: string; // ISO
-  deletedAt?: string | null; // ISO, soft-delete tombstone
+  /** Устар.: раньше soft-delete; новые записи не пишут. Импорт старых JSON может содержать поле. */
+  deletedAt?: string | null;
   reminders?: number[]; // Интервалы напоминаний в секундах до дедлайна
   sentReminders?: string[]; // Список ID уже отправленных уведомлений (интервал + время)
   nextReminderAt?: number | null; // Следующее напоминание (epoch ms)
