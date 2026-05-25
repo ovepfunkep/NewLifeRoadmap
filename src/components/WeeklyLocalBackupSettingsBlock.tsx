@@ -159,7 +159,7 @@ export function WeeklyLocalBackupSettingsBlock({
   };
 
   const shellClass = isBar
-    ? 'inline-flex max-w-full items-center'
+    ? 'inline-flex max-w-full items-center rounded-2xl bg-gray-100/95 px-2.5 py-1.5 dark:bg-gray-800/90'
     : stackedEmbedded
       ? 'space-y-3'
       : 'space-y-3 rounded-lg bg-gray-100 px-3 py-3 dark:bg-gray-700';
@@ -173,47 +173,49 @@ export function WeeklyLocalBackupSettingsBlock({
     <>
       <div className={shellClass} onClick={(e) => e.stopPropagation()}>
         {isBar ? (
-          <div className="flex flex-col items-start gap-y-1.5">
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-              <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+          <div className="flex max-w-full flex-nowrap items-center gap-2">
+            <div className="flex min-w-0 shrink items-center gap-0.5">
+              <span className="truncate text-[11px] font-semibold tracking-tight text-gray-600 dark:text-gray-300">
                 {t('settingsTab.weeklyBackupShortLabel')}
               </span>
               <Tooltip text={t('settingsTab.weeklyBackupHelpTooltip')} multiline position="top">
                 <button
                   type="button"
-                  className="rounded p-0.5 text-gray-400 transition-colors hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent dark:text-gray-500 dark:hover:text-accent"
+                  className="shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] dark:text-gray-500 dark:hover:bg-white/[0.06] dark:hover:text-accent"
                   aria-label={t('settingsTab.weeklyBackupHelpAria')}
                 >
                   <FiHelpCircle size={14} strokeWidth={2} aria-hidden />
                 </button>
               </Tooltip>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={enabled}
-                aria-label={t('settingsTab.weeklyBackupToggleAria')}
-                onClick={() => void handleToggle()}
-                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-                  enabled ? '' : 'bg-gray-300 dark:bg-gray-600'
-                }`}
-                style={enabled ? { backgroundColor: 'var(--accent)' } : undefined}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                    enabled ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
             </div>
-            <div className="flex items-center gap-0.5">
+            <span className="h-4 w-px shrink-0 bg-gray-300/90 dark:bg-gray-600" aria-hidden />
+            <button
+              type="button"
+              role="switch"
+              aria-checked={enabled}
+              aria-label={t('settingsTab.weeklyBackupToggleAria')}
+              onClick={() => void handleToggle()}
+              className={`relative h-5 w-9 shrink-0 self-center rounded-full transition-colors ${
+                enabled ? '' : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+              style={enabled ? { backgroundColor: 'var(--accent)' } : undefined}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  enabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+            <span className="h-4 w-px shrink-0 bg-gray-300/90 dark:bg-gray-600" aria-hidden />
+            <div className="flex shrink-0 items-center gap-0 rounded-lg bg-white/65 p-0.5 dark:bg-gray-900/45">
               <Tooltip text={t('settingsTab.weeklyBackupSaveTooltip')} position="top">
                 <button
                   type="button"
                   onClick={() => void runBackupWithSingleToast()}
-                  className="rounded-lg p-2 text-gray-600 transition-colors hover:bg-accent/10 hover:text-accent dark:text-gray-300 dark:hover:text-accent"
+                  className="rounded-md p-1.5 text-gray-600 transition-colors hover:bg-accent/12 hover:text-accent dark:text-gray-300 dark:hover:text-accent"
                   aria-label={t('settingsTab.weeklyBackupSaveTooltip')}
                 >
-                  <FiSave size={18} strokeWidth={2} />
+                  <FiSave size={17} strokeWidth={2} aria-hidden />
                 </button>
               </Tooltip>
               <Tooltip text={restoreTooltip} multiline position="top">
@@ -222,14 +224,14 @@ export function WeeklyLocalBackupSettingsBlock({
                     type="button"
                     disabled={!canRestore || restoring || restoreOpen}
                     onClick={() => void openRestoreModal()}
-                    className={`rounded-lg p-2 transition-colors ${
+                    className={`rounded-md p-1.5 transition-colors ${
                       canRestore && !restoring && !restoreOpen
-                        ? 'text-gray-600 hover:bg-accent/10 hover:text-accent dark:text-gray-300 dark:hover:text-accent'
+                        ? 'text-gray-600 hover:bg-accent/12 hover:text-accent dark:text-gray-300 dark:hover:text-accent'
                         : 'cursor-not-allowed text-gray-300 dark:text-gray-600'
                     }`}
                     aria-label={t('settingsTab.weeklyBackupRestore')}
                   >
-                    <FiRotateCcw size={18} strokeWidth={2} />
+                    <FiRotateCcw size={17} strokeWidth={2} aria-hidden />
                   </button>
                 </span>
               </Tooltip>

@@ -13,3 +13,4 @@ alwaysApply: true
 - Keep files focused and changes minimal; avoid broad refactors in feature tasks.
 - Use existing naming and state patterns from nearby modules.
 - Update `src/i18n.ts` whenever user-visible strings are changed.
+- Run `npm run verify` for substantive code changes and **before commit/PR**; purely visual Tailwind/class tweaks may skip a local run during iteration—see `AGENTS.md` → Verification.
