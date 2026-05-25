@@ -1,6 +1,7 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Node, ImportStrategy } from './types';
 import { generateTutorial } from './utils/tutorialData';
+import { pickNewerNodeByUpdatedAt } from './utils/syncCompare';
 
 function log(..._args: any[]) {
   // console.log('[DB]', ..._args);
@@ -297,6 +298,33 @@ export async function clearAllNodes(): Promise<void> {
   }
   await tx.done;
   log('All nodes cleared (except root)');
+}
+
+/** Пакетная запись плоских узлов (после clearAllNodes или полного снимка из облака). */
+export async function putAllNodesFlat(nodes: Node[]): Promise<void> {
+  if (!dbInstance) await initDB();
+  const tx = dbInstance!.transaction(STORE_NAME, 'readwrite');
+  for (const raw of nodes) {
+    const { children: _c, deletedAt: _d, ...rest } = raw;
+    let flat: Node = { ...rest, children: [] };
+    if (flat.id === ROOT_ID) {
+      flat = { ...flat, parentId: null };
+    }
+    await tx.store.put(flat);
+  }
+  await tx.done;
+}
+
+/** Инкрементальная подтяжка из облака: LWW по updatedAt, без понижения версии IDB. */
+export async function upsertNodesFlatLww(nodes: Node[]): Promise<void> {
+  if (!dbInstance) await initDB();
+  const tx = dbInstance!.transaction(STORE_NAME, 'readwrite');
+  for (const node of nodes) {
+    const existing = await tx.store.get(node.id);
+    const winner = pickNewerNodeByUpdatedAt(existing, node);
+    await tx.store.put(winner);
+  }
+  await tx.done;
 }
 
 const WEEKLY_FALLBACK_ROW_KEY = 'weeklyPayload';

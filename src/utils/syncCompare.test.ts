@@ -72,6 +72,44 @@ describe('syncCompare', () => {
     it('true on title change when both active', () => {
       expect(isSignificantNodeDiff(base({ title: 'a' }), base({ title: 'b' }))).toBe(true);
     });
+
+    it('false when deadline is undefined vs null', () => {
+      expect(
+        isSignificantNodeDiff(
+          base({ deadline: undefined }),
+          base({ deadline: null }),
+        ),
+      ).toBe(false);
+    });
+
+    it('false when deletedAt is undefined vs null', () => {
+      expect(
+        isSignificantNodeDiff(
+          base({ deletedAt: undefined }),
+          base({ deletedAt: null }),
+        ),
+      ).toBe(false);
+      expect(hasDifferences([base({ id: 'a', deletedAt: undefined })], [base({ id: 'a', deletedAt: null })])).toBe(
+        false,
+      );
+    });
+
+    it('false for equivalent recurrence with reordered scheduleVariants', () => {
+      const r1 = {
+        freq: 'weekly' as const,
+        scheduleVariants: [{ weekdays: [1], timeStart: '09:00' }],
+      };
+      const r2 = {
+        freq: 'weekly' as const,
+        scheduleVariants: [{ timeStart: '09:00', weekdays: [1] }],
+      };
+      expect(
+        isSignificantNodeDiff(
+          base({ isRecurring: true, recurrence: r1 }),
+          base({ isRecurring: true, recurrence: r2 }),
+        ),
+      ).toBe(false);
+    });
   });
 
   describe('hasDifferences / compareNodes', () => {

@@ -1,4 +1,68 @@
-import { Node } from '../types';
+import { Node, type NodeRecurrence } from '../types';
+
+/** Пустое и отсутствующее ISO-поле — одно и то же (IDB vs Firestore). */
+function normIsoField(v: string | null | undefined): string | null {
+  if (v == null || v === '') return null;
+  return v;
+}
+
+function normParentId(parentId: string | null | undefined, nodeId: string): string | null {
+  if (nodeId === 'root-node') return null;
+  return parentId ?? null;
+}
+
+function stableJsonKey(value: unknown): string {
+  if (value === null || value === undefined) return 'null';
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJsonKey(item)).join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj)
+      .filter((k) => obj[k] !== undefined)
+      .sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableJsonKey(obj[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** Канонический ключ recurrence (порядок ключей / вариантов не важен). */
+function recurrenceCompareKey(r: NodeRecurrence | null | undefined): string {
+  if (r == null) return 'null';
+  const copy = JSON.parse(JSON.stringify(r)) as NodeRecurrence;
+  if (Array.isArray(copy.scheduleVariants) && copy.scheduleVariants.length > 0) {
+    copy.scheduleVariants = [...copy.scheduleVariants].sort((a, b) =>
+      stableJsonKey(a).localeCompare(stableJsonKey(b)),
+    );
+  }
+  return stableJsonKey(copy);
+}
+
+export function recurrenceEqual(
+  a: NodeRecurrence | null | undefined,
+  b: NodeRecurrence | null | undefined,
+): boolean {
+  return recurrenceCompareKey(a) === recurrenceCompareKey(b);
+}
+
+/** Список полей, по которым версии узла считаются разными для конфликта / диалога. */
+export function getNodeDiffFieldNames(local: Node, cloud: Node): string[] {
+  const differences: string[] = [];
+  if (local.title !== cloud.title) differences.push('title');
+  if (normDesc(local) !== normDesc(cloud)) differences.push('description');
+  if (local.completed !== cloud.completed) differences.push('completed');
+  if (normIsoField(local.deadline) !== normIsoField(cloud.deadline)) differences.push('deadline');
+  if (normIsoField(local.deadlineEnd) !== normIsoField(cloud.deadlineEnd)) differences.push('deadlineEnd');
+  if (!!local.isRecurring !== !!cloud.isRecurring) differences.push('isRecurring');
+  if (!recurrenceEqual(local.recurrence, cloud.recurrence)) differences.push('recurrence');
+  if (!!local.priority !== !!cloud.priority) differences.push('priority');
+  if (normParentId(local.parentId, local.id) !== normParentId(cloud.parentId, cloud.id)) {
+    differences.push('parentId');
+  }
+  if (normOrder(local.order) !== normOrder(cloud.order)) differences.push('order');
+  if (normIsoField(local.deletedAt) !== normIsoField(cloud.deletedAt)) differences.push('deletedAt');
+  return differences;
+}
 
 /** Время updatedAt для LWW; отсутствие даты считаем 0 (устаревшая версия). */
 export function nodeUpdatedAtMs(node: Pick<Node, 'updatedAt'> | undefined | null): number {
@@ -82,19 +146,7 @@ export function compareNodes(localNodes: Node[], cloudNodes: Node[]): SyncDiff {
     } else if (!local && cloud) {
       cloudOnly.push(cloud);
     } else if (local && cloud) {
-      const differences: string[] = [];
-      
-      if (local.title !== cloud.title) differences.push('title');
-      if (normDesc(local) !== normDesc(cloud)) differences.push('description');
-      if (local.completed !== cloud.completed) differences.push('completed');
-      if (local.deadline !== cloud.deadline) differences.push('deadline');
-      if (local.deadlineEnd !== cloud.deadlineEnd) differences.push('deadlineEnd');
-      if (!!local.isRecurring !== !!cloud.isRecurring) differences.push('isRecurring');
-      if (JSON.stringify(local.recurrence ?? null) !== JSON.stringify(cloud.recurrence ?? null)) differences.push('recurrence');
-      if (!!local.priority !== !!cloud.priority) differences.push('priority');
-      if (local.parentId !== cloud.parentId) differences.push('parentId');
-      if (normOrder(local.order) !== normOrder(cloud.order)) differences.push('order');
-      if (local.deletedAt !== cloud.deletedAt) differences.push('deletedAt');
+      const differences = getNodeDiffFieldNames(local, cloud);
 
       if (differences.length > 0) {
         different.push({
@@ -114,8 +166,8 @@ export function compareNodes(localNodes: Node[], cloudNodes: Node[]): SyncDiff {
  * Проверить, есть ли значимые различия между двумя версиями одного узла
  */
 export function isSignificantNodeDiff(local: Node, cloud: Node): boolean {
-  const localDeleted = !!local.deletedAt;
-  const cloudDeleted = !!cloud.deletedAt;
+  const localDeleted = !!normIsoField(local.deletedAt);
+  const cloudDeleted = !!normIsoField(cloud.deletedAt);
 
   // Если оба удалены - это НЕ значимое различие, даже если даты удаления разные
   if (localDeleted && cloudDeleted) return false;
@@ -123,19 +175,7 @@ export function isSignificantNodeDiff(local: Node, cloud: Node): boolean {
   // Разный статус удаления - это значимо
   if (localDeleted !== cloudDeleted) return true;
 
-  // Оба активны - проверяем основные поля
-  if (local.title !== cloud.title) return true;
-  if (normDesc(local) !== normDesc(cloud)) return true;
-  if (local.completed !== cloud.completed) return true;
-  if (local.deadline !== cloud.deadline) return true;
-  if (local.deadlineEnd !== cloud.deadlineEnd) return true;
-  if (!!local.isRecurring !== !!cloud.isRecurring) return true;
-  if (JSON.stringify(local.recurrence ?? null) !== JSON.stringify(cloud.recurrence ?? null)) return true;
-  if (!!local.priority !== !!cloud.priority) return true;
-  if (local.parentId !== cloud.parentId) return true;
-  // Порядок сортировки не считаем «конфликтом» для диалога и тихого мержа — только шум.
-
-  return false;
+  return getNodeDiffFieldNames(local, cloud).some((f) => f !== 'order' && f !== 'deletedAt');
 }
 
 /**

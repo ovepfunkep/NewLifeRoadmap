@@ -289,6 +289,25 @@ function getUserNodesPath(userId: string): string {
 
 const ROOT_NODE_ID = 'root-node';
 
+/** Документы в Firestore, которых нет в локальном наборе (сверка по doc.id и полю id). */
+async function listServerOrphanDocIds(
+  db: Firestore,
+  userId: string,
+  localIdSet: Set<string>,
+): Promise<string[]> {
+  const nodesRef = collection(db, getUserNodesPath(userId));
+  const snap = await withTimeout(getDocsFromServer(nodesRef), 15000, 'listServerOrphanDocIds');
+  const orphanDocIds: string[] = [];
+  for (const docSnap of snap.docs) {
+    if (docSnap.id === ROOT_NODE_ID) continue;
+    const data = docSnap.data() as DocumentData;
+    const logicalId = String(data.id ?? docSnap.id);
+    if (localIdSet.has(docSnap.id) || localIdSet.has(logicalId)) continue;
+    orphanDocIds.push(docSnap.id);
+  }
+  return orphanDocIds;
+}
+
 /** Физическое удаление документов узлов батчами (лимит Firestore 500 операций). */
 async function commitBatchedNodeDocDeletes(db: Firestore, userId: string, ids: string[]): Promise<void> {
   const uniq = [...new Set(ids.filter((id) => id && id !== ROOT_NODE_ID))];
@@ -381,14 +400,25 @@ export async function syncNodeToFirestore(node: Node): Promise<void> {
   }
 }
 
+export type SyncAllNodesOptions = {
+  /** Удалить из Firestore документы, которых нет в allNodes (после «оставить локальные»). */
+  purgeCloudOrphans?: boolean;
+  /** Записать все локальные узлы, не только с более новым updatedAt. */
+  overwriteAll?: boolean;
+};
+
 /**
  * Сохранить все узлы в Firestore (первая синхронизация или массовое обновление)
  */
-export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Node[]): Promise<void> {
+export async function syncAllNodesToFirestore(
+  allNodes: Node[],
+  cloudNodes?: Node[],
+  options?: SyncAllNodesOptions,
+): Promise<void> {
   const user = getCurrentUser();
   if (!user) {
     log('User not authenticated, skipping sync');
-    return;
+    throw new Error('SYNC_NOT_AUTHENTICATED');
   }
 
   const syncKey = getActiveSyncKey();
@@ -396,7 +426,7 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
 
   if (!syncKey) {
     log('Sync key not found for bulk sync, skipping to prevent plaintext leak');
-    return;
+    throw new Error('SYNC_KEY_MISSING');
   }
 
   try {
@@ -434,7 +464,33 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
     }
     
     log(`Cloud nodes: ${cloudMap.size}, Local nodes: ${allNodes.length}`);
-    
+
+    const localIdSet = new Set(allNodes.map((n) => n.id));
+    let orphansPurged = 0;
+
+    if (options?.purgeCloudOrphans) {
+      const orphanDocIds = await listServerOrphanDocIds(db, user.uid, localIdSet);
+      if (orphanDocIds.length > 0) {
+        await commitBatchedNodeDocDeletes(db, user.uid, orphanDocIds);
+        orphansPurged = orphanDocIds.length;
+        log(`Purged ${orphanDocIds.length} cloud orphan document(s) not present locally`);
+      }
+      const remainingOrphans = await listServerOrphanDocIds(db, user.uid, localIdSet);
+      if (remainingOrphans.length > 0) {
+        throw new Error(`ORPHAN_PURGE_INCOMPLETE:${remainingOrphans.length}`);
+      }
+      const serverSnap = await withTimeout(
+        getDocsFromServer(collection(db, getUserNodesPath(user.uid))),
+        15000,
+        'purgeOrphans:rebuildCloudMap',
+      );
+      cloudMap.clear();
+      serverSnap.forEach((docSnap) => {
+        const data = docSnap.data() as DocumentData;
+        if (!data.deletedAt) cloudMap.set(docSnap.id, data);
+      });
+    }
+
     // Firestore batch ограничен 500 операциями
     const BATCH_LIMIT = 500;
     const nodesRef = collection(db, getUserNodesPath(user.uid));
@@ -445,18 +501,21 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
       log(`Removed ${nodesToPurge.length} legacy tombstone document(s) from Firestore`);
     }
     
-    // ЗАТЕМ сохраняем только ИЗМЕНЕННЫЕ узлы батчами
-    const nodesToSave = allNodes.filter(local => {
-      const cloud = cloudMap.get(local.id);
-      if (!cloud) return true; // Новое
-      
-      const localTime = new Date(local.updatedAt || 0).getTime();
-      const cloudTime = new Date(cloud.updatedAt || 0).getTime();
+    const nodesToSave = options?.overwriteAll
+      ? allNodes
+      : allNodes.filter((local) => {
+          const cloud = cloudMap.get(local.id);
+          if (!cloud) return true;
 
-      return localTime > cloudTime;
-    });
+          const localTime = new Date(local.updatedAt || 0).getTime();
+          const cloudTime = new Date(cloud.updatedAt || 0).getTime();
 
-    log(`Nodes to save after diff check: ${nodesToSave.length} (skipped ${allNodes.length - nodesToSave.length})`);
+          return localTime > cloudTime;
+        });
+
+    log(
+      `Nodes to save: ${nodesToSave.length} (overwriteAll=${!!options?.overwriteAll}, skipped ${allNodes.length - nodesToSave.length})`,
+    );
 
     if (nodesToSave.length > 0) {
       for (let i = 0; i < nodesToSave.length; i += BATCH_LIMIT) {
@@ -475,11 +534,13 @@ export async function syncAllNodesToFirestore(allNodes: Node[], cloudNodes?: Nod
       }
     }
     
-    if (nodesToSave.length > 0) {
+    if (nodesToSave.length > 0 || orphansPurged > 0) {
       await writeChangeLog({ id: 'bulk', updatedAt: new Date().toISOString(), fullSyncRequired: true }, user.uid, 'bulk');
     }
     await updateSyncMeta();
-    log(`Bulk sync completed: ${allNodes.length} nodes synced, ${nodesToPurge.length} purged`);
+    log(
+      `Bulk sync completed: ${nodesToSave.length} saved, ${nodesToPurge.length} tombstones purged, ${orphansPurged} orphans purged`,
+    );
     clearLocalCloudPushPending();
     reportCloudFirestoreSuccess();
   } catch (error) {
