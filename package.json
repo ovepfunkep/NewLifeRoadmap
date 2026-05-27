@@ -4,8 +4,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build && node scripts/postbuild-gh-pages.mjs",
+    "dev": "node scripts/gen-app-version.mjs && vite",
+    "build": "node scripts/gen-app-version.mjs && tsc && vite build && node scripts/postbuild-gh-pages.mjs",
     "build:gh-pages": "GITHUB_PAGES_BASE=/NewLifeRoadmap/ npm run build",
     "preview": "vite preview",
     "test": "vitest",

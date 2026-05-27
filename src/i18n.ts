@@ -217,6 +217,7 @@ export const i18n: Record<Language, Record<string, any>> = {
     footer: {
       refreshMemory: 'Add tutorial',
       settings: 'Settings',
+      version: 'Version',
     },
     support: {
       modalTitle: 'Support the author',
@@ -576,6 +577,7 @@ export const i18n: Record<Language, Record<string, any>> = {
     footer: {
       refreshMemory: 'Добавить туториал',
       settings: 'Настройки',
+      version: 'Версия',
     },
     support: {
       modalTitle: 'Поддержать автора',

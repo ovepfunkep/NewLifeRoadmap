@@ -46,10 +46,19 @@ registerSW({
   },
   onRegisteredSW(_swUrl, registration) {
     if (!registration) return;
-    const id = window.setInterval(() => {
+    const checkForUpdate = () => {
       void registration.update();
-    }, 60 * 60 * 1000);
-    window.addEventListener('beforeunload', () => window.clearInterval(id));
+    };
+    checkForUpdate();
+    window.addEventListener('focus', checkForUpdate);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkForUpdate();
+    });
+    const id = window.setInterval(checkForUpdate, 15 * 60 * 1000);
+    window.addEventListener('beforeunload', () => {
+      window.removeEventListener('focus', checkForUpdate);
+      window.clearInterval(id);
+    });
   },
 });
 

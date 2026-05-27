@@ -76,3 +76,11 @@ Relevant code: [`src/firebase/sync.ts`](../src/firebase/sync.ts) (node bulk load
 
 - Install with `npm ci` (not `npm install`) to use lockfile versions.
 - Re-run `npm run verify` locally before pushing.
+
+### GitHub Pages looks stale after a green deploy
+
+1. **URL**: project site is `https://<owner>.github.io/<repo>/` (for this repo: `/NewLifeRoadmap/`). Opening the repo root without the path loads an old or wrong bundle.
+2. **Pages source**: Repository → Settings → Pages → **Build and deployment** must be **GitHub Actions**, not “Deploy from a branch”.
+3. **PWA cache**: the app is a service-worker PWA. After deploy, compare the build number under the copyright in the footer with the latest commit count. If it is old, hard-refresh (Ctrl+F5) or close all tabs and reopen; updates are also checked on window focus.
+4. **CDN**: if a custom domain uses Cloudflare or similar, purge cache after deploy.
+5. **Deploy workflow**: `.github/workflows/deploy.yml` runs on push to `main`/`master`; the `deploy` job must finish (not only `build`).
