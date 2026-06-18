@@ -1,5 +1,5 @@
 import type { Node } from './types';
-import { isCloudAccessFailure } from './utils/cloudFirestoreHealth';
+import { isCloudAccessFailure, isCloudSyncReachable } from './utils/cloudFirestoreHealth';
 import { markLocalCloudPushPending } from './utils/localCloudPushPending';
 
 // Debounce для синхронизации
@@ -32,6 +32,13 @@ async function isSecurityReady(): Promise<boolean> {
   }
 }
 
+/** Отложить push, если сеть/облако недоступны (локальные правки уже сохранены). */
+function deferCloudPushIfUnreachable(): boolean {
+  if (isCloudSyncReachable()) return false;
+  markLocalCloudPushPending();
+  return true;
+}
+
 /**
  * Синхронизировать узел с Firestore (с debounce)
  */
@@ -56,12 +63,14 @@ async function syncNodeDebounced(node: Node): Promise<void> {
   // Устанавливаем новый таймер
   syncTimeout = setTimeout(async () => {
     try {
-      // Повторно проверяем авторизацию перед выполнением синхронизации
-      if (await isUserAuthenticated()) {
-        await syncNodeToFirestore(node);
-      }
+      if (!(await isUserAuthenticated())) return;
+      if (deferCloudPushIfUnreachable()) return;
+      await syncNodeToFirestore(node);
     } catch (error) {
       console.error('Background sync error:', error);
+      if (isCloudAccessFailure(error)) {
+        markLocalCloudPushPending();
+      }
       // Не показываем ошибку пользователю для фоновой синхронизации
     }
     syncTimeout = null;
@@ -77,16 +86,53 @@ export async function syncNodeNow(node: Node): Promise<void> {
     return; // Пользователь не залогинен, пропускаем синхронизацию
   }
 
+  // Офлайн или активный outage — откладываем без ошибки (локально уже сохранено)
+  if (deferCloudPushIfUnreachable()) {
+    return;
+  }
+
   // Очищаем debounce таймер
   if (syncTimeout) {
     clearTimeout(syncTimeout);
     syncTimeout = null;
+  }
+
+  if (!(await isSecurityReady())) {
+    console.warn('[Sync] Security not ready, skipping immediate sync');
+    return;
   }
   
   try {
     await syncNodeToFirestore(node);
   } catch (error) {
     console.error('Sync error:', error);
+    if (isCloudAccessFailure(error)) {
+      markLocalCloudPushPending();
+    }
+    throw error;
+  }
+}
+
+/**
+ * Удалить узел из облака (с gate по доступности сети/облака).
+ */
+export async function deleteNodeFromCloudNow(
+  nodeId: string,
+  childrenIds: string[] = [],
+): Promise<void> {
+  if (!(await isUserAuthenticated())) {
+    return;
+  }
+
+  if (deferCloudPushIfUnreachable()) {
+    return;
+  }
+
+  try {
+    const { deleteNodeFromFirestore } = await import('./firebase/sync');
+    await deleteNodeFromFirestore(nodeId, childrenIds);
+  } catch (error) {
+    console.error('Delete sync error:', error);
     if (isCloudAccessFailure(error)) {
       markLocalCloudPushPending();
     }

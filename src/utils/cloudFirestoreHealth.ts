@@ -49,6 +49,13 @@ function emit(event: CloudFirestoreHealthEvent) {
   });
 }
 
+/** Идемпотентный переход в outage → модалка «недоступно». */
+function enterCloudOutage(): void {
+  if (outageActive) return;
+  outageActive = true;
+  emit('unavailable');
+}
+
 export function subscribeCloudFirestoreHealth(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -66,12 +73,33 @@ export function reportCloudFirestoreSuccess(): void {
  */
 export function reportCloudFirestoreFailure(err: unknown): void {
   if (!isCloudAccessFailure(err)) return;
-  if (outageActive) return;
-  outageActive = true;
-  emit('unavailable');
+  enterCloudOutage();
+}
+
+/**
+ * Браузер ушёл офлайн (без round-trip к Firestore).
+ * Для залогиненного пользователя — та же модалка, что при сбое облака.
+ */
+export function notifyBrowserWentOffline(): void {
+  enterCloudOutage();
 }
 
 /** Сброс состояния (например при выходе из аккаунта), без модалок. */
 export function resetCloudFirestoreHealth(): void {
   outageActive = false;
+}
+
+/** Активен ли инцидент недоступности облака (после сбоя, до успешного round-trip). */
+export function isCloudFirestoreOutageActive(): boolean {
+  return outageActive;
+}
+
+/**
+ * Можно ли сейчас пытаться писать/читать в облако.
+ * Офлайн браузера и активный outage блокируют push/pull из UI.
+ */
+export function isCloudSyncReachable(): boolean {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
+  if (outageActive) return false;
+  return true;
 }

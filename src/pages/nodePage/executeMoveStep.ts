@@ -2,6 +2,8 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { Node } from '../../types';
 import { getNode, saveNode } from '../../db';
 import { syncNodeNow } from '../../db-sync';
+import { getCurrentUser } from '../../firebase/auth';
+import { isCloudSyncReachable } from '../../utils/cloudFirestoreHealth';
 import { buildBreadcrumbs } from '../../utils';
 import { t } from '../../i18n';
 import type { Toast } from '../../hooks/useToast';
@@ -199,8 +201,10 @@ export async function executeMoveStep(
     }
   };
 
+  const showCloudSyncIndicator = !!getCurrentUser() && isCloudSyncReachable();
   const syncToastId = showToast(t('toast.nodeMoved'), undoMove, {
-    isLoading: true,
+    isLoading: showCloudSyncIndicator,
+    ...(showCloudSyncIndicator ? {} : { isSuccess: true }),
   });
 
   void (async () => {

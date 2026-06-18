@@ -8,10 +8,16 @@ import { useToast } from '../hooks/useToast';
 import { t } from '../i18n';
 import { User } from 'firebase/auth';
 import { initSecurity } from '../utils/securityManager';
-import { resetCloudFirestoreHealth, subscribeCloudFirestoreHealth } from '../utils/cloudFirestoreHealth';
+import {
+  resetCloudFirestoreHealth,
+  subscribeCloudFirestoreHealth,
+  isCloudFirestoreOutageActive,
+  notifyBrowserWentOffline,
+} from '../utils/cloudFirestoreHealth';
 import {
   clearLocalCloudPushPending,
   hasLocalCloudPushPending,
+  markLocalCloudPushPending,
 } from '../utils/localCloudPushPending';
 import type { Node } from '../types';
 
@@ -47,6 +53,12 @@ if (typeof window !== 'undefined') {
 
 function notifyDataUpdated() {
   window.dispatchEvent(new CustomEvent(DATA_UPDATED_EVENT));
+}
+
+/** Офлайн при активной сессии: модалка + флаг отложенного push. */
+function handleLoggedInBrowserOffline() {
+  notifyBrowserWentOffline();
+  markLocalCloudPushPending();
 }
 
 export function SyncManager() {
@@ -231,6 +243,11 @@ export function SyncManager() {
 
   const startChangeListener = useCallback(
     async (userId: string, opts?: { force?: boolean }) => {
+      if (!navigator.onLine) {
+        log('[startChangeListener] Device is offline, deferring');
+        return;
+      }
+
       const force = opts?.force === true;
       if (changeUnsubRef.current && changeListenerUserIdRef.current === userId && !force) {
         log('[startChangeListener] already active for user, skip');
@@ -311,24 +328,47 @@ export function SyncManager() {
   }, [loadCloudDataSilently]);
 
   useEffect(() => {
-    const scheduleFlush = () => {
+    const scheduleOnlineRecovery = () => {
       if (onlineDebounceTimerRef.current) {
         clearTimeout(onlineDebounceTimerRef.current);
       }
       onlineDebounceTimerRef.current = setTimeout(() => {
         onlineDebounceTimerRef.current = null;
-        void flushPendingLocalCloudPush();
+        void (async () => {
+          const userId = currentUserIdRef.current;
+          if (!userId) return;
+
+          if (isCloudFirestoreOutageActive()) {
+            try {
+              await getSyncMeta();
+            } catch {
+              log('[online] Cloud probe failed, staying in outage');
+            }
+          }
+
+          void flushPendingLocalCloudPush();
+          void startChangeListener(userId);
+        })();
       }, 2000);
     };
-    window.addEventListener('online', scheduleFlush);
+    window.addEventListener('online', scheduleOnlineRecovery);
     return () => {
-      window.removeEventListener('online', scheduleFlush);
+      window.removeEventListener('online', scheduleOnlineRecovery);
       if (onlineDebounceTimerRef.current) {
         clearTimeout(onlineDebounceTimerRef.current);
         onlineDebounceTimerRef.current = null;
       }
     };
-  }, [flushPendingLocalCloudPush]);
+  }, [flushPendingLocalCloudPush, startChangeListener]);
+
+  useEffect(() => {
+    const handleOffline = () => {
+      if (!currentUserIdRef.current) return;
+      handleLoggedInBrowserOffline();
+    };
+    window.addEventListener('offline', handleOffline);
+    return () => window.removeEventListener('offline', handleOffline);
+  }, []);
 
   useEffect(() => {
     return subscribeCloudFirestoreHealth((event) => {
@@ -341,6 +381,13 @@ export function SyncManager() {
   const handleFirstSync = useCallback(async (isNewLogin: boolean) => {
     try {
       log(`[handleFirstSync] Starting sync, isNewLogin: ${isNewLogin}`);
+
+      if (!navigator.onLine) {
+        log('[handleFirstSync] Device is offline, deferring cloud sync');
+        handleLoggedInBrowserOffline();
+        isInitialLoadRef.current = false;
+        return;
+      }
 
       if (isNewLogin) {
         const userId = currentUserIdRef.current;
@@ -471,6 +518,10 @@ export function SyncManager() {
         // Сохраняем пользователя сразу
         previousUserRef.current = user;
         currentUserIdRef.current = user.uid;
+
+        if (!navigator.onLine) {
+          handleLoggedInBrowserOffline();
+        }
 
         // Инициализируем систему безопасности (проверяем кэш/конфиг)
         log('[onAuthChange] Initializing security for user', user.uid);

@@ -4,7 +4,9 @@ import { Node, NodeRecurrence } from '../types';
 import { t } from '../i18n';
 import { getNode, saveNode, deleteNode } from '../db';
 import { getCurrentUser } from '../firebase/auth';
-import { syncNodeNow } from '../db-sync';
+import { syncNodeNow, deleteNodeFromCloudNow } from '../db-sync';
+import { isCloudSyncReachable } from '../utils/cloudFirestoreHealth';
+import { markLocalCloudPushPending } from '../utils/localCloudPushPending';
 import { buildBreadcrumbs, getTotalChildCount } from '../utils';
 import { useNodeNavigation } from '../hooks/useHashRoute';
 import { useToast } from '../hooks/useToast';
@@ -411,8 +413,7 @@ export function NodePage() {
         await deleteNode(node.id);
         // Если это была новая задача, синхронизируем удаление
         try {
-          const { deleteNodeFromFirestore } = await import('../firebase/sync');
-          await deleteNodeFromFirestore(node.id, []);
+          await deleteNodeFromCloudNow(node.id, []);
         } catch (e) {
           console.error('Error syncing undo delete:', e);
         }
@@ -437,11 +438,14 @@ export function NodePage() {
       }
     };
 
-    // Показываем объединенный тост с иконкой загрузки
+    // Показываем объединенный тост; индикатор облака только при доступной сети/облаке
+    const showCloudSyncIndicator = !!getCurrentUser() && isCloudSyncReachable();
     const syncToastId = showToast(isNew ? t('toast.nodeCreated') : t('toast.nodeSaved'), undoAction, {
-      isLoading: true,
-      persistent: true,
-      ...(getCurrentUser() ? { subtitle: t('toast.syncingCloud') } : {}),
+      isLoading: showCloudSyncIndicator,
+      persistent: showCloudSyncIndicator,
+      ...(showCloudSyncIndicator
+        ? { subtitle: t('toast.syncingCloud') }
+        : { isSuccess: true }),
     });
     
     // Синхронизируем с облаком асинхронно
@@ -507,6 +511,7 @@ export function NodePage() {
     setAnimatingBurnId(null); // Сбрасываем ID после удаления
     
     // Показываем объединенный тост с иконкой загрузки для синхронизации
+    const showCloudSyncIndicator = !!getCurrentUser() && isCloudSyncReachable();
     const syncToastId = showToast(t('toast.nodeDeleted'), async () => {
       // Отмена удаления
       await saveNode(deletedNode);
@@ -519,15 +524,16 @@ export function NodePage() {
         if (reloaded) setCurrentNode(reloaded);
       }
     }, {
-      isLoading: true,
-      persistent: true,
-      ...(getCurrentUser() ? { subtitle: t('toast.syncingCloud') } : {}),
+      isLoading: showCloudSyncIndicator,
+      persistent: showCloudSyncIndicator,
+      ...(showCloudSyncIndicator
+        ? { subtitle: t('toast.syncingCloud') }
+        : { isSuccess: true }),
     });
     
     // Синхронизируем удаление с облаком асинхронно
     (async () => {
       try {
-        const { deleteNodeFromFirestore } = await import('../firebase/sync');
         // Собираем все ID потомков для удаления
         const collectChildrenIds = (node: Node): string[] => {
           const ids = [node.id];
@@ -538,11 +544,7 @@ export function NodePage() {
         };
         const childrenIds = collectChildrenIds(nodeToDelete);
         
-        // ВАЖНО: При удалении мы ждем какое-то время (например, пока висит тост с отменой), 
-        // прежде чем удалять в облаке. Либо просто удаляем, а при отмене восстановим.
-        // Сейчас мы удаляем сразу в облаке, чтобы данные не висели.
-        
-        await deleteNodeFromFirestore(id, childrenIds.slice(1)); // Убираем сам узел из списка детей
+        await deleteNodeFromCloudNow(id, childrenIds.slice(1));
         
         // Также синхронизируем родителя если есть
         if (deletedParentId) {
@@ -696,10 +698,13 @@ export function NodePage() {
     }
     
     // Показываем тост с индикатором загрузки для синхронизации
+    const showCloudSyncIndicator = !!getCurrentUser() && isCloudSyncReachable();
     const syncToastId = showToast(t('toast.importSuccess'), undefined, {
-      isLoading: true,
-      persistent: true,
-      ...(getCurrentUser() ? { subtitle: t('toast.syncingCloud') } : {}),
+      isLoading: showCloudSyncIndicator,
+      persistent: showCloudSyncIndicator,
+      ...(showCloudSyncIndicator
+        ? { subtitle: t('toast.syncingCloud') }
+        : { isSuccess: true }),
     });
     
     // Синхронизируем все узлы с облаком асинхронно (только если пользователь залогинен)
@@ -710,6 +715,11 @@ export function NodePage() {
         if (!user) {
           // Пользователь не залогинен, закрываем тост без синхронизации
           removeToast(syncToastId);
+          return;
+        }
+
+        if (!isCloudSyncReachable()) {
+          markLocalCloudPushPending();
           return;
         }
         
